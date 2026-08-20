@@ -1,6 +1,7 @@
 package com.animus.smartroom
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.animus.smartroom.bluetooth.BluetoothAudioDeviceManager
@@ -8,6 +9,7 @@ import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.bluetooth.model.BluetoothUiState
 import com.animus.smartroom.media.MusicController
 import com.animus.smartroom.media.model.MusicUiState
+import com.animus.smartroom.media.provider.MusicProvider
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -86,7 +88,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPlayZaraZaraClicked() {
-        musicController.playZaraZaraPreset()
+        val btState = bluetoothUiState.value
+        val isConnected = btState.connectionState is BluetoothDeviceState.Connected
+        val targetName = btState.selectedDevice?.name ?: "LG SNC4R"
+
+        Log.d("MusicController", "[bluetooth] Checking output device before preset: target=$targetName, isConnected=$isConnected")
+
+        if (!isConnected) {
+            val notice = "Connect $targetName to play room audio"
+            Log.w("MusicController", "[music] BLOCKED preset: Target '$targetName' is NOT connected")
+            musicController.setNotice(notice)
+            return
+        }
+
+        Log.i("MusicController", "[music] ALLOWED preset: Target '$targetName' is connected. Playing Zara Zara via provider.")
+        musicController.playZaraZaraPreset(targetName)
+    }
+
+    fun onProviderSelected(providerId: String) {
+        musicController.setProvider(providerId)
+    }
+
+    fun getAvailableProviders(): List<MusicProvider> {
+        return musicController.getAvailableProviders()
     }
 
     override fun onCleared() {

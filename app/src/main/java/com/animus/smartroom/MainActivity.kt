@@ -512,15 +512,26 @@ fun MusicControlCard(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        // Output device indicator (Requirement #5)
+                        // Output device indicator
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Output: ",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(if (musicState.isOutputConnected) AccentGreen else Color(0xFF94A3B8))
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = musicState.activeOutputDeviceName,
+                                text = if (musicState.isOutputConnected) {
+                                    musicState.activeOutputDeviceName
+                                } else {
+                                    "${musicState.activeOutputDeviceName} (Disconnected)"
+                                },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (musicState.isOutputConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -532,9 +543,26 @@ fun MusicControlCard(
                 }
 
                 // Playback Status Tag
+                val statusText = when (musicState.playbackStatus) {
+                    PlaybackStatus.PLAYING -> "Playing"
+                    PlaybackStatus.PAUSED -> "Paused"
+                    PlaybackStatus.SEARCH_OPENED -> "Starting"
+                    PlaybackStatus.ACTION_REQUIRED -> "Action Required"
+                    PlaybackStatus.BUFFERING -> "Buffering"
+                    PlaybackStatus.IDLE -> "Ready"
+                }
+                val statusColor = when (musicState.playbackStatus) {
+                    PlaybackStatus.PLAYING -> AccentGreen
+                    PlaybackStatus.PAUSED -> Color(0xFFF59E0B)
+                    PlaybackStatus.SEARCH_OPENED -> MaterialTheme.colorScheme.primary
+                    PlaybackStatus.ACTION_REQUIRED -> Color(0xFFF59E0B)
+                    PlaybackStatus.BUFFERING -> Color(0xFFF59E0B)
+                    PlaybackStatus.IDLE -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isPlaying) AccentGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                    color = statusColor.copy(alpha = 0.15f)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -544,19 +572,14 @@ fun MusicControlCard(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(if (isPlaying) AccentGreen else MaterialTheme.colorScheme.onSurfaceVariant)
+                                .background(statusColor)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = when (musicState.playbackStatus) {
-                                PlaybackStatus.PLAYING -> "Playing"
-                                PlaybackStatus.PAUSED -> "Paused"
-                                PlaybackStatus.BUFFERING -> "Buffering"
-                                PlaybackStatus.IDLE -> "Ready"
-                            },
+                            text = statusText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            color = if (isPlaying) AccentGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = statusColor
                         )
                     }
                 }
@@ -712,7 +735,7 @@ fun MusicControlCard(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // 5. Preserved Zara Zara Preset Button (Requirement #4)
+            // 5. Clean Primary Preset Button: "Play Zara Zara"
             Button(
                 onClick = onPlayZaraZaraClick,
                 colors = ButtonDefaults.buttonColors(
@@ -725,7 +748,7 @@ fun MusicControlCard(
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play Preset",
+                    contentDescription = "Play Zara Zara",
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -734,6 +757,39 @@ fun MusicControlCard(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
+            }
+
+            // Notice / Bluetooth Gating Banner
+            AnimatedVisibility(
+                visible = musicState.userNotice != null,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Notice",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = musicState.userNotice ?: "",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
         }
     }

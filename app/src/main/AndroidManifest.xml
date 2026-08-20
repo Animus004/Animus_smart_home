@@ -25,6 +25,22 @@
         android:name="android.hardware.bluetooth"
         android:required="true" />
 
+    <!-- Package visibility declarations for external media providers (Android 11+ / API 30+) -->
+    <queries>
+        <package android:name="com.google.android.apps.youtube.music" />
+        <intent>
+            <action android:name="android.intent.action.MEDIA_PLAY" />
+            <data android:scheme="https" android:host="music.youtube.com" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" android:host="music.youtube.com" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
