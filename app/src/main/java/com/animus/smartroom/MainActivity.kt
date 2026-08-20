@@ -39,10 +39,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.animus.smartroom.bluetooth.model.BluetoothAudioDevice
 import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.bluetooth.model.BluetoothUiState
+import com.animus.smartroom.media.model.MusicUiState
+import com.animus.smartroom.media.model.PlaybackStatus
+import com.animus.smartroom.ui.theme.AccentGreen
 import com.animus.smartroom.ui.theme.AnimusSmartRoomTheme
-import com.animus.smartroom.ui.theme.CardBackground
-import com.animus.smartroom.ui.theme.PrimaryBlue
-import com.animus.smartroom.ui.theme.SurfaceDark
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -55,15 +55,23 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val uiState by viewModel.bluetoothUiState.collectAsStateWithLifecycle()
+                    val bluetoothUiState by viewModel.bluetoothUiState.collectAsStateWithLifecycle()
+                    val musicUiState by viewModel.musicUiState.collectAsStateWithLifecycle()
+
                     HomeScreen(
-                        uiState = uiState,
+                        bluetoothState = bluetoothUiState,
+                        musicState = musicUiState,
                         onConnectClick = { viewModel.onConnectClicked() },
                         onDisconnectClick = { viewModel.onDisconnectClicked() },
                         onDeviceSelected = { mac -> viewModel.onDeviceSelected(mac) },
                         onPermissionsResult = { granted -> viewModel.onPermissionsResult(granted) },
                         getRequiredPermissions = { viewModel.getRequiredPermissions() },
-                        hasPermissions = { viewModel.hasPermissions() }
+                        hasPermissions = { viewModel.hasPermissions() },
+                        onPlayPauseClick = { viewModel.onPlayPauseClicked() },
+                        onNextClick = { viewModel.onNextClicked() },
+                        onPreviousClick = { viewModel.onPreviousClicked() },
+                        onVolumeChange = { percent -> viewModel.onVolumeChanged(percent) },
+                        onPlayZaraZaraClick = { viewModel.onPlayZaraZaraClicked() }
                     )
                 }
             }
@@ -78,13 +86,19 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun HomeScreen(
-    uiState: BluetoothUiState,
+    bluetoothState: BluetoothUiState,
+    musicState: MusicUiState,
     onConnectClick: () -> Unit,
     onDisconnectClick: () -> Unit,
     onDeviceSelected: (String) -> Unit,
     onPermissionsResult: (Boolean) -> Unit,
     getRequiredPermissions: () -> Array<String>,
-    hasPermissions: () -> Boolean
+    hasPermissions: () -> Boolean,
+    onPlayPauseClick: () -> Unit,
+    onNextClick: () -> Unit,
+    onPreviousClick: () -> Unit,
+    onVolumeChange: (Float) -> Unit,
+    onPlayZaraZaraClick: () -> Unit
 ) {
     val context = LocalContext.current
     var showDevicePicker by remember { mutableStateOf(false) }
@@ -102,33 +116,33 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
-        // App Header
+        // Top Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp),
+                .padding(bottom = 22.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
                 Text(
                     text = "Animus Smart Room",
-                    fontSize = 26.sp,
+                    fontSize = 25.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = "Room Audio & Automation Center",
                     fontSize = 13.sp,
-                    color = Color(0xFF9E9E9E)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
-                    .background(SurfaceDark)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable {
                         context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
                     },
@@ -137,24 +151,24 @@ fun HomeScreen(
                 Icon(
                     imageVector = Icons.Default.SettingsBluetooth,
                     contentDescription = "Bluetooth Settings",
-                    tint = PrimaryBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
             }
         }
 
-        // Bluetooth Audio Device Card
+        // 1. Bluetooth Audio Device Card
         AudioDeviceCard(
-            uiState = uiState,
+            uiState = bluetoothState,
             onActionClick = {
                 if (!hasPermissions()) {
                     permissionLauncher.launch(getRequiredPermissions())
                 } else {
-                    when (uiState.connectionState) {
+                    when (bluetoothState.connectionState) {
                         is BluetoothDeviceState.Connected -> onDisconnectClick()
                         is BluetoothDeviceState.Disconnected,
                         is BluetoothDeviceState.Error -> onConnectClick()
-                        is BluetoothDeviceState.Connecting -> { /* Disabled while connecting */ }
+                        is BluetoothDeviceState.Connecting -> { /* Disabled while in progress */ }
                     }
                 }
             },
@@ -172,14 +186,21 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Music Section (UI Placeholder)
-        MusicSection()
+        // 2. Universal Music Control Section
+        MusicControlCard(
+            musicState = musicState,
+            onPlayPauseClick = onPlayPauseClick,
+            onNextClick = onNextClick,
+            onPreviousClick = onPreviousClick,
+            onVolumeChange = onVolumeChange,
+            onPlayZaraZaraClick = onPlayZaraZaraClick
+        )
     }
 
     if (showDevicePicker) {
         DeviceSelectionDialog(
-            devices = uiState.pairedDevices,
-            selectedMac = uiState.selectedDevice?.macAddress,
+            devices = bluetoothState.pairedDevices,
+            selectedMac = bluetoothState.selectedDevice?.macAddress,
             onSelect = { mac ->
                 onDeviceSelected(mac)
                 showDevicePicker = false
@@ -204,22 +225,22 @@ fun AudioDeviceCard(
     val selectedDevice = uiState.selectedDevice
 
     val cardBorder = if (isConnected) {
-        BorderStroke(1.5.dp, PrimaryBlue)
+        BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
     } else {
-        BorderStroke(1.dp, Color(0xFF333333))
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         border = cardBorder,
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            // Header with Icon, Device info, and Switch button
+            // Top Row: Device icon, name, MAC, and Switch button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -232,9 +253,10 @@ fun AudioDeviceCard(
                     Box(
                         modifier = Modifier
                             .size(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(
-                                if (isConnected) PrimaryBlue.copy(alpha = 0.18f) else Color(0xFF202020)
+                                if (isConnected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else MaterialTheme.colorScheme.surfaceVariant
                             ),
                         contentAlignment = Alignment.Center
                     ) {
@@ -245,8 +267,8 @@ fun AudioDeviceCard(
                                 else -> Icons.Default.Speaker
                             },
                             contentDescription = "Device Icon",
-                            tint = if (isConnected) PrimaryBlue else Color(0xFFAAAAAA),
-                            modifier = Modifier.size(26.dp)
+                            tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
@@ -257,14 +279,14 @@ fun AudioDeviceCard(
                             text = selectedDevice?.name ?: "No Device Selected",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = if (selectedDevice != null) "MAC: ${selectedDevice.macAddress}" else "Tap to choose device",
+                            text = if (selectedDevice != null) "MAC: ${selectedDevice.macAddress}" else "Tap Switch to choose",
                             fontSize = 12.sp,
-                            color = Color(0xFF888888),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -273,10 +295,10 @@ fun AudioDeviceCard(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Switch Device button
+                // Switch Device Pill Button
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF252525),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.clickable { onSwitchDeviceClick() }
                 ) {
                     Row(
@@ -286,25 +308,25 @@ fun AudioDeviceCard(
                         Icon(
                             imageVector = Icons.Default.SwapHoriz,
                             contentDescription = "Switch Device",
-                            tint = PrimaryBlue,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "Switch",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = PrimaryBlue
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
-            HorizontalDivider(color = Color(0xFF383838), thickness = 0.8.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.8.dp)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Real status details row
+            // Bottom Row: Status text + Connect/Disconnect Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -313,8 +335,8 @@ fun AudioDeviceCard(
                 Column {
                     Text(
                         text = "Connection Status",
-                        fontSize = 12.sp,
-                        color = Color(0xFF888888)
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -324,10 +346,10 @@ fun AudioDeviceCard(
                                 .clip(CircleShape)
                                 .background(
                                     when {
-                                        isConnected -> Color(0xFF00E676)
-                                        isConnecting -> Color(0xFFFFD600)
-                                        isError -> Color(0xFFFF5252)
-                                        else -> Color(0xFF757575)
+                                        isConnected -> AccentGreen
+                                        isConnecting -> Color(0xFFF59E0B)
+                                        isError -> Color(0xFFEF4444)
+                                        else -> Color(0xFF94A3B8)
                                     }
                                 )
                         )
@@ -339,13 +361,13 @@ fun AudioDeviceCard(
                                 is BluetoothDeviceState.Disconnected -> if (selectedDevice != null) "Disconnected" else "No Device"
                                 is BluetoothDeviceState.Error -> "Connection Issue"
                             },
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = when {
-                                isConnected -> Color(0xFF00E676)
-                                isConnecting -> Color(0xFFFFD600)
-                                isError -> Color(0xFFFF5252)
-                                else -> Color(0xFFCCCCCC)
+                                isConnected -> AccentGreen
+                                isConnecting -> Color(0xFFF59E0B)
+                                isError -> Color(0xFFEF4444)
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
                         )
                     }
@@ -357,31 +379,30 @@ fun AudioDeviceCard(
                     enabled = !isConnecting && selectedDevice != null,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isConnected) Color(0xFF333333) else PrimaryBlue,
-                        disabledContainerColor = PrimaryBlue.copy(alpha = 0.5f)
+                        containerColor = if (isConnected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+                        contentColor = if (isConnected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary
                     ),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
                 ) {
                     if (isConnecting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Connecting", fontSize = 14.sp, color = Color.White)
+                        Text(text = "Connecting", fontSize = 13.sp)
                     } else {
                         Text(
                             text = if (isConnected) "Disconnect" else "Connect",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            // User Notice / Error or Unpaired Guidance Banner
+            // User Notice / Permission / Pair Warning Banner
             AnimatedVisibility(
                 visible = uiState.userNotice != null || (!uiState.hasRequiredPermissions && selectedDevice == null),
                 enter = fadeIn(),
@@ -391,24 +412,24 @@ fun AudioDeviceCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 14.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF241C1C))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
                         .padding(12.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "Notice",
-                            tint = Color(0xFFFF8A80),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = uiState.userNotice
-                                ?: if (!uiState.hasRequiredPermissions) "Bluetooth permission required."
-                                else "Please pair your audio device in Bluetooth settings.",
+                                ?: if (!uiState.hasRequiredPermissions) "Bluetooth permission is required."
+                                else "Please pair your audio device in settings.",
                             fontSize = 12.sp,
-                            color = Color(0xFFFFCDD2)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -418,9 +439,9 @@ fun AudioDeviceCard(
                             onClick = onRequestPermission,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(8.dp)
+                            contentPadding = PaddingValues(6.dp)
                         ) {
-                            Text("Grant Bluetooth Permissions", fontSize = 12.sp, color = PrimaryBlue)
+                            Text("Grant Bluetooth Permissions", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                         }
                     } else if (uiState.pairedDevices.isEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -430,12 +451,289 @@ fun AudioDeviceCard(
                             },
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(8.dp)
+                            contentPadding = PaddingValues(6.dp)
                         ) {
-                            Text("Open Bluetooth Settings to Pair", fontSize = 12.sp, color = PrimaryBlue)
+                            Text("Open Bluetooth Settings to Pair", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun MusicControlCard(
+    musicState: MusicUiState,
+    onPlayPauseClick: () -> Unit,
+    onNextClick: () -> Unit,
+    onPreviousClick: () -> Unit,
+    onVolumeChange: (Float) -> Unit,
+    onPlayZaraZaraClick: () -> Unit
+) {
+    val isPlaying = musicState.playbackStatus == PlaybackStatus.PLAYING
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            // 1. Header: Title + Active Audio Output Routing Indicator
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = "Music",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Music Control",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        // Output device indicator (Requirement #5)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Output: ",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = musicState.activeOutputDeviceName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (musicState.isOutputConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                // Playback Status Tag
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isPlaying) AccentGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (isPlaying) AccentGreen else MaterialTheme.colorScheme.onSurfaceVariant)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when (musicState.playbackStatus) {
+                                PlaybackStatus.PLAYING -> "Playing"
+                                PlaybackStatus.PAUSED -> "Paused"
+                                PlaybackStatus.BUFFERING -> "Buffering"
+                                PlaybackStatus.IDLE -> "Ready"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isPlaying) AccentGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // 2. Track info (if available)
+            if (musicState.currentTrackTitle != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = "Track",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = musicState.currentTrackTitle,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (musicState.currentTrackArtist != null) {
+                                Text(
+                                    text = musicState.currentTrackArtist,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // 3. Media Transport Controls (Previous, Play/Pause, Next)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // Previous Track
+                IconButton(
+                    onClick = onPreviousClick,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipPrevious,
+                        contentDescription = "Previous Track",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // Play / Pause Primary Button
+                IconButton(
+                    onClick = onPlayPauseClick,
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                // Next Track
+                IconButton(
+                    onClick = onNextClick,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Next Track",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.8.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 4. Volume Control Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                @Suppress("DEPRECATION")
+                val volumeIcon = when {
+                    musicState.isMuted || musicState.volumePercent == 0f -> Icons.Default.VolumeOff
+                    musicState.volumePercent < 0.4f -> Icons.Default.VolumeDown
+                    else -> Icons.Default.VolumeUp
+                }
+
+                Icon(
+                    imageVector = volumeIcon,
+                    contentDescription = "Volume",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Slider(
+                    value = musicState.volumePercent,
+                    onValueChange = onVolumeChange,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Text(
+                    text = "${(musicState.volumePercent * 100).toInt()}%",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.width(36.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // 5. Preserved Zara Zara Preset Button (Requirement #4)
+            Button(
+                onClick = onPlayZaraZaraClick,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(14.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "Play Preset",
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Play Zara Zara",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
@@ -455,9 +753,9 @@ fun DeviceSelectionDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
             Column(
                 modifier = Modifier.padding(20.dp)
@@ -471,7 +769,7 @@ fun DeviceSelectionDialog(
                         text = "Paired Audio Devices",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     IconButton(
                         onClick = onDismiss,
@@ -480,7 +778,7 @@ fun DeviceSelectionDialog(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = Color.Gray
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -491,7 +789,7 @@ fun DeviceSelectionDialog(
                     Text(
                         text = "No paired Bluetooth audio devices found.",
                         fontSize = 14.sp,
-                        color = Color(0xFF888888),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 12.dp)
                     )
                 } else {
@@ -505,8 +803,8 @@ fun DeviceSelectionDialog(
 
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) PrimaryBlue.copy(alpha = 0.15f) else Color(0xFF282828),
-                                border = if (isSelected) BorderStroke(1.dp, PrimaryBlue) else null,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
+                                border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
@@ -526,7 +824,7 @@ fun DeviceSelectionDialog(
                                         Icon(
                                             imageVector = if (device.isConnected) Icons.Default.BluetoothConnected else Icons.Default.Speaker,
                                             contentDescription = "Device",
-                                            tint = if (isSelected) PrimaryBlue else Color(0xFFAAAAAA),
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
@@ -535,14 +833,14 @@ fun DeviceSelectionDialog(
                                                 text = device.name,
                                                 fontSize = 15.sp,
                                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) PrimaryBlue else Color.White,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
                                                 text = device.macAddress,
                                                 fontSize = 11.sp,
-                                                color = Color(0xFF888888)
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
@@ -550,13 +848,14 @@ fun DeviceSelectionDialog(
                                     if (device.isConnected) {
                                         Surface(
                                             shape = RoundedCornerShape(10.dp),
-                                            color = Color(0xFF1E3A2F),
+                                            color = AccentGreen.copy(alpha = 0.15f),
                                             modifier = Modifier.padding(start = 8.dp)
                                         ) {
                                             Text(
                                                 text = "Connected",
                                                 fontSize = 10.sp,
-                                                color = Color(0xFF69F0AE),
+                                                fontWeight = FontWeight.Medium,
+                                                color = AccentGreen,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                             )
                                         }
@@ -564,7 +863,7 @@ fun DeviceSelectionDialog(
                                         Icon(
                                             imageVector = Icons.Default.Check,
                                             contentDescription = "Selected",
-                                            tint = PrimaryBlue,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -589,99 +888,11 @@ fun DeviceSelectionDialog(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Pair New",
                         modifier = Modifier.size(16.dp),
-                        tint = PrimaryBlue
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Pair New Device in Settings", fontSize = 13.sp, color = PrimaryBlue)
+                    Text("Pair New Device in Settings", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun MusicSection() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF202020)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = "Music",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column {
-                        Text(
-                            text = "Music Presets",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Smart Room Quick Audio",
-                            fontSize = 12.sp,
-                            color = Color(0xFF888888)
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFF282828)
-                ) {
-                    Text(
-                        text = "Preset",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFFB0B0B0),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            Button(
-                onClick = { /* Music playback placeholder */ },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(14.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Play Zara Zara",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
             }
         }
     }
