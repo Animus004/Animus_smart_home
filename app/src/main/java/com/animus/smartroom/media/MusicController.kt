@@ -236,9 +236,9 @@ class MusicController(
     /**
      * Universal entry point for playing a track preset through the active MusicProvider.
      */
-    fun playTrackPreset(title: String, artist: String?, activeDeviceName: String) {
+    fun playTrackPreset(title: String, artist: String?, activeDeviceName: String, directVideoId: String? = null) {
         val isConnected = _uiState.value.isOutputConnected
-        Log.i(TAG, "[ai] Command received: PLAY_MUSIC (title='$title', artist='$artist')")
+        Log.i(TAG, "[ai] Command received: PLAY_MUSIC (title='$title', artist='$artist', directVideoId='$directVideoId')")
         Log.i(TAG, "[music] Forwarding to provider: '${activeProvider.displayName}', Target Bluetooth Output: '$activeDeviceName'")
 
         if (!isConnected) {
@@ -252,7 +252,13 @@ class MusicController(
         Log.i(TAG, "[music] ALLOWED: Bluetooth device '$activeDeviceName' is connected.")
         cancelPendingInspectionAttempts()
 
-        val result = activeProvider.searchAndPlay(title, artist)
+        val result = if (!directVideoId.isNullOrBlank()) {
+            Log.i(TAG, "[music] Direct video ID provided ($directVideoId). Launching direct playback.")
+            (activeProvider as? YouTubeMusicProvider)?.playDirectTrack(directVideoId, title, artist)
+                ?: activeProvider.searchAndPlay(title, artist)
+        } else {
+            activeProvider.searchAndPlay(title, artist)
+        }
         Log.i(TAG, "[provider] Provider ${activeProvider.displayName} returned: ${result::class.simpleName}")
 
         when (result) {

@@ -7,12 +7,19 @@ import androidx.lifecycle.viewModelScope
 import com.animus.smartroom.bluetooth.BluetoothAudioDeviceManager
 import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.bluetooth.model.BluetoothUiState
-import com.animus.smartroom.command.parser.CommandParser
-import com.animus.smartroom.command.parser.LocalCommandParser
+import com.animus.smartroom.brain.AnimusBrainManager
+import com.animus.smartroom.brain.model.BrainProviderType
+import com.animus.smartroom.brain.model.BrainResult
+import com.animus.smartroom.brain.provider.CloudAnimusBrain
+import com.animus.smartroom.brain.provider.GeminiApiClient
+import com.animus.smartroom.brain.provider.GeminiApiKeyStorage
+import com.animus.smartroom.brain.provider.LocalAnimusBrain
 import com.animus.smartroom.command.router.CommandRouter
 import com.animus.smartroom.media.MusicController
 import com.animus.smartroom.media.model.MusicUiState
 import com.animus.smartroom.media.provider.MusicProvider
+import com.animus.smartroom.voice.SpeechRecognitionManager
+import com.animus.smartroom.voice.VoiceInputState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,11 +27,15 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import com.animus.smartroom.media.resolver.MusicResolutionCache
+import com.animus.smartroom.media.resolver.YouTubeMusicResolver
+
 data class AiCommandUiState(
     val lastInputText: String = "",
     val lastResultMessage: String? = null,
     val isSuccess: Boolean? = null,
-    val isProcessing: Boolean = false
+    val isProcessing: Boolean = false,
+    val activeProviderName: String = "Local"
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -32,11 +43,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val bluetoothManager = BluetoothAudioDeviceManager(application.applicationContext)
     private val musicController = MusicController(application.applicationContext)
 
-    private val commandParser: CommandParser = LocalCommandParser()
-    private val commandRouter = CommandRouter(bluetoothManager, musicController)
+    private val apiKeyStorage = GeminiApiKeyStorage(application.applicationContext)
+    private val geminiApiClient = GeminiApiClient()
+
+    private val localBrain = LocalAnimusBrain()
+    private val cloudBrain = CloudAnimusBrain(
+        apiKeyProvider = { apiKeyStorage.getApiKey() },
+        apiClient = geminiApiClient
+    )
+    private val brainManager = AnimusBrainManager(localBrain = localBrain, cloudBrain = cloudBrain)
+
+    private val musicResolutionCache = MusicResolutionCache.create(application.applicationContext)
+    private val musicResolver = YouTubeMusicResolver(
+        apiKeyProvider = { BuildConfig.YOUTUBE_API_KEY.ifBlank { null } },
+        cache = musicResolutionCache
+    )
+
+    private val commandRouter = CommandRouter(
+        bluetoothManager = bluetoothManager,
+        musicController = musicController,
+        musicResolver = musicResolver
+    )
+
+    private val speechRecognitionManager = SpeechRecognitionManager(application.applicationContext) { spokenText ->
+        onExecuteCommand(spokenText)
+    }
 
     val bluetoothUiState: StateFlow<BluetoothUiState> = bluetoothManager.uiState
     val musicUiState: StateFlow<MusicUiState> = musicController.uiState
+    val activeBrainProvider: StateFlow<BrainProviderType> = brainManager.activeProvider
+    val voiceInputState: StateFlow<VoiceInputState> = speechRecognitionManager.state
+
+    private val _maskedApiKey = MutableStateFlow(apiKeyStorage.getMaskedApiKey())
+    val maskedApiKey: StateFlow<String?> = _maskedApiKey.asStateFlow()
 
     private val _aiCommandState = MutableStateFlow(AiCommandUiState())
     val aiCommandState: StateFlow<AiCommandUiState> = _aiCommandState.asStateFlow()
@@ -60,33 +99,118 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         bluetoothManager.setDeviceAlias(macAddress, alias)
     }
 
+    fun setBrainProvider(type: BrainProviderType) {
+        brainManager.setProvider(type)
+        _aiCommandState.update { it.copy(activeProviderName = type.displayName) }
+    }
+
+    fun onSaveGeminiApiKey(key: String?) {
+        apiKeyStorage.saveApiKey(key)
+        _maskedApiKey.value = apiKeyStorage.getMaskedApiKey()
+    }
+
+    fun getGeminiApiKey(): String? {
+        return apiKeyStorage.getApiKey()
+    }
+
+    fun onTestGeminiConnection(apiKey: String?, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val key = apiKey?.trim()?.ifBlank { null } ?: apiKeyStorage.getApiKey()
+            if (key.isNullOrBlank()) {
+                onResult(false, "API key cannot be empty.")
+                return@launch
+            }
+            val result = geminiApiClient.testConnection(key)
+            result.fold(
+                onSuccess = { onResult(true, "Gemini connection successful!") },
+                onFailure = { error -> onResult(false, error.message ?: "Connection failed.") }
+            )
+        }
+    }
+
     // AI Command Layer operations
     fun onExecuteCommand(rawInput: String) {
         val trimmed = rawInput.trim()
         if (trimmed.isBlank()) return
 
         viewModelScope.launch {
-            Log.i("MainViewModel", "[ai] User entered command: '$trimmed'")
-            _aiCommandState.update { it.copy(isProcessing = true, lastInputText = trimmed) }
-
-            val parsedCommand = commandParser.parse(trimmed)
-            Log.i("MainViewModel", "[ai] Parsed command: ${parsedCommand::class.simpleName}")
-
-            val result = commandRouter.execute(parsedCommand)
-            Log.i("MainViewModel", "[ai] Execution result: success=${result.success}, message='${result.message}'")
+            Log.i("MainViewModel", "[music-resolver] User command: '$trimmed' (Provider: ${brainManager.activeProvider.value.displayName})")
+            val isMusicQuery = trimmed.startsWith("play", ignoreCase = true)
+            val musicSubject = if (isMusicQuery) trimmed.substring(4).trim() else ""
 
             _aiCommandState.update {
                 it.copy(
-                    isProcessing = false,
-                    lastResultMessage = result.message,
-                    isSuccess = result.success
+                    isProcessing = true,
+                    lastInputText = trimmed,
+                    activeProviderName = brainManager.activeProvider.value.displayName,
+                    lastResultMessage = if (isMusicQuery && musicSubject.isNotBlank()) "Resolving $musicSubject..." else "Processing command with ${brainManager.activeProvider.value.displayName}..."
                 )
+            }
+
+            val brainResult = brainManager.interpret(trimmed)
+            Log.i("MainViewModel", "[brain] Brain interpreted result: $brainResult")
+
+            when (brainResult) {
+                is BrainResult.Success -> {
+                    val result = commandRouter.execute(brainResult.command)
+                    Log.i("MainViewModel", "[playback] Execution result: success=${result.success}, message='${result.message}'")
+                    _aiCommandState.update {
+                        it.copy(
+                            isProcessing = false,
+                            lastResultMessage = result.message,
+                            isSuccess = result.success
+                        )
+                    }
+                }
+                is BrainResult.InvalidResponse -> {
+                    Log.w("MainViewModel", "[brain] Invalid brain response: ${brainResult.reason}")
+                    _aiCommandState.update {
+                        it.copy(
+                            isProcessing = false,
+                            lastResultMessage = "Brain Error: ${brainResult.reason}",
+                            isSuccess = false
+                        )
+                    }
+                }
+                is BrainResult.Failure -> {
+                    Log.e("MainViewModel", "[brain] Brain failure: ${brainResult.errorMessage}", brainResult.cause)
+                    _aiCommandState.update {
+                        it.copy(
+                            isProcessing = false,
+                            lastResultMessage = brainResult.errorMessage,
+                            isSuccess = false
+                        )
+                    }
+                }
+                is BrainResult.Unavailable -> {
+                    Log.w("MainViewModel", "[brain] Brain is unavailable")
+                    _aiCommandState.update {
+                        it.copy(
+                            isProcessing = false,
+                            lastResultMessage = "Brain provider is unavailable.",
+                            isSuccess = false
+                        )
+                    }
+                }
             }
         }
     }
 
     fun clearCommandResult() {
         _aiCommandState.update { it.copy(lastResultMessage = null, isSuccess = null) }
+    }
+
+    // Voice interaction methods
+    fun onStartVoiceListening() {
+        speechRecognitionManager.startListening()
+    }
+
+    fun onStopVoiceListening() {
+        speechRecognitionManager.stopListening()
+    }
+
+    fun onCancelVoiceListening() {
+        speechRecognitionManager.cancel()
     }
 
     // Bluetooth operations
@@ -169,5 +293,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         bluetoothManager.stopListening()
         musicController.stopListening()
+        speechRecognitionManager.destroy()
     }
 }

@@ -3,7 +3,8 @@ package com.animus.smartroom.command.model
 sealed class AnimusCommand {
     data class PlayMusic(
         val title: String,
-        val artist: String? = null
+        val artist: String? = null,
+        val directVideoId: String? = null
     ) : AnimusCommand()
 
     object PauseMusic : AnimusCommand()

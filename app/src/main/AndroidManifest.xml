@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Network permission for Gemini Cloud Brain -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Permissions for Android 12 (API 31) and higher -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -9,6 +13,9 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
+
+    <!-- Microphone permission for Voice interaction layer -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Legacy permissions for Android 11 (API 30) and lower -->
     <uses-permission
@@ -24,8 +31,11 @@
     <uses-feature
         android:name="android.hardware.bluetooth"
         android:required="true" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
 
-    <!-- Package visibility declarations for external media providers (Android 11+ / API 30+) -->
+    <!-- Package visibility declarations for external media providers and Speech Recognition (Android 11+ / API 30+) -->
     <queries>
         <package android:name="com.google.android.apps.youtube.music" />
         <intent>
@@ -38,6 +48,9 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" android:host="music.youtube.com" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 

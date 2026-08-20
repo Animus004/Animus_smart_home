@@ -7,6 +7,8 @@ import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.command.model.AnimusCommand
 import com.animus.smartroom.command.model.CommandExecutionResult
 import com.animus.smartroom.media.MusicController
+import com.animus.smartroom.media.resolver.MusicResolutionResult
+import com.animus.smartroom.media.resolver.YouTubeMusicResolver
 import java.util.Locale
 
 sealed interface DeviceResolutionResult {
@@ -17,7 +19,8 @@ sealed interface DeviceResolutionResult {
 
 class CommandRouter(
     private val bluetoothManager: BluetoothAudioDeviceManager,
-    private val musicController: MusicController
+    private val musicController: MusicController,
+    private val musicResolver: YouTubeMusicResolver? = null
 ) {
 
     companion object {
@@ -149,7 +152,7 @@ class CommandRouter(
         }
     }
 
-    fun execute(command: AnimusCommand): CommandExecutionResult {
+    suspend fun execute(command: AnimusCommand): CommandExecutionResult {
         Log.i(TAG, "[ai] Routing command: ${command::class.simpleName}")
 
         return when (command) {
@@ -165,11 +168,35 @@ class CommandRouter(
                     )
                 }
 
-                Log.i(TAG, "[ai] Executing PlayMusic: title='${command.title}', artist='${command.artist}'")
+                val resolution = musicResolver?.resolveTrack(
+                    title = command.title,
+                    artist = command.artist,
+                    explicitDirectId = command.directVideoId
+                )
+
+                val effectiveVideoId = when (resolution) {
+                    is MusicResolutionResult.Resolved -> {
+                        Log.i(TAG, "[music-resolver] Resolved '${command.title}' via ${resolution.source} -> videoId='${resolution.videoId}'")
+                        resolution.videoId
+                    }
+                    is MusicResolutionResult.FallbackSearch -> {
+                        Log.i(TAG, "[music-resolver] Unresolved track '${command.title}' (${resolution.reason}). Using client fallback.")
+                        command.directVideoId
+                    }
+                    null -> command.directVideoId
+                }
+
+                if (effectiveVideoId != null) {
+                    Log.i(TAG, "[direct-play] Executing direct playback for '${command.title}' (videoId='$effectiveVideoId') on output '$deviceName'")
+                } else {
+                    Log.i(TAG, "[music-resolver] Executing search fallback for '${command.title}' on output '$deviceName'")
+                }
+
                 musicController.playTrackPreset(
                     title = command.title,
                     artist = command.artist,
-                    activeDeviceName = deviceName
+                    activeDeviceName = deviceName,
+                    directVideoId = effectiveVideoId
                 )
                 CommandExecutionResult(
                     success = true,
