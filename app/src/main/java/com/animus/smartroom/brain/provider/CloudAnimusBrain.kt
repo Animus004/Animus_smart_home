@@ -21,30 +21,31 @@ class CloudAnimusBrain(
     override suspend fun interpret(input: String): BrainResult {
         val apiKey = apiKeyProvider()?.trim()
         if (apiKey.isNullOrBlank()) {
-            Log.w(TAG, "[interpret] Gemini API key is missing.")
+            Log.w(TAG, "[brain] Gemini API key is missing. Cannot route cloud request.")
             return BrainResult.Failure("Gemini API key is required. Tap Brain badge to configure.")
         }
 
-        Log.i(TAG, "[interpret] Querying Gemini Cloud Brain for input: '$input'")
+        Log.i(TAG, "[gemini-call] Request initiated for input: '$input' (Model: ${apiClient.modelId})")
 
         val apiResult = apiClient.generateContent(apiKey, input)
 
         return apiResult.fold(
             onSuccess = { rawJson ->
-                Log.d(TAG, "[interpret] Received raw response from Gemini: $rawJson")
+                Log.i(TAG, "[gemini-call] Response received (${rawJson.length} bytes)")
                 when (val validation = BrainCommandValidator.parseAndValidateJson(rawJson)) {
                     is BrainValidationResult.Valid -> {
-                        Log.i(TAG, "[interpret] Validated command from Gemini: ${validation.command::class.simpleName}")
-                        BrainResult.Success(validation.command, rawResponse = rawJson)
+                        val count = validation.commands.size
+                        Log.i(TAG, "[gemini-call] Parsed command count: $count -> ${validation.commands.map { it::class.simpleName }}")
+                        BrainResult.Success(validation.commands, rawResponse = rawJson)
                     }
                     is BrainValidationResult.Invalid -> {
-                        Log.w(TAG, "[interpret] Gemini response failed validation: ${validation.reason}")
+                        Log.w(TAG, "[gemini-call] Gemini response failed validation: ${validation.reason}")
                         BrainResult.InvalidResponse(validation.reason, rawResponse = rawJson)
                     }
                 }
             },
             onFailure = { error ->
-                Log.e(TAG, "[interpret] Gemini API call failed: ${error.message}", error)
+                Log.e(TAG, "[gemini-call] Gemini API call failed: ${error.message}", error)
                 BrainResult.Failure(error.message ?: "Cloud AI communication failure", error)
             }
         )
@@ -52,7 +53,7 @@ class CloudAnimusBrain(
 
     fun parseCloudResponse(jsonResponse: String): BrainResult {
         return when (val validation = BrainCommandValidator.parseAndValidateJson(jsonResponse)) {
-            is BrainValidationResult.Valid -> BrainResult.Success(validation.command, rawResponse = jsonResponse)
+            is BrainValidationResult.Valid -> BrainResult.Success(validation.commands, rawResponse = jsonResponse)
             is BrainValidationResult.Invalid -> BrainResult.InvalidResponse(validation.reason, rawResponse = jsonResponse)
         }
     }

@@ -26,7 +26,8 @@ object YouTubeUrlValidator {
     )
 
     fun validateAndExtractVideoId(rawUrl: String?): UrlValidationResult {
-        if (rawUrl.isNullOrBlank()) {
+        if (rawUrl.isNullOrBlank() || rawUrl.trim().equals("null", ignoreCase = true)) {
+            Log.w(TAG, "[youtube-url] URL validation invoked with null/blank URL from: ${Throwable().stackTrace.take(5).joinToString(" -> ") { "${it.fileName}:${it.lineNumber}" }}")
             return UrlValidationResult.Invalid("URL is empty or blank.")
         }
 

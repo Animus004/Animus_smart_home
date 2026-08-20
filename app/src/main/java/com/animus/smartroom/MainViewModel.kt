@@ -51,7 +51,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         apiKeyProvider = { apiKeyStorage.getApiKey() },
         apiClient = geminiApiClient
     )
-    private val brainManager = AnimusBrainManager(localBrain = localBrain, cloudBrain = cloudBrain)
+
+    private val initialBrainProvider = apiKeyStorage.getSelectedProvider()
+    private val brainManager = AnimusBrainManager(
+        localBrain = localBrain,
+        cloudBrain = cloudBrain,
+        initialProvider = initialBrainProvider,
+        onProviderChanged = { apiKeyStorage.saveSelectedProvider(it) }
+    )
 
     private val musicResolutionCache = MusicResolutionCache.create(application.applicationContext)
     private val musicResolver = YouTubeMusicResolver(
@@ -77,7 +84,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _maskedApiKey = MutableStateFlow(apiKeyStorage.getMaskedApiKey())
     val maskedApiKey: StateFlow<String?> = _maskedApiKey.asStateFlow()
 
-    private val _aiCommandState = MutableStateFlow(AiCommandUiState())
+    private val _aiCommandState = MutableStateFlow(
+        AiCommandUiState(activeProviderName = initialBrainProvider.displayName)
+    )
     val aiCommandState: StateFlow<AiCommandUiState> = _aiCommandState.asStateFlow()
 
     init {
@@ -101,11 +110,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setBrainProvider(type: BrainProviderType) {
         brainManager.setProvider(type)
+        apiKeyStorage.saveSelectedProvider(type)
         _aiCommandState.update { it.copy(activeProviderName = type.displayName) }
     }
 
     fun onSaveGeminiApiKey(key: String?) {
         apiKeyStorage.saveApiKey(key)
+        if (!key.isNullOrBlank()) {
+            setBrainProvider(BrainProviderType.GEMINI)
+        }
         _maskedApiKey.value = apiKeyStorage.getMaskedApiKey()
     }
 
@@ -134,7 +147,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (trimmed.isBlank()) return
 
         viewModelScope.launch {
-            Log.i("MainViewModel", "[music-resolver] User command: '$trimmed' (Provider: ${brainManager.activeProvider.value.displayName})")
+            val currentProviderName = brainManager.activeProvider.value.displayName
+            Log.i("MainViewModel", "[music-resolver] User command: '$trimmed' (Provider: $currentProviderName)")
             val isMusicQuery = trimmed.startsWith("play", ignoreCase = true)
             val musicSubject = if (isMusicQuery) trimmed.substring(4).trim() else ""
 
@@ -142,8 +156,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     isProcessing = true,
                     lastInputText = trimmed,
-                    activeProviderName = brainManager.activeProvider.value.displayName,
-                    lastResultMessage = if (isMusicQuery && musicSubject.isNotBlank()) "Resolving $musicSubject..." else "Processing command with ${brainManager.activeProvider.value.displayName}..."
+                    activeProviderName = currentProviderName,
+                    lastResultMessage = if (isMusicQuery && musicSubject.isNotBlank()) "Resolving $musicSubject..." else "Processing command with $currentProviderName..."
                 )
             }
 
@@ -152,7 +166,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             when (brainResult) {
                 is BrainResult.Success -> {
-                    val result = commandRouter.execute(brainResult.command)
+                    val result = commandRouter.execute(brainResult.commands)
                     Log.i("MainViewModel", "[playback] Execution result: success=${result.success}, message='${result.message}'")
                     _aiCommandState.update {
                         it.copy(

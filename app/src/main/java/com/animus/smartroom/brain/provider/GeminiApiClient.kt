@@ -24,11 +24,11 @@ class GeminiApiClient(
         private val generateRequestCounter = AtomicInteger(0)
 
         const val SYSTEM_INSTRUCTION = """
-You are the Animus Smart Room command interpreter and music resolver.
-Convert the user's natural-language request into exactly one supported Animus command JSON.
+You are the Animus Smart Room command interpreter.
+Convert the user's natural-language request into a structured JSON response containing an ordered array of supported Animus commands in the "commands" property.
 
 Supported Command Schemas:
-- {"command": "PLAY_MUSIC", "title": "<song_title>", "artist": "<artist_optional>", "playbackUrl": "<authentic_youtube_or_ytmusic_url_optional>"}
+- {"command": "PLAY_MUSIC", "title": "<song_title>", "artist": "<artist_optional>", "playbackUrl": null}
 - {"command": "PAUSE_MUSIC"}
 - {"command": "RESUME_MUSIC"}
 - {"command": "NEXT_TRACK"}
@@ -39,14 +39,14 @@ Supported Command Schemas:
 - {"command": "SWITCH_BLUETOOTH_DEVICE", "target": "<device_name_or_alias>"}
 - {"command": "UNKNOWN", "rawText": "<user_input>"}
 
-Music Resolution Rules:
-- For PLAY_MUSIC requests, extract the accurate recording title and artist from the user's natural language request.
-- If an authentic YouTube or YouTube Music URL is known with high certainty, it may be returned in playbackUrl (e.g. https://music.youtube.com/watch?v=VIDEO_ID or https://www.youtube.com/watch?v=VIDEO_ID); otherwise set playbackUrl to null.
-- Never fabricate, guess, or construct random YouTube video IDs.
-- Provide clean title and artist so client-side resolution handles streaming reliably.
+Multi-Intent & Sequential Rules:
+- If the user's input expresses multiple intentions (e.g. "Play Zaroori Tha and set the volume to 20%" or "Set volume to 30% and play Zara Zara"), output all actions in the exact sequential order requested in the "commands" array.
+- For single command requests (e.g. "Set volume to 40%"), return "commands" with that single command object.
+- For PLAY_MUSIC, accurately extract the title and artist. Do not split song titles when they contain conjunctions like "and" (e.g., "Play Romeo and Juliet").
+- Output format must strictly be: {"commands": [ ... ]}
 
 Output Requirements:
-- Return raw JSON only matching one of the schemas above.
+- Return raw JSON only matching the schema above.
 - Never output markdown backticks, explanations, or prose.
 - Never output Android intents, Bluetooth MAC addresses, or execute code.
 - Never invent unsupported commands.

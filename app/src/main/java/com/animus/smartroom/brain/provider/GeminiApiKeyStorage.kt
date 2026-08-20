@@ -9,11 +9,31 @@ class GeminiApiKeyStorage(context: Context) {
     companion object {
         private const val PREFS_NAME = "animus_brain_prefs"
         private const val KEY_GEMINI_API_KEY = "gemini_api_key_enc"
+        private const val KEY_SELECTED_PROVIDER = "selected_brain_provider"
         private const val OBFUSCATION_SALT = "AnimusSmartRoom_v1.1_Gemini_Salt"
     }
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun getSelectedProvider(): com.animus.smartroom.brain.model.BrainProviderType {
+        val stored = prefs.getString(KEY_SELECTED_PROVIDER, null)
+        return if (stored != null) {
+            try {
+                com.animus.smartroom.brain.model.BrainProviderType.valueOf(stored)
+            } catch (e: Exception) {
+                com.animus.smartroom.brain.model.BrainProviderType.LOCAL
+            }
+        } else if (hasApiKey()) {
+            com.animus.smartroom.brain.model.BrainProviderType.GEMINI
+        } else {
+            com.animus.smartroom.brain.model.BrainProviderType.LOCAL
+        }
+    }
+
+    fun saveSelectedProvider(type: com.animus.smartroom.brain.model.BrainProviderType) {
+        prefs.edit().putString(KEY_SELECTED_PROVIDER, type.name).apply()
+    }
 
     fun getApiKey(): String? {
         val stored = prefs.getString(KEY_GEMINI_API_KEY, null) ?: return null

@@ -4,9 +4,19 @@ import com.animus.smartroom.command.model.AnimusCommand
 
 sealed interface BrainResult {
     data class Success(
-        val command: AnimusCommand,
+        val commands: List<AnimusCommand>,
         val rawResponse: String? = null
-    ) : BrainResult
+    ) : BrainResult {
+        // Convenience constructor for single-command results
+        constructor(command: AnimusCommand, rawResponse: String? = null) : this(
+            commands = listOf(command),
+            rawResponse = rawResponse
+        )
+
+        // Backward compatibility accessor for single-command consumers
+        val command: AnimusCommand
+            get() = commands.firstOrNull() ?: AnimusCommand.UnknownCommand("")
+    }
 
     data class InvalidResponse(
         val reason: String,

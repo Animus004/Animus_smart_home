@@ -126,5 +126,21 @@ class BrainCommandValidatorTest {
         val malformedJson = "{ broken json"
         val result3 = BrainCommandValidator.parseAndValidateJson(malformedJson)
         assertTrue(result3 is BrainValidationResult.Invalid)
+
+        val nullFieldsJson = """
+            {
+                "command": "PLAY_MUSIC",
+                "title": "Ramta Jogi",
+                "artist": null,
+                "playbackUrl": null,
+                "directVideoId": null
+            }
+        """.trimIndent()
+        val resultNullFields = BrainCommandValidator.parseAndValidateJson(nullFieldsJson)
+        assertTrue(resultNullFields is BrainValidationResult.Valid)
+        val cmd = (resultNullFields as BrainValidationResult.Valid).commands[0] as AnimusCommand.PlayMusic
+        assertEquals("Ramta Jogi", cmd.title)
+        assertEquals(null, cmd.artist)
+        assertEquals(null, cmd.directVideoId)
     }
 }

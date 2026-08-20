@@ -250,6 +250,7 @@ class MusicController(
         }
 
         Log.i(TAG, "[music] ALLOWED: Bluetooth device '$activeDeviceName' is connected.")
+        Log.d(TAG, "[play-debug] Before playback: videoId='$directVideoId', url='${if (!directVideoId.isNullOrBlank()) "https://music.youtube.com/watch?v=$directVideoId" else "null"}'")
         cancelPendingInspectionAttempts()
 
         val result = if (!directVideoId.isNullOrBlank()) {

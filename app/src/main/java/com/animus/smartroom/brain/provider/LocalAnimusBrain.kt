@@ -27,7 +27,7 @@ class LocalAnimusBrain(
             return BrainResult.Success(AnimusCommand.UnknownCommand(input))
         }
 
-        Log.d(TAG, "[interpret] Local brain interpreting: '$trimmed'")
+        Log.d(TAG, "[local-brain] Interpreting: '$trimmed'")
 
         return try {
             val parsedCommand = localParser.parse(trimmed)
@@ -64,16 +64,17 @@ class LocalAnimusBrain(
 
             when (val validation = BrainCommandValidator.validate(dto)) {
                 is BrainValidationResult.Valid -> {
-                    Log.i(TAG, "[interpret] Local brain resolved valid command: ${validation.command::class.simpleName}")
-                    BrainResult.Success(validation.command)
+                    val count = validation.commands.size
+                    Log.i(TAG, "[local-brain] Command count returned: $count (${validation.commands.map { it::class.simpleName }})")
+                    BrainResult.Success(validation.commands)
                 }
                 is BrainValidationResult.Invalid -> {
-                    Log.w(TAG, "[interpret] Local brain produced invalid command contract: ${validation.reason}")
+                    Log.w(TAG, "[local-brain] Produced invalid command contract: ${validation.reason}")
                     BrainResult.InvalidResponse(validation.reason)
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "[interpret] Local brain error", e)
+            Log.e(TAG, "[local-brain] Evaluation failed", e)
             BrainResult.Failure("Local brain evaluation failed: ${e.message}", e)
         }
     }

@@ -1,28 +1,40 @@
 package com.animus.smartroom.brain.validator
 
+import android.util.Log
 import com.animus.smartroom.brain.model.BrainCommandDto
 import com.animus.smartroom.command.model.AnimusCommand
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
 sealed interface BrainValidationResult {
-    data class Valid(val command: AnimusCommand) : BrainValidationResult
+    data class Valid(val commands: List<AnimusCommand>) : BrainValidationResult {
+        constructor(command: AnimusCommand) : this(listOf(command))
+        val command: AnimusCommand
+            get() = commands.firstOrNull() ?: AnimusCommand.UnknownCommand("")
+    }
+
     data class Invalid(val reason: String) : BrainValidationResult
 }
 
 object BrainCommandValidator {
+
+    private const val TAG = "BrainCommandValidator"
 
     fun validate(dto: BrainCommandDto): BrainValidationResult {
         val normalizedType = dto.command.trim().uppercase(Locale.ROOT)
 
         return when (normalizedType) {
             BrainCommandDto.CMD_PLAY_MUSIC -> {
-                val title = dto.title?.trim()
+                val title = dto.title?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
                 if (title.isNullOrBlank()) {
                     BrainValidationResult.Invalid("PLAY_MUSIC requires a non-empty 'title' parameter.")
                 } else {
-                    val artist = dto.artist?.trim()?.ifBlank { null }
-                    val rawUrl = dto.playbackUrl?.trim()?.ifBlank { null }
+                    val artist = dto.artist?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
+                    val rawUrl = dto.playbackUrl?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
+                    val directId = dto.directVideoId?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
+
+                    Log.d(TAG, "[play-debug] Gemini PLAY_MUSIC parsed: title='$title', artist='$artist', playbackUrl='$rawUrl', directVideoId='$directId'")
 
                     if (rawUrl != null) {
                         when (val urlValidation = YouTubeUrlValidator.validateAndExtractVideoId(rawUrl)) {
@@ -39,18 +51,17 @@ object BrainCommandValidator {
                                 BrainValidationResult.Invalid("Invalid candidate playback URL: ${urlValidation.reason}")
                             }
                         }
-                    } else if (!dto.directVideoId.isNullOrBlank()) {
-                        val videoId = dto.directVideoId.trim()
-                        if (videoId.length == 11 && videoId.matches(Regex("^[a-zA-Z0-9_-]{11}$"))) {
+                    } else if (directId != null) {
+                        if (directId.length == 11 && directId.matches(Regex("^[a-zA-Z0-9_-]{11}$"))) {
                             BrainValidationResult.Valid(
                                 AnimusCommand.PlayMusic(
                                     title = title,
                                     artist = artist,
-                                    directVideoId = videoId
+                                    directVideoId = directId
                                 )
                             )
                         } else {
-                            BrainValidationResult.Invalid("Invalid direct video ID format: '$videoId'.")
+                            BrainValidationResult.Invalid("Invalid direct video ID format: '$directId'.")
                         }
                     } else {
                         BrainValidationResult.Valid(
@@ -92,7 +103,7 @@ object BrainCommandValidator {
             }
 
             BrainCommandDto.CMD_CONNECT_BLUETOOTH -> {
-                val target = dto.target?.trim()?.ifBlank { null }
+                val target = dto.target?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
                 BrainValidationResult.Valid(AnimusCommand.ConnectBluetoothDevice(deviceName = target))
             }
 
@@ -101,7 +112,7 @@ object BrainCommandValidator {
             }
 
             BrainCommandDto.CMD_SWITCH_BLUETOOTH -> {
-                val target = dto.target?.trim()
+                val target = dto.target?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
                 if (target.isNullOrBlank()) {
                     BrainValidationResult.Invalid("SWITCH_BLUETOOTH_DEVICE requires a non-empty 'target' parameter.")
                 } else {
@@ -120,6 +131,61 @@ object BrainCommandValidator {
         }
     }
 
+    private fun parseDto(json: JSONObject): BrainCommandDto? {
+        val command = if (json.has("command") && !json.isNull("command")) {
+            json.optString("command", "").trim()
+        } else if (json.has("type") && !json.isNull("type")) {
+            json.optString("type", "").trim()
+        } else {
+            ""
+        }
+
+        if (command.isBlank() || command.equals("null", ignoreCase = true)) return null
+
+        val title = if (json.has("title") && !json.isNull("title")) {
+            val s = json.optString("title").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val artist = if (json.has("artist") && !json.isNull("artist")) {
+            val s = json.optString("artist").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val target = if (json.has("target") && !json.isNull("target")) {
+            val s = json.optString("target").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val value = if (json.has("value") && !json.isNull("value")) json.optInt("value") else null
+
+        val playbackUrl = if (json.has("playbackUrl") && !json.isNull("playbackUrl")) {
+            val s = json.optString("playbackUrl").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val directVideoId = if (json.has("directVideoId") && !json.isNull("directVideoId")) {
+            val s = json.optString("directVideoId").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val rawText = if (json.has("rawText") && !json.isNull("rawText")) {
+            val s = json.optString("rawText")
+            if (s.equals("null", ignoreCase = true)) null else s
+        } else null
+
+        return BrainCommandDto(
+            command = command,
+            title = title,
+            artist = artist,
+            target = target,
+            value = value,
+            playbackUrl = playbackUrl,
+            directVideoId = directVideoId,
+            rawText = rawText
+        )
+    }
+
     fun parseAndValidateJson(jsonString: String): BrainValidationResult {
         return try {
             // Clean any potential markdown wrapper from LLM
@@ -130,31 +196,49 @@ object BrainCommandValidator {
                 .removeSuffix("```")
                 .trim()
 
-            val json = JSONObject(cleaned)
-            val command = json.optString("command", "").trim()
-            if (command.isBlank()) {
-                return BrainValidationResult.Invalid("Missing 'command' field in JSON response.")
+            if (cleaned.startsWith("[")) {
+                // Direct JSON Array of commands: [ { ... }, { ... } ]
+                val jsonArray = JSONArray(cleaned)
+                val validatedCommands = mutableListOf<AnimusCommand>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val dto = parseDto(obj) ?: return BrainValidationResult.Invalid("Missing 'command' or 'type' in array element $i.")
+                    when (val res = validate(dto)) {
+                        is BrainValidationResult.Valid -> validatedCommands.addAll(res.commands)
+                        is BrainValidationResult.Invalid -> return res
+                    }
+                }
+                if (validatedCommands.isEmpty()) {
+                    BrainValidationResult.Invalid("Empty command array received.")
+                } else {
+                    BrainValidationResult.Valid(validatedCommands)
+                }
+            } else {
+                val json = JSONObject(cleaned)
+
+                // Check for multi-command array in "commands" property
+                if (json.has("commands") && !json.isNull("commands")) {
+                    val jsonArray = json.getJSONArray("commands")
+                    val validatedCommands = mutableListOf<AnimusCommand>()
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        val dto = parseDto(obj) ?: return BrainValidationResult.Invalid("Missing 'command' or 'type' in 'commands' element $i.")
+                        when (val res = validate(dto)) {
+                            is BrainValidationResult.Valid -> validatedCommands.addAll(res.commands)
+                            is BrainValidationResult.Invalid -> return res
+                        }
+                    }
+                    if (validatedCommands.isEmpty()) {
+                        BrainValidationResult.Invalid("Empty 'commands' array received.")
+                    } else {
+                        BrainValidationResult.Valid(validatedCommands)
+                    }
+                } else {
+                    // Single command object
+                    val dto = parseDto(json) ?: return BrainValidationResult.Invalid("Missing 'command' or 'type' field in JSON response.")
+                    validate(dto)
+                }
             }
-
-            val title = if (json.has("title")) json.optString("title").trim() else null
-            val artist = if (json.has("artist")) json.optString("artist").trim() else null
-            val target = if (json.has("target")) json.optString("target").trim() else null
-            val value = if (json.has("value") && !json.isNull("value")) json.optInt("value") else null
-            val playbackUrl = if (json.has("playbackUrl")) json.optString("playbackUrl").trim() else null
-            val directVideoId = if (json.has("directVideoId")) json.optString("directVideoId").trim() else null
-            val rawText = if (json.has("rawText")) json.optString("rawText") else null
-
-            val dto = BrainCommandDto(
-                command = command,
-                title = title,
-                artist = artist,
-                target = target,
-                value = value,
-                playbackUrl = playbackUrl,
-                directVideoId = directVideoId,
-                rawText = rawText
-            )
-            validate(dto)
         } catch (e: Exception) {
             BrainValidationResult.Invalid("Malformed JSON response: ${e.message}")
         }

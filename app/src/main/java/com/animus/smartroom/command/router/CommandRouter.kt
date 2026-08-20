@@ -153,7 +153,42 @@ class CommandRouter(
     }
 
     suspend fun execute(command: AnimusCommand): CommandExecutionResult {
-        Log.i(TAG, "[ai] Routing command: ${command::class.simpleName}")
+        return execute(listOf(command))
+    }
+
+    suspend fun execute(commands: List<AnimusCommand>): CommandExecutionResult {
+        val count = commands.size
+        Log.i(TAG, "[command-router] Command count received: $count")
+
+        if (commands.isEmpty()) {
+            return CommandExecutionResult(success = false, message = "No commands received.")
+        }
+
+        val messages = mutableListOf<String>()
+        var allSuccess = true
+
+        commands.forEachIndexed { index, cmd ->
+            val order = index + 1
+            Log.i(TAG, "[command-router] Execution order #$order/$count -> Type: ${cmd::class.simpleName}")
+            val res = executeSingle(cmd)
+            if (res.message.isNotBlank()) {
+                messages.add(res.message)
+            }
+            if (!res.success) {
+                allSuccess = false
+            }
+        }
+
+        val combined = if (messages.isNotEmpty()) messages.joinToString(" • ") else "Commands executed"
+        Log.i(TAG, "[command-router] Finished executing $count commands (Success=$allSuccess): '$combined'")
+        return CommandExecutionResult(
+            success = allSuccess,
+            message = combined
+        )
+    }
+
+    private suspend fun executeSingle(command: AnimusCommand): CommandExecutionResult {
+        Log.i(TAG, "[command-router] Executing single command: ${command::class.simpleName}")
 
         return when (command) {
             is AnimusCommand.PlayMusic -> {
@@ -167,6 +202,8 @@ class CommandRouter(
                         message = "Connect a speaker first."
                     )
                 }
+
+                Log.d(TAG, "[play-debug] Before resolver: title='${command.title}', artist='${command.artist}', directVideoId='${command.directVideoId}'")
 
                 val resolution = musicResolver?.resolveTrack(
                     title = command.title,
@@ -185,6 +222,8 @@ class CommandRouter(
                     }
                     null -> command.directVideoId
                 }
+
+                Log.d(TAG, "[play-debug] Resolver result: videoId='$effectiveVideoId'")
 
                 if (effectiveVideoId != null) {
                     Log.i(TAG, "[direct-play] Executing direct playback for '${command.title}' (videoId='$effectiveVideoId') on output '$deviceName'")
@@ -377,10 +416,10 @@ class CommandRouter(
             }
 
             is AnimusCommand.UnknownCommand -> {
-                Log.w(TAG, "[ai] Unknown command received: '${command.rawText}'")
+                Log.w(TAG, "[ai] Unknown command: '${command.rawText}'")
                 CommandExecutionResult(
                     success = false,
-                    message = "I don't understand that command yet."
+                    message = "Could not understand command: '${command.rawText}'"
                 )
             }
         }
