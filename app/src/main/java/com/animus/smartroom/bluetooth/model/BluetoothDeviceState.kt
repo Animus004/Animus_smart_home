@@ -1,5 +1,13 @@
 package com.animus.smartroom.bluetooth.model
 
+data class BluetoothAudioDevice(
+    val name: String,
+    val macAddress: String,
+    val isBonded: Boolean = true,
+    val isConnected: Boolean = false,
+    val isAudioDevice: Boolean = true
+)
+
 sealed interface BluetoothDeviceState {
     data object Disconnected : BluetoothDeviceState
     data object Connecting : BluetoothDeviceState
@@ -13,11 +21,10 @@ sealed interface BluetoothDeviceState {
 }
 
 data class BluetoothUiState(
+    val pairedDevices: List<BluetoothAudioDevice> = emptyList(),
+    val selectedDevice: BluetoothAudioDevice? = null,
     val connectionState: BluetoothDeviceState = BluetoothDeviceState.Disconnected,
-    val isPaired: Boolean = false,
     val isBluetoothEnabled: Boolean = false,
     val hasRequiredPermissions: Boolean = false,
-    val targetDeviceName: String = "LG SNC4R(79)",
-    val targetDeviceMac: String = "54:15:89:DC:A5:79",
     val userNotice: String? = null
 )

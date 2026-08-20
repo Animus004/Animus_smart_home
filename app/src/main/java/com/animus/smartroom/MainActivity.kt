@@ -1,7 +1,6 @@
 package com.animus.smartroom
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -12,9 +11,12 @@ import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,13 +28,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.animus.smartroom.bluetooth.model.BluetoothAudioDevice
 import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.bluetooth.model.BluetoothUiState
 import com.animus.smartroom.ui.theme.AnimusSmartRoomTheme
@@ -54,21 +58,12 @@ class MainActivity : ComponentActivity() {
                     val uiState by viewModel.bluetoothUiState.collectAsStateWithLifecycle()
                     HomeScreen(
                         uiState = uiState,
-                        onConnectClick = {
-                            viewModel.onConnectClicked()
-                        },
-                        onDisconnectClick = {
-                            viewModel.onDisconnectClicked()
-                        },
-                        onPermissionsResult = { granted ->
-                            viewModel.onPermissionsResult(granted)
-                        },
-                        getRequiredPermissions = {
-                            viewModel.getRequiredPermissions()
-                        },
-                        hasPermissions = {
-                            viewModel.hasPermissions()
-                        }
+                        onConnectClick = { viewModel.onConnectClicked() },
+                        onDisconnectClick = { viewModel.onDisconnectClicked() },
+                        onDeviceSelected = { mac -> viewModel.onDeviceSelected(mac) },
+                        onPermissionsResult = { granted -> viewModel.onPermissionsResult(granted) },
+                        getRequiredPermissions = { viewModel.getRequiredPermissions() },
+                        hasPermissions = { viewModel.hasPermissions() }
                     )
                 }
             }
@@ -86,11 +81,14 @@ fun HomeScreen(
     uiState: BluetoothUiState,
     onConnectClick: () -> Unit,
     onDisconnectClick: () -> Unit,
+    onDeviceSelected: (String) -> Unit,
     onPermissionsResult: (Boolean) -> Unit,
     getRequiredPermissions: () -> Array<String>,
     hasPermissions: () -> Boolean
 ) {
     val context = LocalContext.current
+    var showDevicePicker by remember { mutableStateOf(false) }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permsMap ->
@@ -145,8 +143,8 @@ fun HomeScreen(
             }
         }
 
-        // Bluetooth Device Card for LG SNC4R
-        LgDeviceCard(
+        // Bluetooth Audio Device Card
+        AudioDeviceCard(
             uiState = uiState,
             onActionClick = {
                 if (!hasPermissions()) {
@@ -156,8 +154,15 @@ fun HomeScreen(
                         is BluetoothDeviceState.Connected -> onDisconnectClick()
                         is BluetoothDeviceState.Disconnected,
                         is BluetoothDeviceState.Error -> onConnectClick()
-                        is BluetoothDeviceState.Connecting -> { /* Action disabled while connecting */ }
+                        is BluetoothDeviceState.Connecting -> { /* Disabled while connecting */ }
                     }
+                }
+            },
+            onSwitchDeviceClick = {
+                if (!hasPermissions()) {
+                    permissionLauncher.launch(getRequiredPermissions())
+                } else {
+                    showDevicePicker = true
                 }
             },
             onRequestPermission = {
@@ -170,12 +175,25 @@ fun HomeScreen(
         // Music Section (UI Placeholder)
         MusicSection()
     }
+
+    if (showDevicePicker) {
+        DeviceSelectionDialog(
+            devices = uiState.pairedDevices,
+            selectedMac = uiState.selectedDevice?.macAddress,
+            onSelect = { mac ->
+                onDeviceSelected(mac)
+                showDevicePicker = false
+            },
+            onDismiss = { showDevicePicker = false }
+        )
+    }
 }
 
 @Composable
-fun LgDeviceCard(
+fun AudioDeviceCard(
     uiState: BluetoothUiState,
     onActionClick: () -> Unit,
+    onSwitchDeviceClick: () -> Unit,
     onRequestPermission: () -> Unit
 ) {
     val context = LocalContext.current
@@ -183,11 +201,12 @@ fun LgDeviceCard(
     val isConnected = connectionState is BluetoothDeviceState.Connected
     val isConnecting = connectionState is BluetoothDeviceState.Connecting
     val isError = connectionState is BluetoothDeviceState.Error
+    val selectedDevice = uiState.selectedDevice
 
     val cardBorder = if (isConnected) {
-        androidx.compose.foundation.BorderStroke(1.5.dp, PrimaryBlue)
+        BorderStroke(1.5.dp, PrimaryBlue)
     } else {
-        androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF333333))
+        BorderStroke(1.dp, Color(0xFF333333))
     }
 
     Card(
@@ -200,13 +219,16 @@ fun LgDeviceCard(
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            // Header with Icon & State badge
+            // Header with Icon, Device info, and Switch button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .size(46.dp)
@@ -230,33 +252,51 @@ fun LgDeviceCard(
 
                     Spacer(modifier = Modifier.width(14.dp))
 
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = uiState.targetDeviceName,
-                            fontSize = 18.sp,
+                            text = selectedDevice?.name ?: "No Device Selected",
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "MAC: ${uiState.targetDeviceMac}",
+                            text = if (selectedDevice != null) "MAC: ${selectedDevice.macAddress}" else "Tap to choose device",
                             fontSize = 12.sp,
-                            color = Color(0xFF888888)
+                            color = Color(0xFF888888),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // Pairing status pill
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Switch Device button
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (uiState.isPaired) Color(0xFF1E3A2F) else Color(0xFF3A281E)
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF252525),
+                    modifier = Modifier.clickable { onSwitchDeviceClick() }
                 ) {
-                    Text(
-                        text = if (uiState.isPaired) "Paired" else "Unpaired",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (uiState.isPaired) Color(0xFF69F0AE) else Color(0xFFFFAB40),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = "Switch Device",
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Switch",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PrimaryBlue
+                        )
+                    }
                 }
             }
 
@@ -296,7 +336,7 @@ fun LgDeviceCard(
                             text = when (connectionState) {
                                 is BluetoothDeviceState.Connected -> "Connected"
                                 is BluetoothDeviceState.Connecting -> "Connecting..."
-                                is BluetoothDeviceState.Disconnected -> "Disconnected"
+                                is BluetoothDeviceState.Disconnected -> if (selectedDevice != null) "Disconnected" else "No Device"
                                 is BluetoothDeviceState.Error -> "Connection Issue"
                             },
                             fontSize = 15.sp,
@@ -314,7 +354,7 @@ fun LgDeviceCard(
                 // Connect / Disconnect button
                 Button(
                     onClick = onActionClick,
-                    enabled = !isConnecting,
+                    enabled = !isConnecting && selectedDevice != null,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isConnected) Color(0xFF333333) else PrimaryBlue,
@@ -343,7 +383,7 @@ fun LgDeviceCard(
 
             // User Notice / Error or Unpaired Guidance Banner
             AnimatedVisibility(
-                visible = uiState.userNotice != null || (!uiState.hasRequiredPermissions && !uiState.isPaired),
+                visible = uiState.userNotice != null || (!uiState.hasRequiredPermissions && selectedDevice == null),
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
@@ -366,7 +406,7 @@ fun LgDeviceCard(
                         Text(
                             text = uiState.userNotice
                                 ?: if (!uiState.hasRequiredPermissions) "Bluetooth permission required."
-                                else "Ensure soundbar is powered on and paired.",
+                                else "Please pair your audio device in Bluetooth settings.",
                             fontSize = 12.sp,
                             color = Color(0xFFFFCDD2)
                         )
@@ -382,7 +422,7 @@ fun LgDeviceCard(
                         ) {
                             Text("Grant Bluetooth Permissions", fontSize = 12.sp, color = PrimaryBlue)
                         }
-                    } else if (!uiState.isPaired) {
+                    } else if (uiState.pairedDevices.isEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = {
@@ -395,6 +435,164 @@ fun LgDeviceCard(
                             Text("Open Bluetooth Settings to Pair", fontSize = 12.sp, color = PrimaryBlue)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DeviceSelectionDialog(
+    devices: List<BluetoothAudioDevice>,
+    selectedMac: String?,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Paired Audio Devices",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.Gray
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (devices.isEmpty()) {
+                    Text(
+                        text = "No paired Bluetooth audio devices found.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF888888),
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp)
+                    ) {
+                        items(devices) { device ->
+                            val isSelected = device.macAddress.equals(selectedMac, ignoreCase = true)
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) PrimaryBlue.copy(alpha = 0.15f) else Color(0xFF282828),
+                                border = if (isSelected) BorderStroke(1.dp, PrimaryBlue) else null,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable { onSelect(device.macAddress) }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (device.isConnected) Icons.Default.BluetoothConnected else Icons.Default.Speaker,
+                                            contentDescription = "Device",
+                                            tint = if (isSelected) PrimaryBlue else Color(0xFFAAAAAA),
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = device.name,
+                                                fontSize = 15.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) PrimaryBlue else Color.White,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = device.macAddress,
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF888888)
+                                            )
+                                        }
+                                    }
+
+                                    if (device.isConnected) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = Color(0xFF1E3A2F),
+                                            modifier = Modifier.padding(start = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Connected",
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF69F0AE),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    } else if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = PrimaryBlue,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Pair New",
+                        modifier = Modifier.size(16.dp),
+                        tint = PrimaryBlue
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Pair New Device in Settings", fontSize = 13.sp, color = PrimaryBlue)
                 }
             }
         }
@@ -465,7 +663,7 @@ fun MusicSection() {
             Spacer(modifier = Modifier.height(18.dp))
 
             Button(
-                onClick = { /* Music playback will be implemented next */ },
+                onClick = { /* Music playback placeholder */ },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),

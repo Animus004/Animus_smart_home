@@ -2,13 +2,13 @@ package com.animus.smartroom
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import com.animus.smartroom.bluetooth.LgSoundbarBluetoothManager
+import com.animus.smartroom.bluetooth.BluetoothAudioDeviceManager
 import com.animus.smartroom.bluetooth.model.BluetoothUiState
 import kotlinx.coroutines.flow.StateFlow
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val bluetoothManager = LgSoundbarBluetoothManager(application.applicationContext)
+    private val bluetoothManager = BluetoothAudioDeviceManager(application.applicationContext)
 
     val bluetoothUiState: StateFlow<BluetoothUiState> = bluetoothManager.uiState
 
@@ -22,6 +22,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onDisconnectClicked() {
         bluetoothManager.disconnect()
+    }
+
+    fun onDeviceSelected(macAddress: String) {
+        bluetoothManager.selectDevice(macAddress)
     }
 
     fun refreshState() {
