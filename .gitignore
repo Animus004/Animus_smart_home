@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+/app/build
+*.apk
+*.aab
+
+# Local downloaded tools & temporary artifacts
+/jdk/
+/jdk.zip
+*.log
