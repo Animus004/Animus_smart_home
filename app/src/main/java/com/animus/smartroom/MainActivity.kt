@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,10 +58,12 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val bluetoothUiState by viewModel.bluetoothUiState.collectAsStateWithLifecycle()
                     val musicUiState by viewModel.musicUiState.collectAsStateWithLifecycle()
+                    val aiCommandState by viewModel.aiCommandState.collectAsStateWithLifecycle()
 
                     HomeScreen(
                         bluetoothState = bluetoothUiState,
                         musicState = musicUiState,
+                        aiState = aiCommandState,
                         onConnectClick = { viewModel.onConnectClicked() },
                         onDisconnectClick = { viewModel.onDisconnectClicked() },
                         onDeviceSelected = { mac -> viewModel.onDeviceSelected(mac) },
@@ -71,7 +74,9 @@ class MainActivity : ComponentActivity() {
                         onNextClick = { viewModel.onNextClicked() },
                         onPreviousClick = { viewModel.onPreviousClicked() },
                         onVolumeChange = { percent -> viewModel.onVolumeChanged(percent) },
-                        onPlayZaraZaraClick = { viewModel.onPlayZaraZaraClicked() }
+                        onPlayZaraZaraClick = { viewModel.onPlayZaraZaraClicked() },
+                        onExecuteCommand = { cmd -> viewModel.onExecuteCommand(cmd) },
+                        onSetDeviceAlias = { mac, alias -> viewModel.onSetDeviceAlias(mac, alias) }
                     )
                 }
             }
@@ -88,6 +93,7 @@ class MainActivity : ComponentActivity() {
 fun HomeScreen(
     bluetoothState: BluetoothUiState,
     musicState: MusicUiState,
+    aiState: AiCommandUiState,
     onConnectClick: () -> Unit,
     onDisconnectClick: () -> Unit,
     onDeviceSelected: (String) -> Unit,
@@ -98,7 +104,9 @@ fun HomeScreen(
     onNextClick: () -> Unit,
     onPreviousClick: () -> Unit,
     onVolumeChange: (Float) -> Unit,
-    onPlayZaraZaraClick: () -> Unit
+    onPlayZaraZaraClick: () -> Unit,
+    onExecuteCommand: (String) -> Unit,
+    onSetDeviceAlias: (String, String?) -> Unit
 ) {
     val context = LocalContext.current
     var showDevicePicker by remember { mutableStateOf(false) }
@@ -157,7 +165,15 @@ fun HomeScreen(
             }
         }
 
-        // 1. Bluetooth Audio Device Card
+        // 1. AI Command Layer: "Ask Animus"
+        AskAnimusCard(
+            aiState = aiState,
+            onExecuteCommand = onExecuteCommand
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 2. Bluetooth Audio Device Card
         AudioDeviceCard(
             uiState = bluetoothState,
             onActionClick = {
@@ -168,7 +184,8 @@ fun HomeScreen(
                         is BluetoothDeviceState.Connected -> onDisconnectClick()
                         is BluetoothDeviceState.Disconnected,
                         is BluetoothDeviceState.Error -> onConnectClick()
-                        is BluetoothDeviceState.Connecting -> { /* Disabled while in progress */ }
+                        is BluetoothDeviceState.Connecting,
+                        is BluetoothDeviceState.Disconnecting -> { /* Disabled while in progress */ }
                     }
                 }
             },
@@ -186,7 +203,7 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 2. Universal Music Control Section
+        // 3. Universal Music Control Section
         MusicControlCard(
             musicState = musicState,
             onPlayPauseClick = onPlayPauseClick,
@@ -205,8 +222,187 @@ fun HomeScreen(
                 onDeviceSelected(mac)
                 showDevicePicker = false
             },
+            onSetAlias = { mac, alias ->
+                onSetDeviceAlias(mac, alias)
+            },
             onDismiss = { showDevicePicker = false }
         )
+    }
+}
+
+@Composable
+fun AskAnimusCard(
+    aiState: AiCommandUiState,
+    onExecuteCommand: (String) -> Unit
+) {
+    var textInput by remember { mutableStateOf("") }
+    val suggestions = listOf("Play Zara Zara", "Volume 40", "Pause", "Next")
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Ask Animus",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Natural language room & music control",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Text Input Row with Submit
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = textInput,
+                    onValueChange = { textInput = it },
+                    placeholder = {
+                        Text(
+                            text = "e.g. Play Zara Zara, Volume 40...",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                IconButton(
+                    onClick = {
+                        if (textInput.isNotBlank()) {
+                            onExecuteCommand(textInput)
+                            textInput = ""
+                        }
+                    },
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Submit Command",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            // Quick suggestion chips
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                suggestions.forEach { suggestion ->
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.clickable {
+                            onExecuteCommand(suggestion)
+                        }
+                    ) {
+                        Text(
+                            text = suggestion,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            // AI Execution Result Banner
+            AnimatedVisibility(
+                visible = aiState.lastResultMessage != null || aiState.isProcessing,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = when {
+                                aiState.isProcessing -> Icons.Default.HourglassEmpty
+                                aiState.isSuccess == true -> Icons.Default.CheckCircle
+                                else -> Icons.Default.Info
+                            },
+                            contentDescription = "Status",
+                            tint = when {
+                                aiState.isSuccess == true -> AccentGreen
+                                aiState.isSuccess == false -> Color(0xFFEF4444)
+                                else -> MaterialTheme.colorScheme.primary
+                            },
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = if (aiState.isProcessing) "Processing command..." else "Animus: ${aiState.lastResultMessage ?: ""}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = when {
+                                aiState.isSuccess == true -> AccentGreen
+                                aiState.isSuccess == false -> Color(0xFFEF4444)
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -221,6 +417,7 @@ fun AudioDeviceCard(
     val connectionState = uiState.connectionState
     val isConnected = connectionState is BluetoothDeviceState.Connected
     val isConnecting = connectionState is BluetoothDeviceState.Connecting
+    val isDisconnecting = connectionState is BluetoothDeviceState.Disconnecting
     val isError = connectionState is BluetoothDeviceState.Error
     val selectedDevice = uiState.selectedDevice
 
@@ -263,7 +460,7 @@ fun AudioDeviceCard(
                         Icon(
                             imageVector = when {
                                 isConnected -> Icons.Default.BluetoothConnected
-                                isConnecting -> Icons.Default.BluetoothAudio
+                                isConnecting || isDisconnecting -> Icons.Default.BluetoothAudio
                                 else -> Icons.Default.Speaker
                             },
                             contentDescription = "Device Icon",
@@ -276,16 +473,26 @@ fun AudioDeviceCard(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = selectedDevice?.name ?: "No Device Selected",
+                            text = selectedDevice?.displayName ?: "No Device Selected",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        if (selectedDevice?.alias != null) {
+                            Text(
+                                text = selectedDevice.name,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Text(
                             text = if (selectedDevice != null) "MAC: ${selectedDevice.macAddress}" else "Tap Switch to choose",
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -347,7 +554,7 @@ fun AudioDeviceCard(
                                 .background(
                                     when {
                                         isConnected -> AccentGreen
-                                        isConnecting -> Color(0xFFF59E0B)
+                                        isConnecting || isDisconnecting -> Color(0xFFF59E0B)
                                         isError -> Color(0xFFEF4444)
                                         else -> Color(0xFF94A3B8)
                                     }
@@ -358,6 +565,7 @@ fun AudioDeviceCard(
                             text = when (connectionState) {
                                 is BluetoothDeviceState.Connected -> "Connected"
                                 is BluetoothDeviceState.Connecting -> "Connecting..."
+                                is BluetoothDeviceState.Disconnecting -> "Disconnecting..."
                                 is BluetoothDeviceState.Disconnected -> if (selectedDevice != null) "Disconnected" else "No Device"
                                 is BluetoothDeviceState.Error -> "Connection Issue"
                             },
@@ -365,7 +573,7 @@ fun AudioDeviceCard(
                             fontWeight = FontWeight.SemiBold,
                             color = when {
                                 isConnected -> AccentGreen
-                                isConnecting -> Color(0xFFF59E0B)
+                                isConnecting || isDisconnecting -> Color(0xFFF59E0B)
                                 isError -> Color(0xFFEF4444)
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
@@ -376,7 +584,7 @@ fun AudioDeviceCard(
                 // Connect / Disconnect button
                 Button(
                     onClick = onActionClick,
-                    enabled = !isConnecting && selectedDevice != null,
+                    enabled = !isConnecting && !isDisconnecting && selectedDevice != null,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isConnected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
@@ -392,6 +600,14 @@ fun AudioDeviceCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = "Connecting", fontSize = 13.sp)
+                    } else if (isDisconnecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Disconnecting", fontSize = 13.sp)
                     } else {
                         Text(
                             text = if (isConnected) "Disconnect" else "Connect",
@@ -800,9 +1016,11 @@ fun DeviceSelectionDialog(
     devices: List<BluetoothAudioDevice>,
     selectedMac: String?,
     onSelect: (String) -> Unit,
+    onSetAlias: (String, String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    var deviceForAliasEdit by remember { mutableStateOf<BluetoothAudioDevice?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -852,7 +1070,7 @@ fun DeviceSelectionDialog(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 280.dp)
+                            .heightIn(max = 300.dp)
                     ) {
                         items(devices) { device ->
                             val isSelected = device.macAddress.equals(selectedMac, ignoreCase = true)
@@ -884,9 +1102,9 @@ fun DeviceSelectionDialog(
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
-                                        Column {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = device.name,
+                                                text = device.displayName,
                                                 fontSize = 15.sp,
                                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
@@ -894,34 +1112,52 @@ fun DeviceSelectionDialog(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
-                                                text = device.macAddress,
+                                                text = if (device.alias != null) "${device.name} • ${device.macAddress}" else device.macAddress,
                                                 fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }
 
-                                    if (device.isConnected) {
-                                        Surface(
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = AccentGreen.copy(alpha = 0.15f),
-                                            modifier = Modifier.padding(start = 8.dp)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = { deviceForAliasEdit = device },
+                                            modifier = Modifier.size(32.dp)
                                         ) {
-                                            Text(
-                                                text = "Connected",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = AccentGreen,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Edit Alias",
+                                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
-                                    } else if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = "Selected",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+
+                                        if (device.isConnected) {
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = AccentGreen.copy(alpha = 0.15f),
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Connected",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = AccentGreen,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        } else if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier
+                                                    .padding(start = 4.dp)
+                                                    .size(18.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -948,6 +1184,98 @@ fun DeviceSelectionDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Pair New Device in Settings", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+
+    deviceForAliasEdit?.let { targetDevice ->
+        AliasEditDialog(
+            device = targetDevice,
+            onSave = { alias ->
+                onSetAlias(targetDevice.macAddress, alias)
+            },
+            onDismiss = { deviceForAliasEdit = null }
+        )
+    }
+}
+
+@Composable
+fun AliasEditDialog(
+    device: BluetoothAudioDevice,
+    onSave: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var aliasText by remember { mutableStateOf(device.alias ?: "") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+                Text(
+                    text = "Device Alias",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${device.name} (${device.macAddress})",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = aliasText,
+                    onValueChange = { aliasText = it },
+                    label = { Text("Custom Name / Alias") },
+                    placeholder = { Text("e.g. Bedroom Speaker, TV Soundbar") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!device.alias.isNullOrBlank()) {
+                        TextButton(
+                            onClick = {
+                                onSave(null)
+                                onDismiss()
+                            }
+                        ) {
+                            Text("Clear Alias", color = MaterialTheme.colorScheme.error)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            onSave(aliasText.trim().ifEmpty { null })
+                            onDismiss()
+                        },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Save")
+                    }
                 }
             }
         }

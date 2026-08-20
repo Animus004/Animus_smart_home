@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
@@ -35,13 +36,15 @@ class BluetoothAudioDeviceManager(
         const val LG_SNC4R_NAME_DEFAULT = "LG SNC4R(79)"
         const val LG_SNC4R_NAME_FALLBACK = "LG SNC4R"
         const val LG_SNC4R_MAC_DEFAULT = "54:15:89:DC:A5:79"
+        const val STONE_SPINX_PRO_MAC = "04:7D:46:72:A7:E9"
         private const val CONNECT_TIMEOUT_MS = 10000L
-        private const val DISCONNECT_TIMEOUT_MS = 5000L
+        private const val DISCONNECT_TIMEOUT_MS = 6000L
     }
 
     private val bluetoothManager: BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
+    private val aliasManager = BluetoothDeviceAliasManager(context)
 
     private val _uiState = MutableStateFlow(BluetoothUiState())
     val uiState: StateFlow<BluetoothUiState> = _uiState.asStateFlow()
@@ -49,14 +52,15 @@ class BluetoothAudioDeviceManager(
     private var selectedDeviceMac: String? = null
     private var pendingConnectMac: String? = null
     private var a2dpProfile: BluetoothProfile? = null
+    private var headsetProfile: BluetoothProfile? = null
     private var isReceiverRegistered = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private var timeoutRunnable: Runnable? = null
 
-    private val profileListener = object : BluetoothProfile.ServiceListener {
+    private val a2dpListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
             if (profile == BluetoothProfile.A2DP) {
-                Log.d(TAG, "[proxy] A2DP Profile Proxy acquired successfully: $proxy")
+                Log.d(TAG, "[proxy] A2DP Profile Proxy acquired: $proxy")
                 a2dpProfile = proxy
 
                 val pendingMac = pendingConnectMac
@@ -74,16 +78,24 @@ class BluetoothAudioDeviceManager(
             if (profile == BluetoothProfile.A2DP) {
                 Log.w(TAG, "[proxy] A2DP Profile Proxy disconnected by system")
                 a2dpProfile = null
-                cancelTimeout()
-                _uiState.update {
-                    it.copy(
-                        connectionState = if (it.connectionState is BluetoothDeviceState.Connecting) {
-                            BluetoothDeviceState.Disconnected
-                        } else {
-                            it.connectionState
-                        }
-                    )
-                }
+                refreshState()
+            }
+        }
+    }
+
+    private val headsetListener = object : BluetoothProfile.ServiceListener {
+        override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
+            if (profile == BluetoothProfile.HEADSET) {
+                Log.d(TAG, "[proxy] HEADSET Profile Proxy acquired: $proxy")
+                headsetProfile = proxy
+                refreshState()
+            }
+        }
+
+        override fun onServiceDisconnected(profile: Int) {
+            if (profile == BluetoothProfile.HEADSET) {
+                Log.w(TAG, "[proxy] HEADSET Profile Proxy disconnected by system")
+                headsetProfile = null
                 refreshState()
             }
         }
@@ -102,7 +114,7 @@ class BluetoothAudioDeviceManager(
                     Log.d(TAG, "[broadcast] BluetoothAdapter state changed: $state (isEnabled=$isEnabled)")
                     if (!isEnabled) {
                         cancelTimeout()
-                        closeA2dpProxy()
+                        closeProfileProxies()
                         _uiState.update {
                             it.copy(
                                 isBluetoothEnabled = false,
@@ -112,12 +124,13 @@ class BluetoothAudioDeviceManager(
                         }
                     } else {
                         _uiState.update { it.copy(isBluetoothEnabled = true, userNotice = null) }
-                        requestA2dpProxy()
+                        requestProfileProxies()
                         refreshState()
                     }
                 }
 
-                BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
+                BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+                BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
                     val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
                     val prevState = intent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, BluetoothProfile.STATE_DISCONNECTED)
                     val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -127,7 +140,7 @@ class BluetoothAudioDeviceManager(
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
 
-                    Log.d(TAG, "[broadcast] A2DP connection state for ${device?.address} (${device?.name}): state=$state, prevState=$prevState")
+                    Log.d(TAG, "[broadcast] Profile state changed for ${device?.address} (${device?.name}): action=$action, state=$state, prevState=$prevState")
 
                     if (isTargetDevice(device)) {
                         when (state) {
@@ -135,7 +148,7 @@ class BluetoothAudioDeviceManager(
                                 cancelTimeout()
                                 val name = getDeviceDisplayName(device)
                                 val mac = device?.address ?: (selectedDeviceMac ?: LG_SNC4R_MAC_DEFAULT)
-                                Log.i(TAG, "[broadcast] A2DP Connected successfully to $name ($mac)")
+                                Log.i(TAG, "[broadcast] Profile CONNECTED for $name ($mac)")
                                 _uiState.update {
                                     it.copy(
                                         connectionState = BluetoothDeviceState.Connected(name, mac),
@@ -145,36 +158,38 @@ class BluetoothAudioDeviceManager(
                             }
 
                             BluetoothProfile.STATE_CONNECTING -> {
-                                Log.d(TAG, "[broadcast] A2DP Connecting to ${device?.address}")
-                                _uiState.update {
-                                    it.copy(connectionState = BluetoothDeviceState.Connecting)
+                                if (_uiState.value.connectionState !is BluetoothDeviceState.Disconnecting) {
+                                    _uiState.update {
+                                        it.copy(connectionState = BluetoothDeviceState.Connecting)
+                                    }
                                 }
                             }
 
                             BluetoothProfile.STATE_DISCONNECTING -> {
-                                Log.d(TAG, "[broadcast] A2DP Disconnecting from ${device?.address}")
                                 _uiState.update {
-                                    it.copy(connectionState = BluetoothDeviceState.Connecting)
+                                    it.copy(connectionState = BluetoothDeviceState.Disconnecting)
                                 }
                             }
 
                             BluetoothProfile.STATE_DISCONNECTED -> {
-                                cancelTimeout()
-                                Log.d(TAG, "[broadcast] A2DP Disconnected from ${device?.address} (prevState was $prevState)")
-                                val newState = if (prevState == BluetoothProfile.STATE_CONNECTING) {
-                                    BluetoothDeviceState.Error("Connection attempt failed or was rejected by device.")
+                                val isStillConnectedAtSystem = isDeviceConnectedAtSystemLevel(device)
+                                Log.d(TAG, "[broadcast] Profile DISCONNECTED for ${device?.address}. isStillConnectedAtSystem=$isStillConnectedAtSystem")
+
+                                if (isStillConnectedAtSystem) {
+                                    Log.w(TAG, "[broadcast] Target device is STILL CONNECTED to other profiles/ACL at system level. Retaining current state.")
                                 } else {
-                                    BluetoothDeviceState.Disconnected
-                                }
-                                val userNotice = when (newState) {
-                                    is BluetoothDeviceState.Error -> newState.message
-                                    else -> null
-                                }
-                                _uiState.update {
-                                    it.copy(
-                                        connectionState = newState,
-                                        userNotice = userNotice
-                                    )
+                                    cancelTimeout()
+                                    val newState = if (prevState == BluetoothProfile.STATE_CONNECTING) {
+                                        BluetoothDeviceState.Error("Connection attempt failed or was rejected by device.")
+                                    } else {
+                                        BluetoothDeviceState.Disconnected
+                                    }
+                                    _uiState.update {
+                                        it.copy(
+                                            connectionState = newState,
+                                            userNotice = if (newState is BluetoothDeviceState.Error) newState.message else null
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -204,9 +219,13 @@ class BluetoothAudioDeviceManager(
                     }
                     Log.d(TAG, "[broadcast] ACL Disconnected: ${device?.address}")
                     if (isTargetDevice(device)) {
-                        cancelTimeout()
-                        _uiState.update {
-                            it.copy(connectionState = BluetoothDeviceState.Disconnected)
+                        val isStillConnectedAtSystem = isDeviceConnectedAtSystemLevel(device)
+                        Log.d(TAG, "[broadcast] ACL Disconnected received. isStillConnectedAtSystem=$isStillConnectedAtSystem")
+                        if (!isStillConnectedAtSystem) {
+                            cancelTimeout()
+                            _uiState.update {
+                                it.copy(connectionState = BluetoothDeviceState.Disconnected)
+                            }
                         }
                         refreshState()
                     }
@@ -226,6 +245,7 @@ class BluetoothAudioDeviceManager(
             val filter = IntentFilter().apply {
                 addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
                 addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
                 addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
                 addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
                 addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
@@ -235,7 +255,7 @@ class BluetoothAudioDeviceManager(
             Log.d(TAG, "[lifecycle] BroadcastReceiver registered")
         }
 
-        requestA2dpProxy()
+        requestProfileProxies()
         refreshState()
     }
 
@@ -252,35 +272,35 @@ class BluetoothAudioDeviceManager(
             }
             isReceiverRegistered = false
         }
-        closeA2dpProxy()
+        closeProfileProxies()
     }
 
-    private fun requestA2dpProxy() {
+    private fun requestProfileProxies() {
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
-            Log.w(TAG, "[proxy] BluetoothAdapter is null or disabled; cannot request proxy")
+            Log.w(TAG, "[proxy] BluetoothAdapter is null or disabled; cannot request proxies")
             return
         }
 
-        closeA2dpProxy()
+        closeProfileProxies()
 
-        Log.d(TAG, "[proxy] Requesting A2DP profile proxy via getProfileProxy")
-        val success = bluetoothAdapter.getProfileProxy(
-            context,
-            profileListener,
-            BluetoothProfile.A2DP
-        )
-        Log.d(TAG, "[proxy] getProfileProxy invocation returned: $success")
+        Log.d(TAG, "[proxy] Requesting A2DP profile proxy")
+        bluetoothAdapter.getProfileProxy(context, a2dpListener, BluetoothProfile.A2DP)
+
+        Log.d(TAG, "[proxy] Requesting HEADSET profile proxy")
+        bluetoothAdapter.getProfileProxy(context, headsetListener, BluetoothProfile.HEADSET)
     }
 
-    private fun closeA2dpProxy() {
-        if (a2dpProfile != null && bluetoothAdapter != null) {
-            Log.d(TAG, "[proxy] Closing existing A2DP profile proxy ($a2dpProfile)")
-            try {
-                bluetoothAdapter.closeProfileProxy(BluetoothProfile.A2DP, a2dpProfile)
-            } catch (e: Exception) {
-                Log.w(TAG, "[proxy] Error while closing profile proxy", e)
+    private fun closeProfileProxies() {
+        if (bluetoothAdapter != null) {
+            a2dpProfile?.let {
+                try { bluetoothAdapter.closeProfileProxy(BluetoothProfile.A2DP, it) } catch (e: Exception) { /* ignore */ }
             }
             a2dpProfile = null
+
+            headsetProfile?.let {
+                try { bluetoothAdapter.closeProfileProxy(BluetoothProfile.HEADSET, it) } catch (e: Exception) { /* ignore */ }
+            }
+            headsetProfile = null
         }
     }
 
@@ -289,6 +309,55 @@ class BluetoothAudioDeviceManager(
         selectedDeviceMac = macAddress
         cancelTimeout()
         refreshState()
+    }
+
+    @SuppressLint("MissingPermission")
+    fun isDeviceConnectedAtSystemLevel(device: BluetoothDevice?): Boolean {
+        if (device == null) return false
+
+        // 1. Check hidden / reflection BluetoothDevice.isConnected() (direct physical ACL link check)
+        try {
+            val isConnectedMethod = device.javaClass.getMethod("isConnected")
+            isConnectedMethod.isAccessible = true
+            val result = isConnectedMethod.invoke(device) as? Boolean
+            if (result == true) {
+                return true
+            }
+        } catch (e: Exception) {
+            Log.v(TAG, "[state] BluetoothDevice.isConnected reflection: ${e.message}")
+        }
+
+        // 2. Check A2DP proxy
+        val a2dp = a2dpProfile
+        if (a2dp != null) {
+            try {
+                if (a2dp.getConnectionState(device) == BluetoothProfile.STATE_CONNECTED) {
+                    return true
+                }
+            } catch (e: Exception) { /* ignore */ }
+        }
+
+        // 3. Check HEADSET proxy
+        val headset = headsetProfile
+        if (headset != null) {
+            try {
+                if (headset.getConnectionState(device) == BluetoothProfile.STATE_CONNECTED) {
+                    return true
+                }
+            } catch (e: Exception) { /* ignore */ }
+        }
+
+        // 4. Check BluetoothManager.getConnectedDevices for GATT profile
+        if (bluetoothManager != null && hasRequiredPermissions()) {
+            try {
+                val gattDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+                if (gattDevices.any { it.address.equals(device.address, ignoreCase = true) }) {
+                    return true
+                }
+            } catch (e: Exception) { /* ignore */ }
+        }
+
+        return false
     }
 
     @SuppressLint("MissingPermission")
@@ -316,17 +385,10 @@ class BluetoothAudioDeviceManager(
             emptySet()
         } ?: emptySet()
 
-        val a2dp = a2dpProfile
         val deviceList = bondedDevices.map { device ->
             val name = try { device.name ?: "Unknown Device" } catch (e: SecurityException) { "Unknown Device" }
             val mac = device.address
-            val isConnected = if (a2dp != null) {
-                try {
-                    a2dp.getConnectionState(device) == BluetoothProfile.STATE_CONNECTED
-                } catch (e: Exception) {
-                    false
-                }
-            } else false
+            val isConnected = isDeviceConnectedAtSystemLevel(device)
 
             val majorClass = try {
                 device.bluetoothClass?.majorDeviceClass
@@ -340,11 +402,16 @@ class BluetoothAudioDeviceManager(
                     name.contains("speaker", ignoreCase = true) ||
                     name.contains("headset", ignoreCase = true) ||
                     name.contains("ear", ignoreCase = true) ||
-                    name.contains("buds", ignoreCase = true)
+                    name.contains("buds", ignoreCase = true) ||
+                    name.contains("spinx", ignoreCase = true) ||
+                    name.contains("stone", ignoreCase = true) ||
+                    mac.equals(STONE_SPINX_PRO_MAC, ignoreCase = true)
 
+            val alias = aliasManager.getAlias(mac)
             BluetoothAudioDevice(
                 name = name,
                 macAddress = mac,
+                alias = alias,
                 isBonded = true,
                 isConnected = isConnected,
                 isAudioDevice = isAudio
@@ -352,8 +419,9 @@ class BluetoothAudioDeviceManager(
         }.sortedWith(
             compareByDescending<BluetoothAudioDevice> { it.isConnected }
                 .thenByDescending { isLgSoundbar(it.name, it.macAddress) }
+                .thenByDescending { it.macAddress.equals(STONE_SPINX_PRO_MAC, ignoreCase = true) }
                 .thenByDescending { it.isAudioDevice }
-                .thenBy { it.name }
+                .thenBy { it.displayName }
         )
 
         // Resolve selected device
@@ -368,25 +436,41 @@ class BluetoothAudioDeviceManager(
             selectedDeviceMac = resolvedSelectedDevice.macAddress
         }
 
-        // Determine actual connection state for resolved selected device
-        val isSelectedConnected = resolvedSelectedDevice != null && resolvedSelectedDevice.isConnected
+        val targetBtDevice = try {
+            if (resolvedSelectedDevice != null) bluetoothAdapter.getRemoteDevice(resolvedSelectedDevice.macAddress) else null
+        } catch (e: Exception) {
+            null
+        }
+
+        // Determine system-level connection state for the resolved selected device
+        val isSelectedConnected = isDeviceConnectedAtSystemLevel(targetBtDevice)
 
         val currentConnState = _uiState.value.connectionState
         val resolvedConnState: BluetoothDeviceState = when {
             resolvedSelectedDevice == null -> BluetoothDeviceState.Disconnected
-            isSelectedConnected -> BluetoothDeviceState.Connected(
-                deviceName = resolvedSelectedDevice.name,
-                macAddress = resolvedSelectedDevice.macAddress
-            )
+            isSelectedConnected -> {
+                if (currentConnState is BluetoothDeviceState.Disconnecting && timeoutRunnable != null) {
+                    BluetoothDeviceState.Disconnecting
+                } else {
+                    BluetoothDeviceState.Connected(
+                        deviceName = resolvedSelectedDevice.name,
+                        macAddress = resolvedSelectedDevice.macAddress
+                    )
+                }
+            }
             currentConnState is BluetoothDeviceState.Connecting && timeoutRunnable != null -> {
-                // Keep connecting only while active timeout timer is running
                 BluetoothDeviceState.Connecting
+            }
+            currentConnState is BluetoothDeviceState.Disconnecting && timeoutRunnable != null -> {
+                // Device confirmed NOT connected at system level -> disconnect complete!
+                cancelTimeout()
+                BluetoothDeviceState.Disconnected
             }
             currentConnState is BluetoothDeviceState.Error -> currentConnState
             else -> BluetoothDeviceState.Disconnected
         }
 
-        Log.d(TAG, "[state] State refreshed: selected=${resolvedSelectedDevice?.name}, connected=$isSelectedConnected, connState=$resolvedConnState, pairedCount=${deviceList.size}")
+        Log.d(TAG, "[state] State refreshed: selected=${resolvedSelectedDevice?.name} (${resolvedSelectedDevice?.macAddress}), systemConnected=$isSelectedConnected, connState=$resolvedConnState, pairedCount=${deviceList.size}")
 
         _uiState.update {
             it.copy(
@@ -484,25 +568,16 @@ class BluetoothAudioDeviceManager(
 
         val a2dp = a2dpProfile
         if (a2dp == null) {
-            Log.d(TAG, "[connect] A2DP proxy not ready; requesting proxy and queueing connect for $macAddress")
+            Log.d(TAG, "[connect] A2DP proxy not ready; requesting proxies and queueing connect for $macAddress")
             pendingConnectMac = macAddress
             startTimeoutTimer("Connection timed out waiting for Bluetooth audio service.")
-            requestA2dpProxy()
+            requestProfileProxies()
             return
         }
 
-        // Check if already connected on A2DP level
-        val currentA2dpState = try {
-            a2dp.getConnectionState(bluetoothDevice)
-        } catch (e: Exception) {
-            Log.w(TAG, "[connect] Error querying getConnectionState", e)
-            BluetoothProfile.STATE_DISCONNECTED
-        }
-
-        Log.d(TAG, "[connect] Current A2DP state for $deviceName: $currentA2dpState")
-
-        if (currentA2dpState == BluetoothProfile.STATE_CONNECTED) {
-            Log.i(TAG, "[connect] Device $deviceName is already CONNECTED via A2DP")
+        // Check if already connected at system level
+        if (isDeviceConnectedAtSystemLevel(bluetoothDevice)) {
+            Log.i(TAG, "[connect] Device $deviceName is already CONNECTED at system level")
             cancelTimeout()
             _uiState.update {
                 it.copy(
@@ -513,11 +588,17 @@ class BluetoothAudioDeviceManager(
             return
         }
 
-        // Call connect via reflection
-        val success = invokeProfileConnect(a2dp, bluetoothDevice)
-        Log.d(TAG, "[connect] invokeProfileConnect result: $success")
+        // Connect A2DP profile
+        val a2dpSuccess = invokeProfileConnect(a2dp, bluetoothDevice)
+        Log.d(TAG, "[connect] invokeProfileConnect (A2DP) result: $a2dpSuccess")
 
-        if (success) {
+        // Connect HEADSET profile if available
+        headsetProfile?.let { proxy ->
+            val headsetSuccess = invokeProfileConnect(proxy, bluetoothDevice)
+            Log.d(TAG, "[connect] invokeProfileConnect (HEADSET) result: $headsetSuccess")
+        }
+
+        if (a2dpSuccess) {
             startTimeoutTimer("Connection attempt timed out. Ensure $deviceName is powered on and in Bluetooth mode.")
         } else {
             cancelTimeout()
@@ -535,10 +616,11 @@ class BluetoothAudioDeviceManager(
         if (!hasRequiredPermissions()) return
         val selected = _uiState.value.selectedDevice ?: return
 
-        Log.i(TAG, "[disconnect] Initiating disconnection from ${selected.name} (${selected.macAddress})")
-
-        cancelTimeout()
-        pendingConnectMac = null
+        // Prevent duplicate disconnect calls
+        if (_uiState.value.connectionState is BluetoothDeviceState.Disconnecting && timeoutRunnable != null) {
+            Log.w(TAG, "[disconnect] Disconnection from ${selected.name} already in progress, ignoring duplicate trigger")
+            return
+        }
 
         val bluetoothDevice = try {
             bluetoothAdapter?.getRemoteDevice(selected.macAddress)
@@ -546,29 +628,47 @@ class BluetoothAudioDeviceManager(
             null
         }
 
-        val a2dp = a2dpProfile
-
-        _uiState.update {
-            it.copy(connectionState = BluetoothDeviceState.Connecting)
+        val isConnectedAtSystem = isDeviceConnectedAtSystemLevel(bluetoothDevice)
+        if (!isConnectedAtSystem && _uiState.value.connectionState is BluetoothDeviceState.Disconnected) {
+            Log.d(TAG, "[disconnect] Already disconnected from ${selected.name}")
+            return
         }
 
-        // Start disconnect safety timeout
-        startDisconnectTimeoutTimer()
+        Log.i(TAG, "[disconnect] Initiating full system disconnection from ${selected.name} (${selected.macAddress})")
 
-        if (a2dp != null && bluetoothDevice != null) {
-            val success = invokeProfileDisconnect(a2dp, bluetoothDevice)
-            Log.d(TAG, "[disconnect] invokeProfileDisconnect result: $success")
-            if (!success) {
-                cancelTimeout()
-                _uiState.update {
-                    it.copy(connectionState = BluetoothDeviceState.Disconnected)
-                }
+        cancelTimeout()
+        pendingConnectMac = null
+
+        // Transition to Disconnecting state
+        _uiState.update {
+            it.copy(
+                connectionState = BluetoothDeviceState.Disconnecting,
+                userNotice = null
+            )
+        }
+
+        // Start bounded disconnect safety timeout
+        startDisconnectTimeoutTimer(selected.name, selected.macAddress)
+
+        if (bluetoothDevice != null) {
+            // 1. Invoke A2DP profile disconnect
+            a2dpProfile?.let { proxy ->
+                val a2dpSuccess = invokeProfileDisconnect(proxy, bluetoothDevice)
+                Log.d(TAG, "[disconnect] invoke A2DP disconnect result: $a2dpSuccess")
             }
-        } else {
-            cancelTimeout()
-            _uiState.update {
-                it.copy(connectionState = BluetoothDeviceState.Disconnected)
+
+            // 2. Invoke HEADSET profile disconnect
+            headsetProfile?.let { proxy ->
+                val headsetSuccess = invokeProfileDisconnect(proxy, bluetoothDevice)
+                Log.d(TAG, "[disconnect] invoke HEADSET disconnect result: $headsetSuccess")
             }
+
+            // 3. Invoke BluetoothDevice.disconnect() (API 29+ hidden method: tears down all profiles & ACL)
+            val deviceSuccess = invokeDeviceDisconnect(bluetoothDevice)
+            Log.d(TAG, "[disconnect] invoke BluetoothDevice.disconnect() result: $deviceSuccess")
+
+            // 4. Invoke BluetoothAdapter.disconnect(device) if available via reflection
+            invokeAdapterDisconnect(bluetoothDevice)
         }
     }
 
@@ -577,10 +677,10 @@ class BluetoothAudioDeviceManager(
             val connectMethod: Method = profile.javaClass.getMethod("connect", BluetoothDevice::class.java)
             connectMethod.isAccessible = true
             val result = connectMethod.invoke(profile, device) as? Boolean ?: false
-            Log.d(TAG, "[reflection] BluetoothA2dp.connect() returned: $result")
+            Log.d(TAG, "[reflection] ${profile.javaClass.simpleName}.connect() returned: $result")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "[reflection] Failed to invoke BluetoothA2dp.connect()", e)
+            Log.e(TAG, "[reflection] Failed to invoke connect() on ${profile.javaClass.simpleName}", e)
             false
         }
     }
@@ -590,10 +690,37 @@ class BluetoothAudioDeviceManager(
             val disconnectMethod: Method = profile.javaClass.getMethod("disconnect", BluetoothDevice::class.java)
             disconnectMethod.isAccessible = true
             val result = disconnectMethod.invoke(profile, device) as? Boolean ?: false
-            Log.d(TAG, "[reflection] BluetoothA2dp.disconnect() returned: $result")
+            Log.d(TAG, "[reflection] ${profile.javaClass.simpleName}.disconnect() returned: $result")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "[reflection] Failed to invoke BluetoothA2dp.disconnect()", e)
+            Log.e(TAG, "[reflection] Failed to invoke disconnect() on ${profile.javaClass.simpleName}", e)
+            false
+        }
+    }
+
+    private fun invokeDeviceDisconnect(device: BluetoothDevice): Boolean {
+        return try {
+            val disconnectMethod: Method = device.javaClass.getMethod("disconnect")
+            disconnectMethod.isAccessible = true
+            val result = disconnectMethod.invoke(device) as? Boolean ?: false
+            Log.d(TAG, "[reflection] BluetoothDevice.disconnect() returned: $result")
+            true
+        } catch (e: Exception) {
+            Log.d(TAG, "[reflection] BluetoothDevice.disconnect() not available: ${e.message}")
+            false
+        }
+    }
+
+    private fun invokeAdapterDisconnect(device: BluetoothDevice): Boolean {
+        val adapter = bluetoothAdapter ?: return false
+        return try {
+            val disconnectMethod: Method = adapter.javaClass.getMethod("disconnect", BluetoothDevice::class.java)
+            disconnectMethod.isAccessible = true
+            val result = disconnectMethod.invoke(adapter, device) as? Boolean ?: false
+            Log.d(TAG, "[reflection] BluetoothAdapter.disconnect() returned: $result")
+            true
+        } catch (e: Exception) {
+            Log.d(TAG, "[reflection] BluetoothAdapter.disconnect() not available: ${e.message}")
             false
         }
     }
@@ -618,15 +745,32 @@ class BluetoothAudioDeviceManager(
         mainHandler.postDelayed(runnable, CONNECT_TIMEOUT_MS)
     }
 
-    private fun startDisconnectTimeoutTimer() {
+    @SuppressLint("MissingPermission")
+    private fun startDisconnectTimeoutTimer(targetName: String, macAddress: String) {
         cancelTimeout()
-        Log.d(TAG, "[timer] Starting disconnect timeout timer ($DISCONNECT_TIMEOUT_MS ms)")
+        Log.d(TAG, "[timer] Starting disconnect timeout timer ($DISCONNECT_TIMEOUT_MS ms) for $targetName")
         val runnable = Runnable {
-            Log.d(TAG, "[timer] Disconnect timer expired, setting Disconnected")
+            Log.w(TAG, "[timer] Disconnect timer expired for $targetName ($macAddress)")
             timeoutRunnable = null
-            if (_uiState.value.connectionState is BluetoothDeviceState.Connecting) {
+
+            val device = try { bluetoothAdapter?.getRemoteDevice(macAddress) } catch (e: Exception) { null }
+            val isStillConnected = isDeviceConnectedAtSystemLevel(device)
+
+            if (isStillConnected) {
+                Log.e(TAG, "[timer] Disconnect timed out: $targetName is STILL CONNECTED at system level")
                 _uiState.update {
-                    it.copy(connectionState = BluetoothDeviceState.Disconnected)
+                    it.copy(
+                        connectionState = BluetoothDeviceState.Error("Couldn't disconnect $targetName"),
+                        userNotice = "Couldn't disconnect $targetName. Please disconnect from Bluetooth settings."
+                    )
+                }
+            } else {
+                Log.i(TAG, "[timer] Disconnect confirmed via system-level check for $targetName")
+                _uiState.update {
+                    it.copy(
+                        connectionState = BluetoothDeviceState.Disconnected,
+                        userNotice = null
+                    )
                 }
             }
             refreshState()
@@ -658,15 +802,36 @@ class BluetoothAudioDeviceManager(
 
     @SuppressLint("MissingPermission")
     private fun getDeviceDisplayName(device: BluetoothDevice?): String {
-        if (device != null && hasRequiredPermissions()) {
-            try {
-                val name = device.name
-                if (!name.isNullOrBlank()) return name
-            } catch (e: SecurityException) {
-                Log.w(TAG, "SecurityException reading device name", e)
+        if (device != null) {
+            val alias = aliasManager.getAlias(device.address)
+            if (!alias.isNullOrBlank()) return alias
+            if (hasRequiredPermissions()) {
+                try {
+                    val name = device.name
+                    if (!name.isNullOrBlank()) return name
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "SecurityException reading device name", e)
+                }
             }
+            return device.address
         }
-        return selectedDeviceMac ?: LG_SNC4R_NAME_DEFAULT
+        val selectedMac = selectedDeviceMac
+        if (selectedMac != null) {
+            val alias = aliasManager.getAlias(selectedMac)
+            if (!alias.isNullOrBlank()) return alias
+            return selectedMac
+        }
+        return LG_SNC4R_NAME_DEFAULT
+    }
+
+    fun setDeviceAlias(macAddress: String, alias: String?) {
+        Log.i(TAG, "[alias] Setting alias for $macAddress: '$alias'")
+        aliasManager.setAlias(macAddress, alias)
+        refreshState()
+    }
+
+    fun getDeviceAlias(macAddress: String): String? {
+        return aliasManager.getAlias(macAddress)
     }
 
     fun hasRequiredPermissions(): Boolean {
