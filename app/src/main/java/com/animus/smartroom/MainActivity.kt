@@ -1,28 +1,48 @@
 package com.animus.smartroom
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothConnected
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
+import com.animus.smartroom.bluetooth.model.BluetoothUiState
 import com.animus.smartroom.ui.theme.AnimusSmartRoomTheme
 import com.animus.smartroom.ui.theme.CardBackground
 import com.animus.smartroom.ui.theme.PrimaryBlue
+import com.animus.smartroom.ui.theme.SurfaceDark
 
 class MainActivity : ComponentActivity() {
+    private val viewModel: MainViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -31,92 +51,351 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    HomeScreen()
+                    val uiState by viewModel.bluetoothUiState.collectAsStateWithLifecycle()
+                    HomeScreen(
+                        uiState = uiState,
+                        onConnectClick = {
+                            viewModel.onConnectClicked()
+                        },
+                        onDisconnectClick = {
+                            viewModel.onDisconnectClicked()
+                        },
+                        onPermissionsResult = { granted ->
+                            viewModel.onPermissionsResult(granted)
+                        },
+                        getRequiredPermissions = {
+                            viewModel.getRequiredPermissions()
+                        },
+                        hasPermissions = {
+                            viewModel.hasPermissions()
+                        }
+                    )
                 }
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshState()
+    }
 }
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    uiState: BluetoothUiState,
+    onConnectClick: () -> Unit,
+    onDisconnectClick: () -> Unit,
+    onPermissionsResult: (Boolean) -> Unit,
+    getRequiredPermissions: () -> Array<String>,
+    hasPermissions: () -> Boolean
+) {
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permsMap ->
+        val allGranted = permsMap.values.all { it }
+        onPermissionsResult(allGranted)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 24.dp)
     ) {
-        Text(
-            text = "Animus Smart Room",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 32.dp)
+        // App Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Animus Smart Room",
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "Room Audio & Automation Center",
+                    fontSize = 13.sp,
+                    color = Color(0xFF9E9E9E)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceDark)
+                    .clickable {
+                        context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SettingsBluetooth,
+                    contentDescription = "Bluetooth Settings",
+                    tint = PrimaryBlue,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
+        // Bluetooth Device Card for LG SNC4R
+        LgDeviceCard(
+            uiState = uiState,
+            onActionClick = {
+                if (!hasPermissions()) {
+                    permissionLauncher.launch(getRequiredPermissions())
+                } else {
+                    when (uiState.connectionState) {
+                        is BluetoothDeviceState.Connected -> onDisconnectClick()
+                        is BluetoothDeviceState.Disconnected,
+                        is BluetoothDeviceState.Error -> onConnectClick()
+                        is BluetoothDeviceState.Connecting -> { /* Action disabled while connecting */ }
+                    }
+                }
+            },
+            onRequestPermission = {
+                permissionLauncher.launch(getRequiredPermissions())
+            }
         )
 
-        // Bluetooth Device Card
-        DeviceCard(
-            deviceName = "LG SNC4R",
-            icon = Icons.Default.Bluetooth,
-            connectedIcon = Icons.Default.BluetoothConnected
-        )
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // Music Section
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Music Section (UI Placeholder)
         MusicSection()
     }
 }
 
 @Composable
-fun DeviceCard(
-    deviceName: String, 
-    icon: androidx.compose.ui.graphics.vector.ImageVector, 
-    connectedIcon: androidx.compose.ui.graphics.vector.ImageVector
+fun LgDeviceCard(
+    uiState: BluetoothUiState,
+    onActionClick: () -> Unit,
+    onRequestPermission: () -> Unit
 ) {
-    var isConnected by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val connectionState = uiState.connectionState
+    val isConnected = connectionState is BluetoothDeviceState.Connected
+    val isConnecting = connectionState is BluetoothDeviceState.Connecting
+    val isError = connectionState is BluetoothDeviceState.Error
+
+    val cardBorder = if (isConnected) {
+        androidx.compose.foundation.BorderStroke(1.5.dp, PrimaryBlue)
+    } else {
+        androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF333333))
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBackground)
+        shape = RoundedCornerShape(20.dp),
+        border = cardBorder,
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            modifier = Modifier.padding(20.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (isConnected) connectedIcon else icon,
-                    contentDescription = "Device Icon",
-                    tint = if (isConnected) PrimaryBlue else Color.Gray,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
+            // Header with Icon & State badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isConnected) PrimaryBlue.copy(alpha = 0.18f) else Color(0xFF202020)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = when {
+                                isConnected -> Icons.Default.BluetoothConnected
+                                isConnecting -> Icons.Default.BluetoothAudio
+                                else -> Icons.Default.Speaker
+                            },
+                            contentDescription = "Device Icon",
+                            tint = if (isConnected) PrimaryBlue else Color(0xFFAAAAAA),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column {
+                        Text(
+                            text = uiState.targetDeviceName,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "MAC: ${uiState.targetDeviceMac}",
+                            fontSize = 12.sp,
+                            color = Color(0xFF888888)
+                        )
+                    }
+                }
+
+                // Pairing status pill
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (uiState.isPaired) Color(0xFF1E3A2F) else Color(0xFF3A281E)
+                ) {
                     Text(
-                        text = deviceName,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = if (isConnected) "Connected" else "Disconnected",
-                        fontSize = 14.sp,
-                        color = if (isConnected) PrimaryBlue else Color.Gray
+                        text = if (uiState.isPaired) "Paired" else "Unpaired",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (uiState.isPaired) Color(0xFF69F0AE) else Color(0xFFFFAB40),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
             }
-            
-            Button(
-                onClick = { isConnected = !isConnected },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isConnected) Color.DarkGray else PrimaryBlue
-                )
+
+            Spacer(modifier = Modifier.height(18.dp))
+            HorizontalDivider(color = Color(0xFF383838), thickness = 0.8.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Real status details row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(text = if (isConnected) "Disconnect" else "Connect")
+                Column {
+                    Text(
+                        text = "Connection Status",
+                        fontSize = 12.sp,
+                        color = Color(0xFF888888)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isConnected -> Color(0xFF00E676)
+                                        isConnecting -> Color(0xFFFFD600)
+                                        isError -> Color(0xFFFF5252)
+                                        else -> Color(0xFF757575)
+                                    }
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when (connectionState) {
+                                is BluetoothDeviceState.Connected -> "Connected"
+                                is BluetoothDeviceState.Connecting -> "Connecting..."
+                                is BluetoothDeviceState.Disconnected -> "Disconnected"
+                                is BluetoothDeviceState.Error -> "Connection Issue"
+                            },
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = when {
+                                isConnected -> Color(0xFF00E676)
+                                isConnecting -> Color(0xFFFFD600)
+                                isError -> Color(0xFFFF5252)
+                                else -> Color(0xFFCCCCCC)
+                            }
+                        )
+                    }
+                }
+
+                // Connect / Disconnect button
+                Button(
+                    onClick = onActionClick,
+                    enabled = !isConnecting,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isConnected) Color(0xFF333333) else PrimaryBlue,
+                        disabledContainerColor = PrimaryBlue.copy(alpha = 0.5f)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
+                ) {
+                    if (isConnecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Connecting", fontSize = 14.sp, color = Color.White)
+                    } else {
+                        Text(
+                            text = if (isConnected) "Disconnect" else "Connect",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            // User Notice / Error or Unpaired Guidance Banner
+            AnimatedVisibility(
+                visible = uiState.userNotice != null || (!uiState.hasRequiredPermissions && !uiState.isPaired),
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF241C1C))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Notice",
+                            tint = Color(0xFFFF8A80),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = uiState.userNotice
+                                ?: if (!uiState.hasRequiredPermissions) "Bluetooth permission required."
+                                else "Ensure soundbar is powered on and paired.",
+                            fontSize = 12.sp,
+                            color = Color(0xFFFFCDD2)
+                        )
+                    }
+
+                    if (!uiState.hasRequiredPermissions) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onRequestPermission,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(8.dp)
+                        ) {
+                            Text("Grant Bluetooth Permissions", fontSize = 12.sp, color = PrimaryBlue)
+                        }
+                    } else if (!uiState.isPaired) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(8.dp)
+                        ) {
+                            Text("Open Bluetooth Settings to Pair", fontSize = 12.sp, color = PrimaryBlue)
+                        }
+                    }
+                }
             }
         }
     }
@@ -126,41 +405,85 @@ fun DeviceCard(
 fun MusicSection() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBackground)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = "Music",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Music Control",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = { /* TODO: Play Zara Zara */ },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(12.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF202020)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = "Music",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = "Music Presets",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Smart Room Quick Audio",
+                            fontSize = 12.sp,
+                            color = Color(0xFF888888)
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFF282828)
+                ) {
+                    Text(
+                        text = "Preset",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFB0B0B0),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Button(
+                onClick = { /* Music playback will be implemented next */ },
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(14.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = "Play",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Play Zara Zara", fontSize = 16.sp)
+                Text(
+                    text = "Play Zara Zara",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
             }
         }
     }
