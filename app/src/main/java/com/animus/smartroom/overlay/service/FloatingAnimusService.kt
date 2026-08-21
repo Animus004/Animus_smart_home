@@ -27,6 +27,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.animus.smartroom.AnimusApplication
 import com.animus.smartroom.MainActivity
 import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
+import com.animus.smartroom.core.diagnostics.model.ActionSource
 import com.animus.smartroom.core.diagnostics.model.ActionStage
 import com.animus.smartroom.core.diagnostics.model.ActionStatus
 import com.animus.smartroom.core.diagnostics.model.AnimusActionEvent
@@ -197,6 +198,64 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
         }
         layoutParams = params
 
+        val container = com.animus.smartroom.overlay.view.DraggableOverlayContainer(this)
+        var startWindowX = 0
+        var startWindowY = 0
+
+        container.onDragStart = {
+            startWindowX = params.x
+            startWindowY = params.y
+            DiagnosticBus.publish {
+                create(
+                    source = ActionSource.USER_COMMAND,
+                    targetDevice = null,
+                    action = "OVERLAY_DRAG_STARTED",
+                    stage = ActionStage.RECEIVED,
+                    status = ActionStatus.IN_PROGRESS,
+                    message = "Overlay dragging started at ($startWindowX, $startWindowY)"
+                )
+            }
+        }
+
+        container.onDragMove = { deltaX, deltaY ->
+            val (clampedX, clampedY) = OverlayPositionStorage.clampStatic(
+                x = startWindowX + deltaX,
+                y = startWindowY + deltaY,
+                screenWidth = screenWidth,
+                screenHeight = screenHeight,
+                overlayWidth = 150,
+                overlayHeight = 150
+            )
+            params.x = clampedX
+            params.y = clampedY
+            try {
+                wm.updateViewLayout(container, params)
+            } catch (e: Exception) {
+                Log.w(TAG, "[overlay] Error updating view layout during drag", e)
+            }
+        }
+
+        container.onDragEnd = { wasDragging ->
+            if (wasDragging) {
+                positionStorage.savePosition(
+                    x = params.x,
+                    y = params.y,
+                    screenWidth = screenWidth,
+                    screenHeight = screenHeight
+                )
+                DiagnosticBus.publish {
+                    create(
+                        source = ActionSource.USER_COMMAND,
+                        targetDevice = null,
+                        action = "OVERLAY_DRAG_ENDED",
+                        stage = ActionStage.COMPLETED,
+                        status = ActionStatus.SUCCESS,
+                        message = "Overlay drag ended at (${params.x}, ${params.y})"
+                    )
+                }
+            }
+        }
+
         val composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingAnimusService)
             setViewTreeSavedStateRegistryOwner(this@FloatingAnimusService)
@@ -213,53 +272,10 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
             }
         }
 
-        var initialX = 0
-        var initialY = 0
-        var initialTouchX = 0f
-        var initialTouchY = 0f
-        var isDragging = false
-
-        composeView.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x
-                    initialY = params.y
-                    initialTouchX = event.rawX
-                    initialTouchY = event.rawY
-                    isDragging = false
-                    false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val deltaX = (event.rawX - initialTouchX).toInt()
-                    val deltaY = (event.rawY - initialTouchY).toInt()
-                    if (abs(deltaX) > 10 || abs(deltaY) > 10) {
-                        isDragging = true
-                        params.x = initialX + deltaX
-                        params.y = initialY + deltaY
-                        wm.updateViewLayout(composeView, params)
-                    }
-                    isDragging
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (isDragging) {
-                        positionStorage.savePosition(
-                            x = params.x,
-                            y = params.y,
-                            screenWidth = screenWidth,
-                            screenHeight = screenHeight
-                        )
-                        true
-                    } else {
-                        false
-                    }
-                }
-                else -> false
-            }
-        }
-
-        overlayView = composeView
+        container.addView(composeView)
+        overlayView = container
         try {
-            wm.addView(composeView, params)
+            wm.addView(container, params)
             Log.i(TAG, "[overlay] Floating window added to WindowManager at (${params.x}, ${params.y})")
         } catch (e: Exception) {
             Log.e(TAG, "[overlay] Failed to add floating view to WindowManager", e)

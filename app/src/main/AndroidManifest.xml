@@ -25,8 +25,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Required by AnimusRuntimeService.startForeground() -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Required on Android 14+ for typed foreground services (dataSync = network I/O to Tuya) -->
+    <!-- Required on Android 14+ for typed foreground services (dataSync = network I/O to Tuya, microphone = voice input in background) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Required for Floating Control Surface Overlay -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
@@ -112,16 +113,17 @@
 
         <!-- AnimusRuntimeService: started on demand, not unconditionally.
              Provides persistent foreground notification and runtime lifecycle anchor.
-             foregroundServiceType=dataSync: network I/O to Tuya cloud (Android 14+). -->
+             foregroundServiceType=dataSync|microphone for Tuya I/O & background speech recognition on Android 14+. -->
         <service
             android:name=".runtime.AnimusRuntimeService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|microphone" />
 
         <!-- FloatingAnimusService: started explicitly by user.
              Hosts the floating translucent control surface over other apps. -->
         <service
             android:name=".overlay.service.FloatingAnimusService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync|microphone" />
     </application>
 </manifest>
