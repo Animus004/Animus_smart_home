@@ -36,6 +36,31 @@ class LocalCommandParser : CommandParser {
             """^play(?:\s+(?:song|track|the\s+song|the\s+track))?\s+(.+)$""",
             Pattern.CASE_INSENSITIVE
         )
+
+        private val AC_TEMP_REGEX = Pattern.compile(
+            """^(?:(?:set|change|make)\s+)?(?:the\s+)?(?:ac|air\s+conditioner)\s+(?:temperature\s+|temp\s+)?(?:to\s+)?(\d{2})(?:\s*(?:degrees|degree|°c|°|c|deg))?$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val TEMP_ONLY_REGEX = Pattern.compile(
+            """^(?:(?:set|change)\s+)?(?:the\s+)?(?:temperature|temp)\s+(?:to\s+)?(\d{2})(?:\s*(?:degrees|degree|°c|°|c|deg))?$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val AC_MODE_REGEX = Pattern.compile(
+            """^(?:(?:set|change)\s+)?(?:the\s+)?(?:ac|air\s+conditioner)\s+(?:mode\s+)?(?:to\s+)?(cool|heat|fan|auto|dry)(?:\s+mode)?$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val AC_FAN_SPEED_REGEX = Pattern.compile(
+            """^(?:(?:set|change)\s+)?(?:the\s+)?(?:ac|air\s+conditioner)\s+(?:fan(?:\s+speed)?)\s+(?:to\s+)?(low|medium|high|auto)$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val AC_SWING_REGEX = Pattern.compile(
+            """^(?:(?:set|change|turn)\s+)?(?:the\s+)?(?:ac|air\s+conditioner)\s+(?:swing)\s+(?:to\s+)?(on|off|vertical|horizontal|both)$""",
+            Pattern.CASE_INSENSITIVE
+        )
     }
 
     override fun parse(input: String): AnimusCommand {
@@ -122,7 +147,111 @@ class LocalCommandParser : CommandParser {
             return AnimusCommand.DisconnectBluetoothDevice
         }
 
-        // 6. Volume commands
+        // 6. AC Power Commands
+        if (normalized in setOf(
+                "turn on ac",
+                "turn on the ac",
+                "turn the ac on",
+                "turn on air conditioner",
+                "turn on the air conditioner",
+                "power on ac",
+                "start ac",
+                "start the ac",
+                "ac on"
+            )
+        ) {
+            return AnimusCommand.SetDeviceCapability(
+                target = "AC",
+                capability = com.animus.smartroom.device.model.DeviceCapability.Power,
+                value = true
+            )
+        }
+
+        if (normalized in setOf(
+                "turn off ac",
+                "turn off the ac",
+                "turn the ac off",
+                "turn off air conditioner",
+                "turn off the air conditioner",
+                "power off ac",
+                "stop ac",
+                "stop the ac",
+                "shut off ac",
+                "ac off"
+            )
+        ) {
+            return AnimusCommand.SetDeviceCapability(
+                target = "AC",
+                capability = com.animus.smartroom.device.model.DeviceCapability.Power,
+                value = false
+            )
+        }
+
+        // 7. AC Temperature Commands
+        val acTempMatcher = AC_TEMP_REGEX.matcher(trimmed)
+        if (acTempMatcher.find()) {
+            val temp = acTempMatcher.group(1)?.toIntOrNull()
+            if (temp != null) {
+                return AnimusCommand.SetDeviceCapability(
+                    target = "AC",
+                    capability = com.animus.smartroom.device.model.DeviceCapability.Temperature,
+                    value = temp
+                )
+            }
+        }
+
+        val tempOnlyMatcher = TEMP_ONLY_REGEX.matcher(trimmed)
+        if (tempOnlyMatcher.find()) {
+            val temp = tempOnlyMatcher.group(1)?.toIntOrNull()
+            if (temp != null) {
+                return AnimusCommand.SetDeviceCapability(
+                    target = "AC",
+                    capability = com.animus.smartroom.device.model.DeviceCapability.Temperature,
+                    value = temp
+                )
+            }
+        }
+
+        // 8. AC Mode Commands
+        val acModeMatcher = AC_MODE_REGEX.matcher(trimmed)
+        if (acModeMatcher.find()) {
+            val modeStr = acModeMatcher.group(1)?.trim()?.uppercase(Locale.ROOT)
+            if (modeStr != null) {
+                return AnimusCommand.SetDeviceCapability(
+                    target = "AC",
+                    capability = com.animus.smartroom.device.model.DeviceCapability.HvacMode,
+                    value = modeStr
+                )
+            }
+        }
+
+        // 9. AC Fan Speed Commands
+        val acFanMatcher = AC_FAN_SPEED_REGEX.matcher(trimmed)
+        if (acFanMatcher.find()) {
+            val fanStr = acFanMatcher.group(1)?.trim()?.uppercase(Locale.ROOT)
+            if (fanStr != null) {
+                return AnimusCommand.SetDeviceCapability(
+                    target = "AC",
+                    capability = com.animus.smartroom.device.model.DeviceCapability.FanSpeed,
+                    value = fanStr
+                )
+            }
+        }
+
+        // 10. AC Swing Commands
+        val acSwingMatcher = AC_SWING_REGEX.matcher(trimmed)
+        if (acSwingMatcher.find()) {
+            val swingStr = acSwingMatcher.group(1)?.trim()?.uppercase(Locale.ROOT)
+            if (swingStr != null) {
+                return AnimusCommand.SetDeviceCapability(
+                    target = "AC",
+                    capability = com.animus.smartroom.device.model.DeviceCapability.Swing,
+                    value = swingStr
+                )
+            }
+        }
+
+        // 11. Volume commands
         val volumeOnlyMatcher = VOLUME_ONLY_DIGIT_REGEX.matcher(trimmed)
         if (volumeOnlyMatcher.find()) {
             val percent = volumeOnlyMatcher.group(1)?.toIntOrNull()

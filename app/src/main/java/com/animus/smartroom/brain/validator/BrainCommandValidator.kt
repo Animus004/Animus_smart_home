@@ -120,6 +120,50 @@ object BrainCommandValidator {
                 }
             }
 
+            BrainCommandDto.CMD_SET_DEVICE,
+            BrainCommandDto.CMD_SET_DEVICE_CAPABILITY -> {
+                val target = dto.target?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
+                val capabilityStr = dto.capability?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
+
+                if (target.isNullOrBlank()) {
+                    BrainValidationResult.Invalid("SET_DEVICE requires a non-empty 'target' parameter.")
+                } else if (capabilityStr.isNullOrBlank()) {
+                    BrainValidationResult.Invalid("SET_DEVICE requires a valid 'capability' parameter.")
+                } else {
+                    val cap = com.animus.smartroom.device.model.DeviceCapability.fromString(capabilityStr)
+                    if (cap == null) {
+                        BrainValidationResult.Invalid("Unknown device capability: '$capabilityStr'.")
+                    } else {
+                        val effectiveValue: Any? = dto.value ?: dto.valueString
+                        BrainValidationResult.Valid(
+                            AnimusCommand.SetDeviceCapability(
+                                target = target,
+                                capability = cap,
+                                value = effectiveValue
+                            )
+                        )
+                    }
+                }
+            }
+
+            BrainCommandDto.CMD_SET_AC -> {
+                val target = dto.target?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it } ?: "AC"
+                val capabilityStr = dto.capability?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it } ?: "TEMPERATURE"
+                val cap = com.animus.smartroom.device.model.DeviceCapability.fromString(capabilityStr)
+                if (cap == null) {
+                    BrainValidationResult.Invalid("Unknown AC capability: '$capabilityStr'.")
+                } else {
+                    val effectiveValue: Any? = dto.value ?: dto.valueString
+                    BrainValidationResult.Valid(
+                        AnimusCommand.SetDeviceCapability(
+                            target = target,
+                            capability = cap,
+                            value = effectiveValue
+                        )
+                    )
+                }
+            }
+
             BrainCommandDto.CMD_UNKNOWN -> {
                 val raw = dto.rawText ?: "unknown"
                 BrainValidationResult.Valid(AnimusCommand.UnknownCommand(rawText = raw))
@@ -157,7 +201,24 @@ object BrainCommandValidator {
             if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
         } else null
 
-        val value = if (json.has("value") && !json.isNull("value")) json.optInt("value") else null
+        val capability = if (json.has("capability") && !json.isNull("capability")) {
+            val s = json.optString("capability").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val value = if (json.has("value") && !json.isNull("value")) {
+            val v = json.opt("value")
+            when (v) {
+                is Number -> v.toInt()
+                is String -> v.toIntOrNull()
+                else -> null
+            }
+        } else null
+
+        val valueString = if (json.has("value") && !json.isNull("value")) {
+            val s = json.optString("value").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
 
         val playbackUrl = if (json.has("playbackUrl") && !json.isNull("playbackUrl")) {
             val s = json.optString("playbackUrl").trim()
@@ -179,7 +240,9 @@ object BrainCommandValidator {
             title = title,
             artist = artist,
             target = target,
+            capability = capability,
             value = value,
+            valueString = valueString,
             playbackUrl = playbackUrl,
             directVideoId = directVideoId,
             rawText = rawText

@@ -30,6 +30,16 @@ import kotlinx.coroutines.launch
 import com.animus.smartroom.media.resolver.MusicResolutionCache
 import com.animus.smartroom.media.resolver.YouTubeMusicResolver
 
+import com.animus.smartroom.device.adapter.BluetoothAudioDeviceAdapter
+import com.animus.smartroom.device.model.DeviceCapability
+import com.animus.smartroom.device.model.DeviceConnectionState
+import com.animus.smartroom.device.model.DeviceType
+import com.animus.smartroom.device.model.RoomDevice
+import com.animus.smartroom.device.registry.DeviceRegistry
+import com.animus.smartroom.device.tuya.TuyaAirConditionerAdapter
+import com.animus.smartroom.device.tuya.client.TuyaCloudApiClient
+import com.animus.smartroom.device.tuya.model.TuyaAcState
+
 data class AiCommandUiState(
     val lastInputText: String = "",
     val lastResultMessage: String? = null,
@@ -42,6 +52,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val bluetoothManager = BluetoothAudioDeviceManager(application.applicationContext)
     private val musicController = MusicController(application.applicationContext)
+
+    val tuyaApiClient = TuyaCloudApiClient(
+        accessIdProvider = { BuildConfig.TUYA_ACCESS_ID },
+        accessSecretProvider = { BuildConfig.TUYA_ACCESS_SECRET },
+        endpointProvider = { BuildConfig.TUYA_REGION_ENDPOINT.ifBlank { "https://openapi.tuyain.com" } }
+    )
+
+    val tuyaAcAdapter = TuyaAirConditionerAdapter(
+        apiClient = tuyaApiClient,
+        allowWriteCommands = false // Read-only verification phase
+    )
+
+    val acState: StateFlow<TuyaAcState> = tuyaAcAdapter.acState
+
+    val deviceRegistry = DeviceRegistry().apply {
+        registerAdapterForType(DeviceType.BLUETOOTH_AUDIO, BluetoothAudioDeviceAdapter(bluetoothManager))
+        registerAdapterForType(DeviceType.AIR_CONDITIONER, tuyaAcAdapter)
+
+        val realAcId = BuildConfig.TUYA_DEVICE_ID.ifBlank { "76776532a4e57c0a2ca4" }
+        registerDevice(
+            RoomDevice(
+                id = realAcId,
+                displayName = "Bedroom AC",
+                type = DeviceType.AIR_CONDITIONER,
+                connectionState = DeviceConnectionState.Connected,
+                supportedCapabilities = setOf(
+                    DeviceCapability.Power,
+                    DeviceCapability.Temperature,
+                    DeviceCapability.HvacMode,
+                    DeviceCapability.FanSpeed
+                ),
+                aliases = listOf("AC", "Air Conditioner", "Room AC", "Bedroom AC", "Inverter AC")
+            )
+        )
+    }
 
     private val apiKeyStorage = GeminiApiKeyStorage(application.applicationContext)
     private val geminiApiClient = GeminiApiClient()
@@ -69,7 +114,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val commandRouter = CommandRouter(
         bluetoothManager = bluetoothManager,
         musicController = musicController,
-        musicResolver = musicResolver
+        musicResolver = musicResolver,
+        deviceRegistry = deviceRegistry
     )
 
     private val speechRecognitionManager = SpeechRecognitionManager(application.applicationContext) { spokenText ->
@@ -93,14 +139,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         bluetoothManager.startListening()
         musicController.startListening()
 
-        // Sync selected bluetooth output device with music controller
+        // Sync selected bluetooth output device with music controller and DeviceRegistry
         viewModelScope.launch {
             bluetoothUiState.collectLatest { btState ->
                 val selectedDevice = btState.selectedDevice
                 val isConnected = btState.connectionState is BluetoothDeviceState.Connected
                 val name = selectedDevice?.displayName ?: if (isConnected) (btState.connectionState as BluetoothDeviceState.Connected).deviceName else null
                 musicController.updateOutputDevice(name, isConnected)
+
+                // Sync Bluetooth devices to DeviceRegistry
+                val btRoomDevices = btState.pairedDevices.map { btDev ->
+                    val connState = when {
+                        btDev.isConnected -> DeviceConnectionState.Connected
+                        else -> DeviceConnectionState.Disconnected
+                    }
+                    RoomDevice(
+                        id = btDev.macAddress,
+                        displayName = btDev.displayName,
+                        type = DeviceType.BLUETOOTH_AUDIO,
+                        connectionState = connState,
+                        supportedCapabilities = setOf(
+                            DeviceCapability.Connect,
+                            DeviceCapability.Disconnect,
+                            DeviceCapability.Play,
+                            DeviceCapability.Pause,
+                            DeviceCapability.Next,
+                            DeviceCapability.Previous,
+                            DeviceCapability.Volume
+                        ),
+                        aliases = listOfNotNull(btDev.alias, btDev.name).distinct()
+                    )
+                }
+                deviceRegistry.registerDevices(btRoomDevices)
             }
+        }
+
+        // Initial refresh of AC state
+        viewModelScope.launch {
+            val realAcId = BuildConfig.TUYA_DEVICE_ID.ifBlank { "76776532a4e57c0a2ca4" }
+            tuyaAcAdapter.refreshState(realAcId)
         }
     }
 

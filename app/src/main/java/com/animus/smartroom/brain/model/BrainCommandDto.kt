@@ -5,7 +5,9 @@ data class BrainCommandDto(
     val title: String? = null,
     val artist: String? = null,
     val target: String? = null,
+    val capability: String? = null,
     val value: Int? = null,
+    val valueString: String? = null,
     val playbackUrl: String? = null,
     val directVideoId: String? = null,
     val rawText: String? = null
@@ -20,6 +22,9 @@ data class BrainCommandDto(
         const val CMD_CONNECT_BLUETOOTH = "CONNECT_BLUETOOTH_DEVICE"
         const val CMD_DISCONNECT_BLUETOOTH = "DISCONNECT_BLUETOOTH_DEVICE"
         const val CMD_SWITCH_BLUETOOTH = "SWITCH_BLUETOOTH_DEVICE"
+        const val CMD_SET_DEVICE = "SET_DEVICE"
+        const val CMD_SET_DEVICE_CAPABILITY = "SET_DEVICE_CAPABILITY"
+        const val CMD_SET_AC = "SET_AC"
         const val CMD_UNKNOWN = "UNKNOWN"
     }
 }

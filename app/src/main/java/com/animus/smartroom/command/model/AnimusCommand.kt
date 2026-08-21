@@ -1,5 +1,7 @@
 package com.animus.smartroom.command.model
 
+import com.animus.smartroom.device.model.DeviceCapability
+
 sealed class AnimusCommand {
     data class PlayMusic(
         val title: String,
@@ -24,6 +26,12 @@ sealed class AnimusCommand {
 
     data class SwitchBluetoothDevice(
         val deviceName: String
+    ) : AnimusCommand()
+
+    data class SetDeviceCapability(
+        val target: String,
+        val capability: DeviceCapability,
+        val value: Any? = null
     ) : AnimusCommand()
 
     data class UnknownCommand(

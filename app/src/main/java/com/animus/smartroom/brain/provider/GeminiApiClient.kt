@@ -37,6 +37,7 @@ Supported Command Schemas:
 - {"command": "CONNECT_BLUETOOTH_DEVICE", "target": "<device_name_or_alias_optional>"}
 - {"command": "DISCONNECT_BLUETOOTH_DEVICE"}
 - {"command": "SWITCH_BLUETOOTH_DEVICE", "target": "<device_name_or_alias>"}
+- {"command": "SET_DEVICE", "target": "<device_target>", "capability": "POWER|TEMPERATURE|MODE|FAN_SPEED|SWING|VOLUME", "value": <value>}
 - {"command": "UNKNOWN", "rawText": "<user_input>"}
 
 Multi-Intent & Sequential Rules:

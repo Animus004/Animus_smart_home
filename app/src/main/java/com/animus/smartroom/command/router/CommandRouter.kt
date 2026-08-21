@@ -9,6 +9,7 @@ import com.animus.smartroom.command.model.CommandExecutionResult
 import com.animus.smartroom.media.MusicController
 import com.animus.smartroom.media.resolver.MusicResolutionResult
 import com.animus.smartroom.media.resolver.YouTubeMusicResolver
+import com.animus.smartroom.device.registry.DeviceRegistry
 import java.util.Locale
 
 sealed interface DeviceResolutionResult {
@@ -18,9 +19,10 @@ sealed interface DeviceResolutionResult {
 }
 
 class CommandRouter(
-    private val bluetoothManager: BluetoothAudioDeviceManager,
-    private val musicController: MusicController,
-    private val musicResolver: YouTubeMusicResolver? = null
+    private val bluetoothManager: BluetoothAudioDeviceManager? = null,
+    private val musicController: MusicController? = null,
+    private val musicResolver: YouTubeMusicResolver? = null,
+    private val deviceRegistry: DeviceRegistry? = null
 ) {
 
     companion object {
@@ -192,8 +194,9 @@ class CommandRouter(
 
         return when (command) {
             is AnimusCommand.PlayMusic -> {
-                val isConnected = musicController.uiState.value.isOutputConnected
-                val deviceName = musicController.uiState.value.activeOutputDeviceName
+                val controller = musicController ?: return CommandExecutionResult(false, "Music controller is not initialized.")
+                val isConnected = controller.uiState.value.isOutputConnected
+                val deviceName = controller.uiState.value.activeOutputDeviceName
 
                 if (!isConnected) {
                     Log.w(TAG, "[ai] PlayMusic blocked: Bluetooth output is disconnected")
@@ -231,7 +234,7 @@ class CommandRouter(
                     Log.i(TAG, "[music-resolver] Executing search fallback for '${command.title}' on output '$deviceName'")
                 }
 
-                musicController.playTrackPreset(
+                controller.playTrackPreset(
                     title = command.title,
                     artist = command.artist,
                     activeDeviceName = deviceName,
@@ -245,7 +248,7 @@ class CommandRouter(
 
             is AnimusCommand.PauseMusic -> {
                 Log.i(TAG, "[ai] Executing PauseMusic")
-                musicController.pause()
+                musicController?.pause()
                 CommandExecutionResult(
                     success = true,
                     message = "Music paused"
@@ -253,7 +256,8 @@ class CommandRouter(
             }
 
             is AnimusCommand.ResumeMusic -> {
-                val isConnected = musicController.uiState.value.isOutputConnected
+                val controller = musicController ?: return CommandExecutionResult(false, "Music controller is not initialized.")
+                val isConnected = controller.uiState.value.isOutputConnected
                 if (!isConnected) {
                     Log.w(TAG, "[ai] ResumeMusic blocked: Bluetooth output is disconnected")
                     return CommandExecutionResult(
@@ -262,7 +266,7 @@ class CommandRouter(
                     )
                 }
                 Log.i(TAG, "[ai] Executing ResumeMusic")
-                musicController.play()
+                controller.play()
                 CommandExecutionResult(
                     success = true,
                     message = "Resuming playback"
@@ -271,7 +275,7 @@ class CommandRouter(
 
             is AnimusCommand.NextTrack -> {
                 Log.i(TAG, "[ai] Executing NextTrack")
-                musicController.next()
+                musicController?.next()
                 CommandExecutionResult(
                     success = true,
                     message = "Next track"
@@ -280,7 +284,7 @@ class CommandRouter(
 
             is AnimusCommand.PreviousTrack -> {
                 Log.i(TAG, "[ai] Executing PreviousTrack")
-                musicController.previous()
+                musicController?.previous()
                 CommandExecutionResult(
                     success = true,
                     message = "Previous track"
@@ -290,7 +294,7 @@ class CommandRouter(
             is AnimusCommand.SetVolume -> {
                 val clamped = command.percentage.coerceIn(0, 100)
                 Log.i(TAG, "[ai] Executing SetVolume: $clamped%")
-                musicController.setVolume(clamped / 100f)
+                musicController?.setVolume(clamped / 100f)
                 CommandExecutionResult(
                     success = true,
                     message = "Volume set to $clamped%"
@@ -298,10 +302,11 @@ class CommandRouter(
             }
 
             is AnimusCommand.ConnectBluetoothDevice -> {
-                val paired = bluetoothManager.uiState.value.pairedDevices
+                val btMgr = bluetoothManager ?: return CommandExecutionResult(false, "Bluetooth manager is not initialized.")
+                val paired = btMgr.uiState.value.pairedDevices
                 if (command.deviceName.isNullOrBlank()) {
                     Log.i(TAG, "[ai] Executing ConnectBluetoothDevice (selected device)")
-                    val selected = bluetoothManager.uiState.value.selectedDevice
+                    val selected = btMgr.uiState.value.selectedDevice
                     val targetName = selected?.displayName ?: "Speaker"
                     if (selected != null && selected.isConnected) {
                         CommandExecutionResult(
@@ -309,7 +314,7 @@ class CommandRouter(
                             message = "Already connected to $targetName"
                         )
                     } else {
-                        bluetoothManager.connect()
+                        btMgr.connect()
                         CommandExecutionResult(
                             success = true,
                             message = "Connecting to $targetName..."
@@ -320,14 +325,14 @@ class CommandRouter(
                         is DeviceResolutionResult.Match -> {
                             val target = resolution.device
                             Log.i(TAG, "[ai] Found matching paired device for '${command.deviceName}': ${target.displayName} (${target.macAddress})")
-                            bluetoothManager.selectDevice(target.macAddress)
+                            btMgr.selectDevice(target.macAddress)
                             if (target.isConnected) {
                                 CommandExecutionResult(
                                     success = true,
                                     message = "Already connected to ${target.displayName}"
                                 )
                             } else {
-                                bluetoothManager.connect()
+                                btMgr.connect()
                                 CommandExecutionResult(
                                     success = true,
                                     message = "Connecting to ${target.displayName}..."
@@ -352,8 +357,9 @@ class CommandRouter(
             }
 
             is AnimusCommand.DisconnectBluetoothDevice -> {
+                val btMgr = bluetoothManager ?: return CommandExecutionResult(false, "Bluetooth manager is not initialized.")
                 Log.i(TAG, "[ai] Executing DisconnectBluetoothDevice")
-                val current = bluetoothManager.uiState.value.connectionState
+                val current = btMgr.uiState.value.connectionState
                 when (current) {
                     is BluetoothDeviceState.Disconnected -> {
                         CommandExecutionResult(
@@ -368,7 +374,7 @@ class CommandRouter(
                         )
                     }
                     else -> {
-                        bluetoothManager.disconnect()
+                        btMgr.disconnect()
                         CommandExecutionResult(
                             success = true,
                             message = "Disconnecting..."
@@ -378,13 +384,14 @@ class CommandRouter(
             }
 
             is AnimusCommand.SwitchBluetoothDevice -> {
-                val paired = bluetoothManager.uiState.value.pairedDevices
+                val btMgr = bluetoothManager ?: return CommandExecutionResult(false, "Bluetooth manager is not initialized.")
+                val paired = btMgr.uiState.value.pairedDevices
                 when (val resolution = resolveDeviceTarget(command.deviceName, paired)) {
                     is DeviceResolutionResult.Match -> {
                         val target = resolution.device
                         val isAlreadyConnected = target.isConnected
                         Log.i(TAG, "[ai] Switching to target: ${target.displayName} (${target.macAddress}), isAlreadyConnected=$isAlreadyConnected")
-                        bluetoothManager.selectDevice(target.macAddress)
+                        btMgr.selectDevice(target.macAddress)
 
                         if (isAlreadyConnected) {
                             CommandExecutionResult(
@@ -392,7 +399,7 @@ class CommandRouter(
                                 message = "Switched to ${target.displayName}"
                             )
                         } else {
-                            bluetoothManager.connect()
+                            btMgr.connect()
                             CommandExecutionResult(
                                 success = true,
                                 message = "Connecting to ${target.displayName}..."
@@ -412,6 +419,27 @@ class CommandRouter(
                             message = "Device '${command.deviceName}' not found in paired devices."
                         )
                     }
+                }
+            }
+
+            is AnimusCommand.SetDeviceCapability -> {
+                Log.i(TAG, "[ai] Executing SetDeviceCapability: Target='${command.target}', Capability=${command.capability.name}, Value='${command.value}'")
+                val registry = deviceRegistry
+                if (registry == null) {
+                    CommandExecutionResult(
+                        success = false,
+                        message = "Device registry is not initialized."
+                    )
+                } else {
+                    val result = registry.executeCapability(
+                        targetQuery = command.target,
+                        capability = command.capability,
+                        value = command.value
+                    )
+                    CommandExecutionResult(
+                        success = result.success,
+                        message = result.message
+                    )
                 }
             }
 

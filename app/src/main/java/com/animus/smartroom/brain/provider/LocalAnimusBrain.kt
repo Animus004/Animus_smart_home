@@ -56,6 +56,13 @@ class LocalAnimusBrain(
                     command = BrainCommandDto.CMD_SWITCH_BLUETOOTH,
                     target = parsedCommand.deviceName
                 )
+                is AnimusCommand.SetDeviceCapability -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_SET_DEVICE,
+                    target = parsedCommand.target,
+                    capability = parsedCommand.capability.name,
+                    value = parsedCommand.value as? Int,
+                    valueString = parsedCommand.value?.toString()
+                )
                 is AnimusCommand.UnknownCommand -> BrainCommandDto(
                     command = BrainCommandDto.CMD_UNKNOWN,
                     rawText = parsedCommand.rawText

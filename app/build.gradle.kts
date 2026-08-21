@@ -12,6 +12,10 @@ if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
 val youtubeApiKey: String = localProperties.getProperty("youtube.api.key", "")
+val tuyaAccessId: String = localProperties.getProperty("tuya.access.id", "").trim()
+val tuyaAccessSecret: String = localProperties.getProperty("tuya.access.secret", "").trim()
+val tuyaDeviceId: String = localProperties.getProperty("tuya.device.id", "").trim()
+val tuyaRegionEndpoint: String = localProperties.getProperty("tuya.region.endpoint", "https://openapi.tuyain.com").trim()
 
 android {
     namespace = "com.animus.smartroom"
@@ -25,6 +29,10 @@ android {
         versionName = "1.0"
 
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
+        buildConfigField("String", "TUYA_ACCESS_ID", "\"$tuyaAccessId\"")
+        buildConfigField("String", "TUYA_ACCESS_SECRET", "\"$tuyaAccessSecret\"")
+        buildConfigField("String", "TUYA_DEVICE_ID", "\"$tuyaDeviceId\"")
+        buildConfigField("String", "TUYA_REGION_ENDPOINT", "\"$tuyaRegionEndpoint\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
