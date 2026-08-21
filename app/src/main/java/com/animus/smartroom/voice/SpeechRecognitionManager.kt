@@ -72,16 +72,24 @@ class SpeechRecognitionManager(
             cleanupRecognizer()
 
             try {
-                // Prefer OnDeviceSpeechRecognizer on Android 13+ (API 33+) for seamless background execution
-                val recognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
-                    Log.i(TAG, "Creating OnDeviceSpeechRecognizer for low-latency background recognition")
-                    SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-                } else {
-                    Log.i(TAG, "Creating standard SpeechRecognizer")
-                    SpeechRecognizer.createSpeechRecognizer(context)
+                var recognizer: SpeechRecognizer? = null
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    try {
+                        if (SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                            Log.i(TAG, "Attempting OnDeviceSpeechRecognizer")
+                            recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                        }
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "OnDeviceSpeechRecognizer creation failed, falling back", t)
+                    }
                 }
 
-                speechRecognizer = recognizer.apply {
+                if (recognizer == null) {
+                    Log.i(TAG, "Creating standard SpeechRecognizer with application context")
+                    recognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
+                }
+
+                speechRecognizer = recognizer?.apply {
                     setRecognitionListener(createListener())
                 }
 
@@ -90,9 +98,7 @@ class SpeechRecognitionManager(
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                    }
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
                 }
 
                 _state.value = VoicePortState.Listening(rmsDb = 0f)

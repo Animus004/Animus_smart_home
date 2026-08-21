@@ -2,6 +2,7 @@ package com.animus.smartroom
 
 import android.app.Application
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import com.animus.smartroom.bluetooth.BluetoothAudioDeviceManager
 import com.animus.smartroom.device.adapter.BluetoothAudioDeviceAdapter
@@ -268,7 +269,11 @@ class AnimusApplication : Application() {
         }
         Log.i(TAG, "[overlay] Starting FloatingAnimusService")
         val intent = FloatingAnimusService.startIntent(this)
-        startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
         return true
     }
 

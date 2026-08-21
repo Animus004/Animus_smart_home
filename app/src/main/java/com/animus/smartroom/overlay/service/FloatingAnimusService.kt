@@ -26,6 +26,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.animus.smartroom.AnimusApplication
 import com.animus.smartroom.MainActivity
+import com.animus.smartroom.notification.AndroidNotificationAdapter
 import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.core.diagnostics.model.ActionSource
 import com.animus.smartroom.core.diagnostics.model.ActionStage
@@ -198,7 +199,15 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
         }
         layoutParams = params
 
-        val container = com.animus.smartroom.overlay.view.DraggableOverlayContainer(this)
+        if (overlayView != null) {
+            Log.w(TAG, "[overlay] Overlay window already initialized, skipping duplicate creation.")
+            return
+        }
+
+        val container = com.animus.smartroom.overlay.view.DraggableOverlayContainer(this).apply {
+            setViewTreeLifecycleOwner(this@FloatingAnimusService)
+            setViewTreeSavedStateRegistryOwner(this@FloatingAnimusService)
+        }
         var startWindowX = 0
         var startWindowY = 0
 
@@ -559,7 +568,20 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 return START_NOT_STICKY
             }
             else -> {
-                Log.i(TAG, "[overlay] Floating service running")
+                Log.i(TAG, "[overlay] Floating service running as foreground service with microphone access")
+                val notification = AndroidNotificationAdapter.buildRuntimeNotification(this)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val foregroundTypes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    } else {
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    }
+                    startForeground(AndroidNotificationAdapter.NOTIFICATION_ID_RUNTIME, notification, foregroundTypes)
+                } else {
+                    startForeground(AndroidNotificationAdapter.NOTIFICATION_ID_RUNTIME, notification)
+                }
+
                 _overlayState.update { it.copy(visibility = FloatingOverlayVisibility.COLLAPSED) }
                 resetInactivityTimers()
             }
