@@ -1,8 +1,9 @@
 package com.animus.smartroom.routine.storage
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
+import com.animus.smartroom.core.port.AndroidPersistentStore
+import com.animus.smartroom.core.port.PersistentStore
 import com.animus.smartroom.diagnostics.DiagnosticBus
 import com.animus.smartroom.diagnostics.DiagnosticStage
 import com.animus.smartroom.routine.model.EnvironmentSnapshot
@@ -14,12 +15,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 
-open class RoutineStorage(context: Context? = null) {
+open class RoutineStorage(
+    context: Context? = null,
+    store: PersistentStore? = null
+) {
 
     companion object {
         private const val TAG = "RoutineStorage"
-        private const val PREFS_NAME = "animus_routines_prefs"
-        private const val KEY_ACTIVE_ROUTINE = "active_routine_json"
+        const val PREFS_NAME = "animus_routines_prefs"
+        const val KEY_ACTIVE_ROUTINE = "active_routine_json"
 
         // Process-wide StateFlow to guarantee instantaneous state synchronization across Receiver, Engine, ViewModel & UI
         private val _globalActiveRoutineFlow = MutableStateFlow<RoutineState?>(null)
@@ -29,20 +33,19 @@ open class RoutineStorage(context: Context? = null) {
     val activeRoutineFlow: StateFlow<RoutineState?>
         get() = _globalActiveRoutineFlow.asStateFlow()
 
-    private val prefs: SharedPreferences? =
-        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val persistentStore: PersistentStore? = store ?: context?.let { AndroidPersistentStore(it, PREFS_NAME) }
 
-    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+    private val storeListener: (String) -> Unit = { key ->
         if (key == KEY_ACTIVE_ROUTINE) {
-            val updated = readFromPrefs()
+            val updated = readFromStore()
             _globalActiveRoutineFlow.value = updated
             Log.d(TAG, "[storage] Preference change detected -> status: ${updated?.status}")
         }
     }
 
     init {
-        prefs?.registerOnSharedPreferenceChangeListener(prefListener)
-        val initial = readFromPrefs()
+        persistentStore?.registerChangeListener(storeListener)
+        val initial = readFromStore()
         if (_globalActiveRoutineFlow.value == null && initial != null) {
             _globalActiveRoutineFlow.value = initial
         }
@@ -50,9 +53,9 @@ open class RoutineStorage(context: Context? = null) {
 
     open fun saveActiveRoutine(routine: RoutineState?) {
         _globalActiveRoutineFlow.value = routine
-        val p = prefs ?: return
+        val p = persistentStore ?: return
         if (routine == null) {
-            p.edit().remove(KEY_ACTIVE_ROUTINE).apply()
+            p.remove(KEY_ACTIVE_ROUTINE)
             DiagnosticBus.log(
                 tag = "storage",
                 stage = DiagnosticStage.PERSISTED,
@@ -89,7 +92,7 @@ open class RoutineStorage(context: Context? = null) {
                 }
             }
 
-            p.edit().putString(KEY_ACTIVE_ROUTINE, json.toString()).apply()
+            p.putString(KEY_ACTIVE_ROUTINE, json.toString())
             Log.d(TAG, "[storage] Saved routine: ${routine.id} (Status: ${routine.status})")
             DiagnosticBus.log(
                 tag = "storage",
@@ -104,11 +107,11 @@ open class RoutineStorage(context: Context? = null) {
     open fun getActiveRoutine(): RoutineState? {
         val currentFlowValue = _globalActiveRoutineFlow.value
         if (currentFlowValue != null) return currentFlowValue
-        return readFromPrefs()
+        return readFromStore()
     }
 
-    private fun readFromPrefs(): RoutineState? {
-        val raw = prefs?.getString(KEY_ACTIVE_ROUTINE, null) ?: return null
+    private fun readFromStore(): RoutineState? {
+        val raw = persistentStore?.getString(KEY_ACTIVE_ROUTINE, null) ?: return null
         return try {
             val json = JSONObject(raw)
             val id = json.getString("id")
@@ -150,7 +153,7 @@ open class RoutineStorage(context: Context? = null) {
 
     open fun clearActiveRoutine() {
         _globalActiveRoutineFlow.value = null
-        prefs?.edit()?.remove(KEY_ACTIVE_ROUTINE)?.apply()
+        persistentStore?.remove(KEY_ACTIVE_ROUTINE)
         DiagnosticBus.log(
             tag = "storage",
             stage = DiagnosticStage.PERSISTED,

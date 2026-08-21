@@ -272,4 +272,33 @@ class DeviceRegistry {
             }
         }
     }
+
+    suspend fun executeCommand(device: RoomDevice, command: com.animus.smartroom.core.device.DeviceCommand): DeviceCommandResult {
+        val adapter = getAdapterForDevice(device)
+            ?: return DeviceCommandResult(
+                success = false,
+                message = "No adapter registered for ${device.displayName} (Type=${device.type})."
+            )
+
+        return if (adapter is com.animus.smartroom.core.device.DeviceAdapter) {
+            adapter.execute(device, command)
+        } else {
+            // Fallback translation
+            when (command) {
+                is com.animus.smartroom.core.device.DeviceCommand.Power ->
+                    adapter.executeCapability(device, DeviceCapability.Power, command.enabled)
+                is com.animus.smartroom.core.device.DeviceCommand.SetTemperature ->
+                    adapter.executeCapability(device, DeviceCapability.Temperature, command.celsius)
+                is com.animus.smartroom.core.device.DeviceCommand.SetMode ->
+                    adapter.executeCapability(device, DeviceCapability.HvacMode, command.mode)
+                is com.animus.smartroom.core.device.DeviceCommand.SetFanSpeed ->
+                    adapter.executeCapability(device, DeviceCapability.FanSpeed, command.speed)
+                is com.animus.smartroom.core.device.DeviceCommand.Connect ->
+                    adapter.executeCapability(device, DeviceCapability.Connect, null)
+                is com.animus.smartroom.core.device.DeviceCommand.Disconnect ->
+                    adapter.executeCapability(device, DeviceCapability.Disconnect, null)
+                else -> DeviceCommandResult(success = false, message = "Unsupported command: $command")
+            }
+        }
+    }
 }

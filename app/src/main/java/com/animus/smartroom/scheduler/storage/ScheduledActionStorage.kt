@@ -3,6 +3,8 @@ package com.animus.smartroom.scheduler.storage
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.animus.smartroom.core.port.AndroidPersistentStore
+import com.animus.smartroom.core.port.PersistentStore
 import com.animus.smartroom.diagnostics.DiagnosticBus
 import com.animus.smartroom.diagnostics.DiagnosticStage
 import com.animus.smartroom.scheduler.model.DeviceActionType
@@ -14,11 +16,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-open class ScheduledActionStorage(context: Context? = null) {
+open class ScheduledActionStorage(
+    context: Context? = null,
+    store: PersistentStore? = null
+) {
 
     companion object {
         private const val TAG = "ScheduledActionStorage"
-        private const val PREFS_NAME = "animus_scheduled_actions_prefs"
+        const val PREFS_NAME = "animus_scheduled_actions_prefs"
 
         // Global StateFlow to guarantee UI and background service synchronization
         private val _globalActionsFlow = MutableStateFlow<List<ScheduledDeviceAction>>(emptyList())
@@ -28,27 +33,26 @@ open class ScheduledActionStorage(context: Context? = null) {
     val actionsFlow: StateFlow<List<ScheduledDeviceAction>>
         get() = _globalActionsFlow.asStateFlow()
 
-    private val prefs: SharedPreferences? =
-        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val persistentStore: PersistentStore? = store ?: context?.let { AndroidPersistentStore(it, PREFS_NAME) }
 
-    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        val updated = readAllFromPrefs()
+    private val storeListener: (String) -> Unit = { _ ->
+        val updated = readAllFromStore()
         _globalActionsFlow.value = updated
         Log.d(TAG, "[storage] Preference change detected -> ${updated.size} actions in storage")
     }
 
     init {
-        prefs?.registerOnSharedPreferenceChangeListener(prefListener)
-        val initial = readAllFromPrefs()
+        persistentStore?.registerChangeListener(storeListener)
+        val initial = readAllFromStore()
         if (_globalActionsFlow.value.isEmpty() && initial.isNotEmpty()) {
             _globalActionsFlow.value = initial
         }
     }
 
-    private fun readAllFromPrefs(): List<ScheduledDeviceAction> {
-        val p = prefs ?: return emptyList()
+    private fun readAllFromStore(): List<ScheduledDeviceAction> {
+        val s = persistentStore ?: return emptyList()
         val list = mutableListOf<ScheduledDeviceAction>()
-        p.all.forEach { (key, value) ->
+        s.getAll().forEach { (key, value) ->
             if (value is String) {
                 val action = ScheduledDeviceAction.fromJson(value)
                 if (action != null) {
@@ -72,7 +76,7 @@ open class ScheduledActionStorage(context: Context? = null) {
             mutable.sortedBy { it.scheduledExecutionTimeMillis }
         }
 
-        prefs?.edit()?.putString(action.id, action.toJson())?.apply()
+        persistentStore?.putString(action.id, action.toJson())
         Log.i(TAG, "[storage] Saved action ${action.id} (${action.targetDeviceType} -> ${action.actionType}, Status: ${action.status})")
 
         DiagnosticBus.log(
@@ -85,7 +89,7 @@ open class ScheduledActionStorage(context: Context? = null) {
     @Synchronized
     open fun getAction(id: String): ScheduledDeviceAction? {
         return _globalActionsFlow.value.firstOrNull { it.id == id } ?: run {
-            val jsonStr = prefs?.getString(id, null) ?: return null
+            val jsonStr = persistentStore?.getString(id, null) ?: return null
             ScheduledDeviceAction.fromJson(jsonStr)
         }
     }
@@ -131,13 +135,13 @@ open class ScheduledActionStorage(context: Context? = null) {
         _globalActionsFlow.update { current ->
             current.filterNot { it.id == id }
         }
-        prefs?.edit()?.remove(id)?.apply()
+        persistentStore?.remove(id)
         Log.i(TAG, "[storage] Deleted action $id")
     }
 
     @Synchronized
     open fun clear() {
         _globalActionsFlow.value = emptyList()
-        prefs?.edit()?.clear()?.apply()
+        persistentStore?.getAll()?.keys?.forEach { persistentStore.remove(it) }
     }
 }

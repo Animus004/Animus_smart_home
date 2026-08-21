@@ -9,6 +9,10 @@ import android.os.Build
 import android.util.Log
 import com.animus.smartroom.MainActivity
 import com.animus.smartroom.context.HomeLocationContext
+import com.animus.smartroom.core.port.AndroidClock
+import com.animus.smartroom.core.port.AndroidAlarmManagerScheduler
+import com.animus.smartroom.core.port.Clock
+import com.animus.smartroom.core.port.PlatformScheduler
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.diagnostics.DiagnosticBus
 import com.animus.smartroom.diagnostics.DiagnosticStage
@@ -32,7 +36,9 @@ sealed interface ActionScheduleResult {
 
 open class DeviceSchedulerEngine(
     private val context: Context? = null,
-    val storage: ScheduledActionStorage = ScheduledActionStorage(context)
+    val storage: ScheduledActionStorage = ScheduledActionStorage(context),
+    val clock: Clock = AndroidClock(),
+    private val platformScheduler: PlatformScheduler? = context?.let { AndroidAlarmManagerScheduler(it) }
 ) {
 
     companion object {
@@ -151,8 +157,8 @@ open class DeviceSchedulerEngine(
             message = "target=$targetDeviceType, action=$actionType, delay=$delayMinutes, time=$scheduledTime"
         )
 
-        val triggerAtMillis = explicitTimeMillis ?: parseExecutionTime(delayMinutes, scheduledTime)
-        if (triggerAtMillis == null || triggerAtMillis <= System.currentTimeMillis()) {
+        val triggerAtMillis = explicitTimeMillis ?: parseExecutionTime(delayMinutes, scheduledTime, clock.currentTimeMillis(), clock.timeZoneId())
+        if (triggerAtMillis == null || triggerAtMillis <= clock.currentTimeMillis()) {
             val err = "Invalid execution time specified: delay='$delayMinutes', scheduledTime='$scheduledTime'"
             Log.w(TAG, "[scheduler] $err")
             DiagnosticBus.log(
@@ -188,11 +194,11 @@ open class DeviceSchedulerEngine(
         // Persist to storage
         storage.saveAction(action)
 
-        // Schedule AlarmManager
+        // Schedule via PlatformScheduler or AlarmManager
         armAlarm(action)
 
         val sdf = SimpleDateFormat("HH:mm:ss dd-MMM", Locale.getDefault()).apply {
-            timeZone = TimeZone.getTimeZone(HomeLocationContext.getLocation().timeZone)
+            timeZone = TimeZone.getTimeZone(clock.timeZoneId())
         }
 
         DiagnosticBus.log(
@@ -207,6 +213,11 @@ open class DeviceSchedulerEngine(
 
     @SuppressLint("ScheduleExactAlarm")
     open fun armAlarm(action: ScheduledDeviceAction) {
+        if (platformScheduler != null) {
+            platformScheduler.armExact(action.id, action.scheduledExecutionTimeMillis, action.toJson())
+            return
+        }
+
         val ctx = context ?: return
         if (alarmManager == null) {
             Log.e(TAG, "[scheduler] AlarmManager service is null")
@@ -277,6 +288,11 @@ open class DeviceSchedulerEngine(
     }
 
     open fun disarmAlarm(actionId: String) {
+        if (platformScheduler != null) {
+            platformScheduler.disarm(actionId)
+            return
+        }
+
         val ctx = context ?: return
         if (alarmManager == null) return
 
@@ -309,7 +325,7 @@ open class DeviceSchedulerEngine(
             }
         }
 
-        val remainingMillis = action.remainingMillis()
+        val remainingMillis = action.remainingMillis(clock.currentTimeMillis())
         if (remainingMillis <= 0) {
             return "The ${action.targetDeviceType} timer is triggering now."
         }
@@ -338,7 +354,7 @@ open class DeviceSchedulerEngine(
     open fun restorePersistedActions() {
         val pending = storage.getActiveActions()
         Log.i(TAG, "[scheduler] Restoring ${pending.size} pending scheduled action(s)")
-        val now = System.currentTimeMillis()
+        val now = clock.currentTimeMillis()
 
         pending.forEach { action ->
             if (action.scheduledExecutionTimeMillis > now) {

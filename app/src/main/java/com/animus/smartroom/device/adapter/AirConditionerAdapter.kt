@@ -2,6 +2,7 @@ package com.animus.smartroom.device.adapter
 
 import com.animus.smartroom.device.model.DeviceCapability
 import com.animus.smartroom.device.model.DeviceCommandResult
+import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.device.model.RoomDevice
 
 enum class AcMode {
@@ -38,6 +39,8 @@ enum class AcSwing {
  * Contract for Air Conditioner device integrations.
  */
 interface AirConditionerAdapter : DeviceAdapter {
+    override val deviceType: DeviceType get() = DeviceType.AIR_CONDITIONER
+
     suspend fun setPower(device: RoomDevice, on: Boolean): DeviceCommandResult
     suspend fun setTemperature(device: RoomDevice, celsius: Int): DeviceCommandResult
     suspend fun setMode(device: RoomDevice, mode: AcMode): DeviceCommandResult

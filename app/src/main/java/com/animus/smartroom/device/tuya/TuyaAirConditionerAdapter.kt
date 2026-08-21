@@ -1,6 +1,8 @@
 package com.animus.smartroom.device.tuya
 
 import android.util.Log
+import com.animus.smartroom.core.device.AirConditionerDeviceAdapter
+import com.animus.smartroom.core.device.DeviceCommand
 import com.animus.smartroom.device.adapter.AcFanSpeed
 import com.animus.smartroom.device.adapter.AcMode
 import com.animus.smartroom.device.adapter.AcSwing
@@ -21,7 +23,9 @@ import java.util.Locale
 class TuyaAirConditionerAdapter(
     private val apiClient: TuyaApiClient,
     val allowWriteCommands: Boolean = false
-) : AirConditionerAdapter {
+) : AirConditionerAdapter, AirConditionerDeviceAdapter {
+
+    override val deviceType: com.animus.smartroom.device.model.DeviceType get() = com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
 
     companion object {
         private const val TAG = "TuyaAcAdapter"
@@ -607,6 +611,10 @@ class TuyaAirConditionerAdapter(
         }
     }
 
+    override suspend fun getAcState(device: RoomDevice): TuyaAcState {
+        return refreshState(device.id).getOrElse { _acState.value }
+    }
+
     /**
      * Translates raw Tuya status items into Animus semantic state.
      */
@@ -665,5 +673,37 @@ class TuyaAirConditionerAdapter(
         )
         _acState.value = updated
         return updated
+    }
+
+    override suspend fun execute(device: RoomDevice, command: DeviceCommand): DeviceCommandResult {
+        return when (command) {
+            is DeviceCommand.Power -> setPower(device, command.enabled)
+            is DeviceCommand.SetTemperature -> setTemperature(device, command.celsius)
+            is DeviceCommand.SetMode -> {
+                val modeEnum = AcMode.fromString(command.mode) ?: AcMode.COOL
+                setMode(device, modeEnum)
+            }
+            is DeviceCommand.SetFanSpeed -> {
+                val fanEnum = AcFanSpeed.fromString(command.speed) ?: AcFanSpeed.AUTO
+                setFanSpeed(device, fanEnum)
+            }
+            is DeviceCommand.SetSwing -> {
+                val swingEnum = AcSwing.fromString(command.swing) ?: AcSwing.OFF
+                setSwing(device, swingEnum)
+            }
+            else -> DeviceCommandResult(success = false, message = "Unsupported command for AC: $command")
+        }
+    }
+
+    override suspend fun getState(device: RoomDevice): Map<String, Any> {
+        val state = getAcState(device)
+        return mapOf(
+            "power" to state.power,
+            "targetTemperature" to state.targetTemperature,
+            "ambientTemperature" to state.ambientTemperature,
+            "mode" to state.mode.name,
+            "fanSpeed" to state.fanSpeed.name,
+            "isOnline" to state.isOnline
+        )
     }
 }

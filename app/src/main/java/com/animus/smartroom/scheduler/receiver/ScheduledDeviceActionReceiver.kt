@@ -29,6 +29,8 @@ class ScheduledDeviceActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val actionId = intent.getStringExtra(DeviceSchedulerEngine.EXTRA_ACTION_ID)
+            ?: intent.getStringExtra("action_id")
+            ?: intent.getStringExtra("extra_action_id")
         Log.i(TAG, "[receiver] onReceive called with actionId='$actionId', intentAction='${intent.action}'")
 
         if (actionId.isNullOrBlank()) {
@@ -107,13 +109,22 @@ class ScheduledDeviceActionReceiver : BroadcastReceiver() {
                     return
                 }
 
+                val acDevice = deviceRegistry?.devices?.value?.values?.firstOrNull { it.type == DeviceType.AIR_CONDITIONER }
+                if (acDevice == null) {
+                    val msg = "Registered AC device not found in DeviceRegistry."
+                    storage.updateStatus(actionId, ScheduledActionStatus.FAILED, msg)
+                    DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = msg)
+                    return
+                }
+
                 // 1. Live Readback Check (Deterministic Manual Override)
-                val currentState = tuyaAcAdapter.acState.value
+                val refreshedState = tuyaAcAdapter.refreshState(acDevice.id).getOrNull()
+                val currentState = refreshedState ?: tuyaAcAdapter.acState.value
                 val isPowerOff = action.actionType == DeviceActionType.POWER_OFF
                 val isPowerOn = action.actionType == DeviceActionType.POWER_ON
 
-                if (isPowerOff && !currentState.power) {
-                    Log.i(TAG, "[ac] AC is already OFF. Marking COMPLETED_WITH_NO_CHANGE.")
+                if (isPowerOff && refreshedState != null && !currentState.power) {
+                    Log.i(TAG, "[ac] AC is already physically OFF. Marking COMPLETED_WITH_NO_CHANGE.")
                     storage.updateStatus(actionId, ScheduledActionStatus.COMPLETED_WITH_NO_CHANGE)
                     DiagnosticBus.log(
                         tag = "ac",
@@ -124,8 +135,8 @@ class ScheduledDeviceActionReceiver : BroadcastReceiver() {
                     return
                 }
 
-                if (isPowerOn && currentState.power) {
-                    Log.i(TAG, "[ac] AC is already ON. Marking COMPLETED_WITH_NO_CHANGE.")
+                if (isPowerOn && refreshedState != null && currentState.power) {
+                    Log.i(TAG, "[ac] AC is already physically ON. Marking COMPLETED_WITH_NO_CHANGE.")
                     storage.updateStatus(actionId, ScheduledActionStatus.COMPLETED_WITH_NO_CHANGE)
                     DiagnosticBus.log(
                         tag = "ac",
@@ -137,14 +148,6 @@ class ScheduledDeviceActionReceiver : BroadcastReceiver() {
                 }
 
                 // 2. Execute AC Command
-                // 2. Execute AC Command
-                val acDevice = deviceRegistry?.devices?.value?.values?.firstOrNull { it.type == DeviceType.AIR_CONDITIONER }
-                if (acDevice == null) {
-                    val msg = "Registered AC device not found in DeviceRegistry."
-                    storage.updateStatus(actionId, ScheduledActionStatus.FAILED, msg)
-                    DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = msg)
-                    return
-                }
 
                 val commandResult = when (action.actionType) {
                     DeviceActionType.POWER_ON -> tuyaAcAdapter.executeCapability(acDevice, DeviceCapability.Power, true)
