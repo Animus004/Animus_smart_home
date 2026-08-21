@@ -21,6 +21,7 @@ enum class DiagnosticStage {
     PLAYBACK,
     INVALIDATED,
     SCHEDULED,
+    PRECONDITION,
     EXECUTING,
     DEVICE_RESPONSE,
     VERIFYING,

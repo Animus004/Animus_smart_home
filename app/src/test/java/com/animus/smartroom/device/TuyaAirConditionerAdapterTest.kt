@@ -53,7 +53,14 @@ class TuyaAirConditionerAdapterTest {
 
     @Before
     fun setUp() {
-        fakeClient = FakeTuyaApiClient()
+        fakeClient = FakeTuyaApiClient().apply {
+            statusToReturn = listOf(
+                TuyaDeviceStatusItem("switch", true),
+                TuyaDeviceStatusItem("temp_set", 24),
+                TuyaDeviceStatusItem("mode", "cold"),
+                TuyaDeviceStatusItem("fan_speed_enum", "auto")
+            )
+        }
         adapter = TuyaAirConditionerAdapter(
             apiClient = fakeClient,
             allowWriteCommands = true // enabled for adapter command mapping tests
@@ -129,17 +136,19 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testSetPowerTranslation() = runBlocking {
-        val resultOn = adapter.setPower(testDevice, true)
-        assertTrue(resultOn.success)
-        assertEquals(1, fakeClient.sentCommands.size)
-        assertEquals("switch", fakeClient.sentCommands[0]["code"])
-        assertEquals(true, fakeClient.sentCommands[0]["value"])
-
+        // Initially ON -> turn OFF
         val resultOff = adapter.setPower(testDevice, false)
         assertTrue(resultOff.success)
+        assertEquals(1, fakeClient.sentCommands.size)
+        assertEquals("switch", fakeClient.sentCommands[0]["code"])
+        assertEquals(false, fakeClient.sentCommands[0]["value"])
+
+        // Now OFF -> turn ON
+        val resultOn = adapter.setPower(testDevice, true)
+        assertTrue(resultOn.success)
         assertEquals(2, fakeClient.sentCommands.size)
         assertEquals("switch", fakeClient.sentCommands[1]["code"])
-        assertEquals(false, fakeClient.sentCommands[1]["value"])
+        assertEquals(true, fakeClient.sentCommands[1]["value"])
     }
 
     @Test
@@ -160,7 +169,12 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testSetTemperature24ExactControlledWrite() = runBlocking {
-        val singleClient = FakeTuyaApiClient()
+        val singleClient = FakeTuyaApiClient().apply {
+            statusToReturn = listOf(
+                TuyaDeviceStatusItem("switch", true),
+                TuyaDeviceStatusItem("temp_set", 24)
+            )
+        }
         val singleAdapter = TuyaAirConditionerAdapter(singleClient, allowWriteCommands = true)
 
         val result = singleAdapter.setTemperature(testDevice, 24)

@@ -13,4 +13,5 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Animus Smart Room"
+include(":core")
 include(":app")

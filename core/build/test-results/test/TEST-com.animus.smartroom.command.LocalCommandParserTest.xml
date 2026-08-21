@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.animus.smartroom.command.LocalCommandParserTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-08-21T14:18:25" hostname="ANIMUS" time="0.018">
+  <properties/>
+  <testcase name="testDisconnectCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.005"/>
+  <testcase name="testConnectCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testSwitchDeviceCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.003"/>
+  <testcase name="testUnknownCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testNextCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testPauseCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testVolumeCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testPlayZaraZaraByArtist" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testResumeCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testPreviousCommands" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <testcase name="testPlayZaraZara" classname="com.animus.smartroom.command.LocalCommandParserTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

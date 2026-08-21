@@ -138,19 +138,14 @@ class TuyaAirConditionerAdapter(
         }
     }
 
-    override suspend fun setPower(device: RoomDevice, on: Boolean): DeviceCommandResult {
-        val targetStateStr = if (on) "ON" else "OFF"
-        DiagnosticBus.log(
-            tag = "ac",
-            stage = DiagnosticStage.REQUESTED,
-            message = "Set power = $targetStateStr"
-        )
-        DiagnosticBus.log(
-            tag = "ac",
-            stage = DiagnosticStage.VALIDATING,
-            message = "Power action $targetStateStr is valid"
-        )
+    data class PreconditionResult(
+        val success: Boolean,
+        val autoPoweredOn: Boolean,
+        val errorMessage: String? = null
+    )
 
+    suspend fun setPowerInternal(device: RoomDevice, on: Boolean): DeviceCommandResult {
+        val targetStateStr = if (on) "ON" else "OFF"
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_SWITCH,
             "value" to on
@@ -231,6 +226,75 @@ class TuyaAirConditionerAdapter(
         }
     }
 
+    private suspend fun ensurePowerPrerequisite(device: RoomDevice, capabilityName: String): PreconditionResult {
+        val refreshed = refreshState(device.id).getOrNull()
+        val current = refreshed ?: _acState.value
+
+        if (current.power) {
+            return PreconditionResult(success = true, autoPoweredOn = false)
+        }
+
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.PRECONDITION,
+            message = "Requested $capabilityName requires power=ON. AC is currently OFF -> performing automatic power-on."
+        )
+
+        val powerOnRes = setPowerInternal(device, on = true)
+        if (!powerOnRes.success) {
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = "Prerequisite power-on failed: ${powerOnRes.message}"
+            )
+            return PreconditionResult(
+                success = false,
+                autoPoweredOn = false,
+                errorMessage = "AC is currently off. I couldn't power it on, so I didn't apply the $capabilityName change."
+            )
+        }
+
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.PRECONDITION,
+            message = "Power ON verified. Proceeding with $capabilityName."
+        )
+
+        return PreconditionResult(success = true, autoPoweredOn = true)
+    }
+
+    override suspend fun setPower(device: RoomDevice, on: Boolean): DeviceCommandResult {
+        val targetStateStr = if (on) "ON" else "OFF"
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.REQUESTED,
+            message = "Set power = $targetStateStr"
+        )
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.VALIDATING,
+            message = "Power action $targetStateStr is valid"
+        )
+
+        // Live refresh state before decision
+        val refreshed = refreshState(device.id).getOrNull()
+        val current = refreshed ?: _acState.value
+
+        if (current.power == on) {
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.COMPLETED,
+                message = "power=$targetStateStr (Already in requested state)"
+            )
+            return DeviceCommandResult(
+                success = true,
+                message = "${device.displayName} is already turned $targetStateStr."
+            )
+        }
+
+        return setPowerInternal(device, on)
+    }
+
     override suspend fun setTemperature(device: RoomDevice, celsius: Int): DeviceCommandResult {
         DiagnosticBus.log(
             tag = "ac",
@@ -257,6 +321,15 @@ class TuyaAirConditionerAdapter(
             message = "Temperature $celsius°C within $MIN_TEMPERATURE–$MAX_TEMPERATURE°C"
         )
 
+        // Verified Power Prerequisite
+        val prereq = ensurePowerPrerequisite(device, "temperature")
+        if (!prereq.success) {
+            return DeviceCommandResult(
+                success = false,
+                message = prereq.errorMessage ?: "Failed to power on ${device.displayName}."
+            )
+        }
+
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_TEMP_SET,
             "value" to celsius
@@ -274,9 +347,14 @@ class TuyaAirConditionerAdapter(
                 stage = DiagnosticStage.COMPLETED,
                 message = "targetTemperature=$celsius°C (Simulated)"
             )
+            val successMsg = if (prereq.autoPoweredOn) {
+                "AC was off, so I turned it on and set the temperature to $celsius°C."
+            } else {
+                "${device.displayName} temperature set to $celsius°C (Verified mapping: $tuyaCommand)"
+            }
             return DeviceCommandResult(
                 success = true,
-                message = "${device.displayName} temperature set to $celsius°C (Verified mapping: $tuyaCommand)"
+                message = successMsg
             )
         }
 
@@ -308,9 +386,14 @@ class TuyaAirConditionerAdapter(
                     stage = DiagnosticStage.COMPLETED,
                     message = "targetTemperature=$celsius°C verified"
                 )
+                val successMsg = if (prereq.autoPoweredOn) {
+                    "AC was off, so I turned it on and set the temperature to $celsius°C."
+                } else {
+                    "${device.displayName} temperature set to $celsius°C."
+                }
                 DeviceCommandResult(
                     success = true,
-                    message = "${device.displayName} temperature set to $celsius°C."
+                    message = successMsg
                 )
             } else {
                 DiagnosticBus.log(
@@ -376,6 +459,15 @@ class TuyaAirConditionerAdapter(
             message = "Mode ${mode.name} mapped to Tuya code '$tuyaCode'"
         )
 
+        // Verified Power Prerequisite
+        val prereq = ensurePowerPrerequisite(device, "mode")
+        if (!prereq.success) {
+            return DeviceCommandResult(
+                success = false,
+                message = prereq.errorMessage ?: "Failed to power on ${device.displayName}."
+            )
+        }
+
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_MODE,
             "value" to tuyaCode
@@ -393,9 +485,14 @@ class TuyaAirConditionerAdapter(
                 stage = DiagnosticStage.COMPLETED,
                 message = "mode=${mode.name} (Simulated)"
             )
+            val successMsg = if (prereq.autoPoweredOn) {
+                "AC was off, so I turned it on and switched to ${mode.name} mode."
+            } else {
+                "${device.displayName} mode set to ${mode.name} (Verified mapping: $tuyaCommand)"
+            }
             return DeviceCommandResult(
                 success = true,
-                message = "${device.displayName} mode set to ${mode.name} (Verified mapping: $tuyaCommand)"
+                message = successMsg
             )
         }
 
@@ -427,9 +524,14 @@ class TuyaAirConditionerAdapter(
                     stage = DiagnosticStage.COMPLETED,
                     message = "mode=${mode.name} verified"
                 )
+                val successMsg = if (prereq.autoPoweredOn) {
+                    "AC was off, so I turned it on and switched to ${mode.name} mode."
+                } else {
+                    "${device.displayName} mode set to ${mode.name}."
+                }
                 DeviceCommandResult(
                     success = true,
-                    message = "${device.displayName} mode set to ${mode.name}."
+                    message = successMsg
                 )
             } else {
                 DiagnosticBus.log(
@@ -482,6 +584,15 @@ class TuyaAirConditionerAdapter(
             message = "Fan speed ${speed.name} mapped to Tuya code '$tuyaCode'"
         )
 
+        // Verified Power Prerequisite
+        val prereq = ensurePowerPrerequisite(device, "fan speed")
+        if (!prereq.success) {
+            return DeviceCommandResult(
+                success = false,
+                message = prereq.errorMessage ?: "Failed to power on ${device.displayName}."
+            )
+        }
+
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_FAN_SPEED,
             "value" to tuyaCode
@@ -499,9 +610,14 @@ class TuyaAirConditionerAdapter(
                 stage = DiagnosticStage.COMPLETED,
                 message = "fanSpeed=${speed.name} (Simulated)"
             )
+            val successMsg = if (prereq.autoPoweredOn) {
+                "AC was off, so I turned it on and set the fan to ${speed.name}."
+            } else {
+                "${device.displayName} fan speed set to ${speed.name} (Verified mapping: $tuyaCommand)"
+            }
             return DeviceCommandResult(
                 success = true,
-                message = "${device.displayName} fan speed set to ${speed.name} (Verified mapping: $tuyaCommand)"
+                message = successMsg
             )
         }
 
@@ -533,9 +649,14 @@ class TuyaAirConditionerAdapter(
                     stage = DiagnosticStage.COMPLETED,
                     message = "fanSpeed=${speed.name} verified"
                 )
+                val successMsg = if (prereq.autoPoweredOn) {
+                    "AC was off, so I turned it on and set the fan to ${speed.name}."
+                } else {
+                    "${device.displayName} fan speed set to ${speed.name}."
+                }
                 DeviceCommandResult(
                     success = true,
-                    message = "${device.displayName} fan speed set to ${speed.name}."
+                    message = successMsg
                 )
             } else {
                 DiagnosticBus.log(
