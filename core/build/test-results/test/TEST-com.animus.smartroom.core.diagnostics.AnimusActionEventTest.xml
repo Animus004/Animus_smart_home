@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.animus.smartroom.core.diagnostics.AnimusActionEventTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.018">
+  <properties/>
+  <testcase name="AnimusActionEvent constructs with all fields and formats displayString" classname="com.animus.smartroom.core.diagnostics.AnimusActionEventTest" time="0.012"/>
+  <testcase name="AnimusActionEvent rejects blank id" classname="com.animus.smartroom.core.diagnostics.AnimusActionEventTest" time="0.001"/>
+  <testcase name="AnimusActionEvent serializes to and deserializes from JSON deterministically" classname="com.animus.smartroom.core.diagnostics.AnimusActionEventTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

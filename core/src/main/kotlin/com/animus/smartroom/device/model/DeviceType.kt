@@ -7,5 +7,11 @@ enum class DeviceType {
     HDMI_SWITCH,
     DISPLAY,
     PROJECTOR,
-    OTHER
+    OTHER;
+
+    companion object {
+        fun fromString(value: String): DeviceType? {
+            return entries.firstOrNull { it.name.equals(value.trim(), ignoreCase = true) }
+        }
+    }
 }

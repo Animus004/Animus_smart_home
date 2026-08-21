@@ -17,12 +17,16 @@
     <!-- Microphone permission for Voice interaction layer -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Alarm, Notification, and Boot permissions for Schedulers -->
+    <!-- Alarm, Notification, Boot, WakeLock and Foreground Service permissions -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Required by AnimusRuntimeService.startForeground() -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required on Android 14+ for typed foreground services (dataSync = network I/O to Tuya) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Legacy permissions for Android 11 (API 30) and lower -->
     <uses-permission
@@ -103,5 +107,13 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!-- AnimusRuntimeService: started on demand, not unconditionally.
+             Provides persistent foreground notification and runtime lifecycle anchor.
+             foregroundServiceType=dataSync: network I/O to Tuya cloud (Android 14+). -->
+        <service
+            android:name=".runtime.AnimusRuntimeService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

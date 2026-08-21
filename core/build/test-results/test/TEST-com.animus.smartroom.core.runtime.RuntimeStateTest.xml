@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.animus.smartroom.core.runtime.RuntimeStateTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.001">
+  <properties/>
+  <testcase name="lastActionEventId can be set and cleared" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.001"/>
+  <testcase name="RuntimeState is a value type — structural equality" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
+  <testcase name="IDLE state has expected defaults" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
+  <testcase name="state transitions preserve other fields" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
+  <testcase name="timestamp updates produce distinct states" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

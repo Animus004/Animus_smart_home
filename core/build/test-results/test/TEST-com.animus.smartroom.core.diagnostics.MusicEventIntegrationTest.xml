@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.animus.smartroom.core.diagnostics.MusicEventIntegrationTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.003">
+  <properties/>
+  <testcase name="music playback emits resolving and completed events with sanitized metadata" classname="com.animus.smartroom.core.diagnostics.MusicEventIntegrationTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

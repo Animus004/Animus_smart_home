@@ -198,12 +198,25 @@ class CommandRouter(
         return execute(listOf(command))
     }
 
-    suspend fun execute(commands: List<AnimusCommand>): CommandExecutionResult {
+    suspend fun execute(
+        commands: List<AnimusCommand>,
+        correlationId: String? = null
+    ): CommandExecutionResult {
         val count = commands.size
-        Log.i(TAG, "[command-router] Command count received: $count")
+        val effectiveCorrId = correlationId ?: "cmd-${java.util.UUID.randomUUID().toString().substring(0, 8)}"
+        Log.i(TAG, "[command-router] Command count received: $count, correlationId=$effectiveCorrId")
 
         if (commands.isEmpty()) {
             return CommandExecutionResult(success = false, message = "No commands received.")
+        }
+
+        com.animus.smartroom.diagnostics.DiagnosticBus.publish {
+            received(
+                correlationId = effectiveCorrId,
+                action = if (count > 1) "MULTI_COMMAND" else getCommandSummary(commands.first()),
+                message = "Received $count command(s) for execution",
+                metadata = mapOf("commandCount" to count.toString())
+            )
         }
 
         val ordered = orderCommandsForExecution(commands)
@@ -214,10 +227,10 @@ class CommandRouter(
             val cmd = ordered[i]
             val order = i + 1
             val summary = getCommandSummary(cmd)
-            Log.i(TAG, "[multi-debug] command $order/$count START: $summary")
+            Log.i(TAG, "[multi-debug] command $order/$count START: $summary (corrId=$effectiveCorrId)")
 
             val res: CommandExecutionResult = try {
-                val singleRes = executeSingle(cmd)
+                val singleRes = executeSingle(cmd, effectiveCorrId)
                 Log.i(TAG, "[multi-debug] command $order/$count RESULT: success=${singleRes.success}, message='${singleRes.message}'")
                 singleRes
             } catch (e: Exception) {
@@ -240,14 +253,36 @@ class CommandRouter(
 
         val combined = if (messages.isNotEmpty()) messages.joinToString(" • ") else "Commands executed"
         Log.i(TAG, "[command-router] Finished executing $count commands (Success=$allSuccess): '$combined'")
+
+        com.animus.smartroom.diagnostics.DiagnosticBus.publish {
+            if (allSuccess) {
+                completed(
+                    correlationId = effectiveCorrId,
+                    action = if (count > 1) "MULTI_COMMAND" else "SINGLE_COMMAND",
+                    message = combined,
+                    metadata = mapOf("commandCount" to count.toString(), "success" to "true")
+                )
+            } else {
+                failed(
+                    correlationId = effectiveCorrId,
+                    action = if (count > 1) "MULTI_COMMAND" else "SINGLE_COMMAND",
+                    message = combined,
+                    metadata = mapOf("commandCount" to count.toString(), "success" to "false")
+                )
+            }
+        }
+
         return CommandExecutionResult(
             success = allSuccess,
             message = combined
         )
     }
 
-    private suspend fun executeSingle(command: AnimusCommand): CommandExecutionResult {
-        Log.i(TAG, "[command-router] Executing single command: ${command::class.simpleName}")
+    private suspend fun executeSingle(
+        command: AnimusCommand,
+        correlationId: String? = null
+    ): CommandExecutionResult {
+        Log.i(TAG, "[command-router] Executing single command: ${command::class.simpleName} (corrId=$correlationId)")
 
         return when (command) {
             is AnimusCommand.PlayMusic -> {

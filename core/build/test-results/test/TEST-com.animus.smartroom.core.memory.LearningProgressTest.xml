@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.memory.LearningProgressTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-21T14:18:25" hostname="ANIMUS" time="0.0">
+<testsuite name="com.animus.smartroom.core.memory.LearningProgressTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.006">
   <properties/>
-  <testcase name="Empty events return NOT_STARTED status" classname="com.animus.smartroom.core.memory.LearningProgressTest" time="0.0"/>
+  <testcase name="Empty events return NOT_STARTED status" classname="com.animus.smartroom.core.memory.LearningProgressTest" time="0.003"/>
   <testcase name="Single studied event derives LEARNING status and correct timestamps" classname="com.animus.smartroom.core.memory.LearningProgressTest" time="0.0"/>
-  <testcase name="Practiced event derives PRACTICING status" classname="com.animus.smartroom.core.memory.LearningProgressTest" time="0.0"/>
-  <testcase name="Completed events derive COMPLETED status" classname="com.animus.smartroom.core.memory.LearningProgressTest" time="0.0"/>
+  <testcase name="Practiced event derives PRACTICING status" classname="com.animus.smartroom.core.memory.LearningProgressTest" time="0.002"/>
+  <testcase name="Completed events derive COMPLETED status" classname="com.animus.smartroom.core.memory.LearningProgressTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

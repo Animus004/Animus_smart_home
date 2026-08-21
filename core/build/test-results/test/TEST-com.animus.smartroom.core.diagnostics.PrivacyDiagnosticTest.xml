@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.animus.smartroom.core.diagnostics.PrivacyDiagnosticTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.002">
+  <properties/>
+  <testcase name="EventSanitizer redacts Gemini API key, Bearer tokens, and Tuya credentials" classname="com.animus.smartroom.core.diagnostics.PrivacyDiagnosticTest" time="0.001"/>
+  <testcase name="EventSanitizer redacts sensitive metadata keys and values" classname="com.animus.smartroom.core.diagnostics.PrivacyDiagnosticTest" time="0.0"/>
+  <testcase name="DiagnosticBus automatically sanitizes published events and JSON export" classname="com.animus.smartroom.core.diagnostics.PrivacyDiagnosticTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

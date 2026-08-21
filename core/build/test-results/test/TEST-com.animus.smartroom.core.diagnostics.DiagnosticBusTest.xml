@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.animus.smartroom.core.diagnostics.DiagnosticBusTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.026">
+  <properties/>
+  <testcase name="concurrent publishers do not corrupt buffer or drop events within capacity" classname="com.animus.smartroom.core.diagnostics.DiagnosticBusTest" time="0.01"/>
+  <testcase name="ActionEventQuery filters events accurately" classname="com.animus.smartroom.core.diagnostics.DiagnosticBusTest" time="0.001"/>
+  <testcase name="publish updates StateFlow and preserves bounded ring buffer" classname="com.animus.smartroom.core.diagnostics.DiagnosticBusTest" time="0.011"/>
+  <testcase name="legacy log seamlessly updates both legacy flow and structured action events" classname="com.animus.smartroom.core.diagnostics.DiagnosticBusTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

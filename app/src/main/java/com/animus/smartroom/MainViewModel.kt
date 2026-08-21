@@ -15,9 +15,19 @@ import com.animus.smartroom.brain.provider.GeminiApiClient
 import com.animus.smartroom.brain.provider.GeminiApiKeyStorage
 import com.animus.smartroom.brain.provider.LocalAnimusBrain
 import com.animus.smartroom.command.router.CommandRouter
+import com.animus.smartroom.core.diagnostics.model.AnimusActionEvent
+import com.animus.smartroom.core.runtime.AnimusRuntime
+import com.animus.smartroom.core.runtime.RuntimeState
+import com.animus.smartroom.device.model.DeviceCapability
+import com.animus.smartroom.device.model.DeviceConnectionState
+import com.animus.smartroom.device.model.DeviceType
+import com.animus.smartroom.device.model.RoomDevice
+import com.animus.smartroom.device.tuya.model.TuyaAcState
 import com.animus.smartroom.media.MusicController
 import com.animus.smartroom.media.model.MusicUiState
 import com.animus.smartroom.media.provider.MusicProvider
+import com.animus.smartroom.media.resolver.MusicResolutionCache
+import com.animus.smartroom.media.resolver.YouTubeMusicResolver
 import com.animus.smartroom.voice.SpeechRecognitionManager
 import com.animus.smartroom.voice.VoiceInputState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,19 +37,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-import com.animus.smartroom.media.resolver.MusicResolutionCache
-import com.animus.smartroom.media.resolver.YouTubeMusicResolver
-
-import com.animus.smartroom.device.adapter.BluetoothAudioDeviceAdapter
-import com.animus.smartroom.device.model.DeviceCapability
-import com.animus.smartroom.device.model.DeviceConnectionState
-import com.animus.smartroom.device.model.DeviceType
-import com.animus.smartroom.device.model.RoomDevice
-import com.animus.smartroom.device.registry.DeviceRegistry
-import com.animus.smartroom.device.tuya.TuyaAirConditionerAdapter
-import com.animus.smartroom.device.tuya.client.TuyaCloudApiClient
-import com.animus.smartroom.device.tuya.model.TuyaAcState
-
 data class AiCommandUiState(
     val lastInputText: String = "",
     val lastResultMessage: String? = null,
@@ -48,55 +45,41 @@ data class AiCommandUiState(
     val activeProviderName: String = "Local"
 )
 
+/**
+ * ViewModel for MainActivity. Acts as an observer/controller, not a runtime owner.
+ *
+ * All singleton dependencies (DeviceRegistry, TuyaAcAdapter, DeviceSchedulerEngine,
+ * ScheduledActionStorage, RoutineEngine, MusicController, BluetoothController)
+ * are consumed from [AnimusApplication] — the single authoritative dependency graph.
+ *
+ * Destroying this ViewModel (Activity recreation) does NOT affect:
+ * - Scheduled actions (persisted in ScheduledActionStorage + AlarmManager)
+ * - Routine state (managed by RoutineEngine in AnimusApplication scope)
+ * - DiagnosticBus event history
+ * - AnimusRuntime state
+ */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val bluetoothManager = BluetoothAudioDeviceManager(application.applicationContext)
-    private val musicController = MusicController(application.applicationContext)
+    // ─── Application-scoped singletons (single source of truth) ──────────────
+    private val app: AnimusApplication = application as AnimusApplication
+    private val bluetoothManager: BluetoothAudioDeviceManager = app.bluetoothController
+    private val musicController: MusicController = app.musicController
 
-    val tuyaApiClient = TuyaCloudApiClient(
-        accessIdProvider = { BuildConfig.TUYA_ACCESS_ID },
-        accessSecretProvider = { BuildConfig.TUYA_ACCESS_SECRET },
-        endpointProvider = { BuildConfig.TUYA_REGION_ENDPOINT.ifBlank { "https://openapi.tuyain.com" } }
-    )
+    /** AC state backed by the application-scoped TuyaAirConditionerAdapter. */
+    val acState: StateFlow<TuyaAcState> = app.tuyaAcAdapter.acState
+    val tuyaAcState: StateFlow<TuyaAcState> = app.tuyaAcAdapter.acState
 
-    val tuyaAcAdapter = TuyaAirConditionerAdapter(
-        apiClient = tuyaApiClient,
-        allowWriteCommands = true // Verified AC controls enabled
-    )
+    /** Device registry — application-scoped, survives Activity recreation. */
+    val deviceRegistry = app.deviceRegistry
 
-    val acState: StateFlow<TuyaAcState> = tuyaAcAdapter.acState
-
-    val deviceRegistry = DeviceRegistry().apply {
-        registerAdapterForType(DeviceType.BLUETOOTH_AUDIO, BluetoothAudioDeviceAdapter(bluetoothManager))
-        registerAdapterForType(DeviceType.AIR_CONDITIONER, tuyaAcAdapter)
-
-        val realAcId = BuildConfig.TUYA_DEVICE_ID.ifBlank { "76776532a4e57c0a2ca4" }
-        registerDevice(
-            RoomDevice(
-                id = realAcId,
-                displayName = "Bedroom AC",
-                type = DeviceType.AIR_CONDITIONER,
-                connectionState = DeviceConnectionState.Connected,
-                supportedCapabilities = setOf(
-                    DeviceCapability.Power,
-                    DeviceCapability.Temperature,
-                    DeviceCapability.HvacMode,
-                    DeviceCapability.FanSpeed
-                ),
-                aliases = listOf("AC", "Air Conditioner", "Room AC", "Bedroom AC", "Inverter AC")
-            )
-        )
-    }
-
+    // ─── Brain (ViewModel-scoped — holds no network state) ───────────────────
     private val apiKeyStorage = GeminiApiKeyStorage(application.applicationContext)
     private val geminiApiClient = GeminiApiClient()
-
     private val localBrain = LocalAnimusBrain()
     private val cloudBrain = CloudAnimusBrain(
         apiKeyProvider = { apiKeyStorage.getApiKey() },
         apiClient = geminiApiClient
     )
-
     private val initialBrainProvider = apiKeyStorage.getSelectedProvider()
     private val brainManager = AnimusBrainManager(
         localBrain = localBrain,
@@ -105,42 +88,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onProviderChanged = { apiKeyStorage.saveSelectedProvider(it) }
     )
 
+    // ─── Music resolver (ViewModel-scoped, cache is application-context-backed) ─
     private val musicResolutionCache = MusicResolutionCache.create(application.applicationContext)
     private val musicResolver = YouTubeMusicResolver(
         apiKeyProvider = { BuildConfig.YOUTUBE_API_KEY.ifBlank { null } },
         cache = musicResolutionCache
     )
 
-    val routineEngine = com.animus.smartroom.routine.RoutineEngine(
-        context = application.applicationContext,
-        deviceRegistry = deviceRegistry,
-        bluetoothManager = bluetoothManager,
-        musicController = musicController,
-        musicResolver = musicResolver
-    )
-
+    // ─── Routine engine — application-scoped ─────────────────────────────────
+    val routineEngine = app.routineEngine
     val activeRoutine: StateFlow<com.animus.smartroom.routine.model.RoutineState?> = routineEngine.activeRoutine
 
-    val registeredDevices: StateFlow<List<RoomDevice>> = MutableStateFlow<List<RoomDevice>>(emptyList()).apply {
-        viewModelScope.launch {
-            deviceRegistry.devices.collectLatest { map ->
-                value = map.values.toList()
-            }
-        }
-    }.asStateFlow()
+    // ─── Scheduler — application-scoped ──────────────────────────────────────
+    val scheduledActionStorage = app.scheduledActionStorage
+    val deviceSchedulerEngine = app.deviceSchedulerEngine
+    val scheduledActions: StateFlow<List<com.animus.smartroom.scheduler.model.ScheduledDeviceAction>> =
+        scheduledActionStorage.actionsFlow
 
-    val tuyaAcState: StateFlow<TuyaAcState> = tuyaAcAdapter.acState
-
-    private val _isAcOperating = MutableStateFlow(false)
-    val isAcOperating: StateFlow<Boolean> = _isAcOperating.asStateFlow()
-
-    val diagnosticEvents: StateFlow<List<com.animus.smartroom.diagnostics.DiagnosticEvent>> =
-        com.animus.smartroom.diagnostics.DiagnosticBus.eventsFlow
-
-    val scheduledActionStorage = com.animus.smartroom.scheduler.storage.ScheduledActionStorage(application.applicationContext)
-    val deviceSchedulerEngine = com.animus.smartroom.scheduler.DeviceSchedulerEngine(application.applicationContext, scheduledActionStorage)
-    val scheduledActions: StateFlow<List<com.animus.smartroom.scheduler.model.ScheduledDeviceAction>> = scheduledActionStorage.actionsFlow
-
+    // ─── Command router ───────────────────────────────────────────────────────
     private val commandRouter = CommandRouter(
         bluetoothManager = bluetoothManager,
         musicController = musicController,
@@ -150,14 +115,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         deviceSchedulerEngine = deviceSchedulerEngine
     )
 
+    // ─── Registered devices (from application-scoped registry) ───────────────
+    val registeredDevices: StateFlow<List<RoomDevice>> = MutableStateFlow<List<RoomDevice>>(emptyList()).apply {
+        viewModelScope.launch {
+            deviceRegistry.devices.collectLatest { map ->
+                value = map.values.toList()
+            }
+        }
+    }.asStateFlow()
+
+    // ─── Voice ────────────────────────────────────────────────────────────────
     private val speechRecognitionManager = SpeechRecognitionManager(application.applicationContext) { spokenText ->
         onExecuteCommand(spokenText)
     }
 
+    // ─── Runtime state (from AnimusApplication singleton) ────────────────────
+    val animusRuntime: AnimusRuntime = app.animusRuntime
+    val runtimeState: StateFlow<RuntimeState> = animusRuntime.state
+    val actionEvents: StateFlow<List<AnimusActionEvent>> = animusRuntime.actionEvents
+
+    // ─── UI State ─────────────────────────────────────────────────────────────
     val bluetoothUiState: StateFlow<BluetoothUiState> = bluetoothManager.uiState
     val musicUiState: StateFlow<MusicUiState> = musicController.uiState
     val activeBrainProvider: StateFlow<BrainProviderType> = brainManager.activeProvider
     val voiceInputState: StateFlow<VoiceInputState> = speechRecognitionManager.state
+
+    /** Legacy diagnostic events stream (for backward-compatible UI rendering). */
+    val diagnosticEvents: StateFlow<List<com.animus.smartroom.diagnostics.DiagnosticEvent>> =
+        com.animus.smartroom.diagnostics.DiagnosticBus.eventsFlow
 
     private val _maskedApiKey = MutableStateFlow(apiKeyStorage.getMaskedApiKey())
     val maskedApiKey: StateFlow<String?> = _maskedApiKey.asStateFlow()
@@ -167,113 +152,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val aiCommandState: StateFlow<AiCommandUiState> = _aiCommandState.asStateFlow()
 
-    fun cancelActiveRoutine() {
-        viewModelScope.launch {
-            val result = routineEngine.cancelSleep()
-            _aiCommandState.update { current ->
-                current.copy(
-                    lastResultMessage = result.message,
-                    isProcessing = false
-                )
-            }
-        }
-    }
-
-    fun stopAlarm() {
-        viewModelScope.launch {
-            routineEngine.stopAlarm()
-        }
-    }
-
-    fun clearDiagnostics() {
-        com.animus.smartroom.diagnostics.DiagnosticBus.clear()
-    }
-
-    fun setAcPower(on: Boolean) {
-        viewModelScope.launch {
-            _isAcOperating.value = true
-            try {
-                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
-                if (realAc != null) {
-                    val result = tuyaAcAdapter.setPower(realAc, on)
-                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
-                }
-            } finally {
-                _isAcOperating.value = false
-            }
-        }
-    }
-
-    fun setAcTemperature(celsius: Int) {
-        viewModelScope.launch {
-            _isAcOperating.value = true
-            try {
-                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
-                if (realAc != null) {
-                    val result = tuyaAcAdapter.setTemperature(realAc, celsius)
-                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
-                }
-            } finally {
-                _isAcOperating.value = false
-            }
-        }
-    }
-
-    fun setAcMode(mode: com.animus.smartroom.device.adapter.AcMode) {
-        viewModelScope.launch {
-            _isAcOperating.value = true
-            try {
-                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
-                if (realAc != null) {
-                    val result = tuyaAcAdapter.setMode(realAc, mode)
-                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
-                }
-            } finally {
-                _isAcOperating.value = false
-            }
-        }
-    }
-
-    fun setAcFanSpeed(speed: com.animus.smartroom.device.adapter.AcFanSpeed) {
-        viewModelScope.launch {
-            _isAcOperating.value = true
-            try {
-                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
-                if (realAc != null) {
-                    val result = tuyaAcAdapter.setFanSpeed(realAc, speed)
-                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
-                }
-            } finally {
-                _isAcOperating.value = false
-            }
-        }
-    }
-
-    fun scheduleAcTimer(delayMinutes: Int, powerOn: Boolean) {
-        viewModelScope.launch {
-            val actionType = if (powerOn) com.animus.smartroom.scheduler.model.DeviceActionType.POWER_ON else com.animus.smartroom.scheduler.model.DeviceActionType.POWER_OFF
-            val res = deviceSchedulerEngine.scheduleAction(
-                targetDeviceType = DeviceType.AIR_CONDITIONER,
-                actionType = actionType,
-                delayMinutes = delayMinutes
-            )
-            val msg = when (res) {
-                is com.animus.smartroom.scheduler.ActionScheduleResult.Success -> {
-                    val stateDesc = if (powerOn) "turn on" else "turn off"
-                    "AC scheduled to $stateDesc in $delayMinutes minute${if (delayMinutes > 1) "s" else ""}."
-                }
-                is com.animus.smartroom.scheduler.ActionScheduleResult.Error -> res.message
-            }
-            _aiCommandState.update { it.copy(lastResultMessage = msg) }
-        }
-    }
-
-    fun cancelAcTimer() {
-        viewModelScope.launch {
-            deviceSchedulerEngine.cancelActionsForDevice(DeviceType.AIR_CONDITIONER)
-            _aiCommandState.update { it.copy(lastResultMessage = "AC timer cancelled.") }
-        }
-    }
+    private val _isAcOperating = MutableStateFlow(false)
+    val isAcOperating: StateFlow<Boolean> = _isAcOperating.asStateFlow()
 
     init {
         bluetoothManager.startListening()
@@ -284,7 +164,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             bluetoothUiState.collectLatest { btState ->
                 val selectedDevice = btState.selectedDevice
                 val isConnected = btState.connectionState is BluetoothDeviceState.Connected
-                val name = selectedDevice?.displayName ?: if (isConnected) (btState.connectionState as BluetoothDeviceState.Connected).deviceName else null
+                val name = selectedDevice?.displayName
+                    ?: if (isConnected) (btState.connectionState as BluetoothDeviceState.Connected).deviceName else null
                 musicController.updateOutputDevice(name, isConnected)
 
                 // Sync Bluetooth devices to DeviceRegistry
@@ -317,9 +198,131 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Initial refresh of AC state
         viewModelScope.launch {
             val realAcId = BuildConfig.TUYA_DEVICE_ID.ifBlank { "76776532a4e57c0a2ca4" }
-            tuyaAcAdapter.refreshState(realAcId)
+            app.tuyaAcAdapter.refreshState(realAcId)
         }
     }
+
+    // ─── AC control ───────────────────────────────────────────────────────────
+
+    fun setAcPower(on: Boolean) {
+        viewModelScope.launch {
+            _isAcOperating.value = true
+            try {
+                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
+                if (realAc != null) {
+                    val result = app.tuyaAcAdapter.setPower(realAc, on)
+                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
+                }
+            } finally {
+                _isAcOperating.value = false
+            }
+        }
+    }
+
+    fun setAcTemperature(celsius: Int) {
+        viewModelScope.launch {
+            _isAcOperating.value = true
+            try {
+                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
+                if (realAc != null) {
+                    val result = app.tuyaAcAdapter.setTemperature(realAc, celsius)
+                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
+                }
+            } finally {
+                _isAcOperating.value = false
+            }
+        }
+    }
+
+    fun setAcMode(mode: com.animus.smartroom.device.adapter.AcMode) {
+        viewModelScope.launch {
+            _isAcOperating.value = true
+            try {
+                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
+                if (realAc != null) {
+                    val result = app.tuyaAcAdapter.setMode(realAc, mode)
+                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
+                }
+            } finally {
+                _isAcOperating.value = false
+            }
+        }
+    }
+
+    fun setAcFanSpeed(speed: com.animus.smartroom.device.adapter.AcFanSpeed) {
+        viewModelScope.launch {
+            _isAcOperating.value = true
+            try {
+                val realAc = deviceRegistry.getDevicesByType(DeviceType.AIR_CONDITIONER).firstOrNull()
+                if (realAc != null) {
+                    val result = app.tuyaAcAdapter.setFanSpeed(realAc, speed)
+                    _aiCommandState.update { it.copy(lastResultMessage = result.message) }
+                }
+            } finally {
+                _isAcOperating.value = false
+            }
+        }
+    }
+
+    // ─── Scheduler ────────────────────────────────────────────────────────────
+
+    fun scheduleAcTimer(delayMinutes: Int, powerOn: Boolean) {
+        viewModelScope.launch {
+            val actionType = if (powerOn)
+                com.animus.smartroom.scheduler.model.DeviceActionType.POWER_ON
+            else
+                com.animus.smartroom.scheduler.model.DeviceActionType.POWER_OFF
+
+            val res = deviceSchedulerEngine.scheduleAction(
+                targetDeviceType = DeviceType.AIR_CONDITIONER,
+                actionType = actionType,
+                delayMinutes = delayMinutes
+            )
+            val msg = when (res) {
+                is com.animus.smartroom.scheduler.ActionScheduleResult.Success -> {
+                    val stateDesc = if (powerOn) "turn on" else "turn off"
+                    "AC scheduled to $stateDesc in $delayMinutes minute${if (delayMinutes > 1) "s" else ""}."
+                }
+                is com.animus.smartroom.scheduler.ActionScheduleResult.Error -> res.message
+            }
+            _aiCommandState.update { it.copy(lastResultMessage = msg) }
+        }
+    }
+
+    fun cancelAcTimer() {
+        viewModelScope.launch {
+            deviceSchedulerEngine.cancelActionsForDevice(DeviceType.AIR_CONDITIONER)
+            _aiCommandState.update { it.copy(lastResultMessage = "AC timer cancelled.") }
+        }
+    }
+
+    // ─── Routine ──────────────────────────────────────────────────────────────
+
+    fun cancelActiveRoutine() {
+        viewModelScope.launch {
+            val result = routineEngine.cancelSleep()
+            _aiCommandState.update { current ->
+                current.copy(
+                    lastResultMessage = result.message,
+                    isProcessing = false
+                )
+            }
+        }
+    }
+
+    fun stopAlarm() {
+        viewModelScope.launch {
+            routineEngine.stopAlarm()
+        }
+    }
+
+    // ─── Diagnostics ──────────────────────────────────────────────────────────
+
+    fun clearDiagnostics() {
+        com.animus.smartroom.diagnostics.DiagnosticBus.clear()
+    }
+
+    // ─── Brain + AI Command ───────────────────────────────────────────────────
 
     fun onSetDeviceAlias(macAddress: String, alias: String?) {
         bluetoothManager.setDeviceAlias(macAddress, alias)
@@ -339,9 +342,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _maskedApiKey.value = apiKeyStorage.getMaskedApiKey()
     }
 
-    fun getGeminiApiKey(): String? {
-        return apiKeyStorage.getApiKey()
-    }
+    fun getGeminiApiKey(): String? = apiKeyStorage.getApiKey()
 
     fun onTestGeminiConnection(apiKey: String?, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
@@ -358,7 +359,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // AI Command Layer operations
     fun onExecuteCommand(rawInput: String) {
         val trimmed = rawInput.trim()
         if (trimmed.isBlank()) return
@@ -374,7 +374,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isProcessing = true,
                     lastInputText = trimmed,
                     activeProviderName = currentProviderName,
-                    lastResultMessage = if (isMusicQuery && musicSubject.isNotBlank()) "Resolving $musicSubject..." else "Processing command with $currentProviderName..."
+                    lastResultMessage = if (isMusicQuery && musicSubject.isNotBlank())
+                        "Resolving $musicSubject..."
+                    else
+                        "Processing command with $currentProviderName..."
                 )
             }
 
@@ -431,31 +434,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _aiCommandState.update { it.copy(lastResultMessage = null, isSuccess = null) }
     }
 
-    // Voice interaction methods
-    fun onStartVoiceListening() {
-        speechRecognitionManager.startListening()
-    }
+    // ─── Voice ────────────────────────────────────────────────────────────────
 
-    fun onStopVoiceListening() {
-        speechRecognitionManager.stopListening()
-    }
+    fun onStartVoiceListening() { speechRecognitionManager.startListening() }
+    fun onStopVoiceListening() { speechRecognitionManager.stopListening() }
+    fun onCancelVoiceListening() { speechRecognitionManager.cancel() }
 
-    fun onCancelVoiceListening() {
-        speechRecognitionManager.cancel()
-    }
+    // ─── Bluetooth ────────────────────────────────────────────────────────────
 
-    // Bluetooth operations
-    fun onConnectClicked() {
-        bluetoothManager.connect()
-    }
-
-    fun onDisconnectClicked() {
-        bluetoothManager.disconnect()
-    }
-
-    fun onDeviceSelected(macAddress: String) {
-        bluetoothManager.selectDevice(macAddress)
-    }
+    fun onConnectClicked() { bluetoothManager.connect() }
+    fun onDisconnectClicked() { bluetoothManager.disconnect() }
+    fun onDeviceSelected(macAddress: String) { bluetoothManager.selectDevice(macAddress) }
 
     fun refreshState() {
         bluetoothManager.refreshState()
@@ -464,35 +453,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPermissionsResult(granted: Boolean) {
         bluetoothManager.refreshState()
-        if (granted) {
-            bluetoothManager.connect()
-        }
+        if (granted) bluetoothManager.connect()
     }
 
-    fun getRequiredPermissions(): Array<String> {
-        return bluetoothManager.getRequiredPermissions()
-    }
+    fun getRequiredPermissions(): Array<String> = bluetoothManager.getRequiredPermissions()
+    fun hasPermissions(): Boolean = bluetoothManager.hasRequiredPermissions()
 
-    fun hasPermissions(): Boolean {
-        return bluetoothManager.hasRequiredPermissions()
-    }
+    // ─── Music ────────────────────────────────────────────────────────────────
 
-    // Media & Music operations
-    fun onPlayPauseClicked() {
-        musicController.togglePlayPause()
-    }
-
-    fun onNextClicked() {
-        musicController.next()
-    }
-
-    fun onPreviousClicked() {
-        musicController.previous()
-    }
-
-    fun onVolumeChanged(percent: Float) {
-        musicController.setVolume(percent)
-    }
+    fun onPlayPauseClicked() { musicController.togglePlayPause() }
+    fun onNextClicked() { musicController.next() }
+    fun onPreviousClicked() { musicController.previous() }
+    fun onVolumeChanged(percent: Float) { musicController.setVolume(percent) }
 
     fun onPlayZaraZaraClicked() {
         val btState = bluetoothUiState.value
@@ -512,13 +484,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         musicController.playZaraZaraPreset(targetName)
     }
 
-    fun onProviderSelected(providerId: String) {
-        musicController.setProvider(providerId)
-    }
+    fun onProviderSelected(providerId: String) { musicController.setProvider(providerId) }
+    fun getAvailableProviders(): List<MusicProvider> = musicController.getAvailableProviders()
 
-    fun getAvailableProviders(): List<MusicProvider> {
-        return musicController.getAvailableProviders()
-    }
+    // ─── Lifecycle ────────────────────────────────────────────────────────────
 
     override fun onCleared() {
         super.onCleared()

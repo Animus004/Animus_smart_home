@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.port.PersistentStoreTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T14:18:25" hostname="ANIMUS" time="0.001">
+<testsuite name="com.animus.smartroom.core.port.PersistentStoreTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.001">
   <properties/>
   <testcase name="FakePersistentStore basic CRUD and change listener operations" classname="com.animus.smartroom.core.port.PersistentStoreTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>

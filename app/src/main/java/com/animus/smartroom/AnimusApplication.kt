@@ -1,6 +1,7 @@
 package com.animus.smartroom
 
 import android.app.Application
+import android.content.Intent
 import android.util.Log
 import com.animus.smartroom.bluetooth.BluetoothAudioDeviceManager
 import com.animus.smartroom.device.adapter.BluetoothAudioDeviceAdapter
@@ -15,8 +16,12 @@ import com.animus.smartroom.media.MusicController
 import com.animus.smartroom.routine.RoutineEngine
 import com.animus.smartroom.routine.scheduler.RoutineScheduler
 import com.animus.smartroom.routine.storage.RoutineStorage
+import com.animus.smartroom.notification.AndroidNotificationAdapter
+import com.animus.smartroom.runtime.AnimusRuntimeImpl
+import com.animus.smartroom.runtime.AnimusRuntimeService
 import com.animus.smartroom.scheduler.DeviceSchedulerEngine
 import com.animus.smartroom.scheduler.storage.ScheduledActionStorage
+import com.animus.smartroom.core.runtime.AnimusRuntime
 
 class AnimusApplication : Application() {
 
@@ -59,10 +64,20 @@ class AnimusApplication : Application() {
     lateinit var memoryStore: com.animus.smartroom.core.memory.store.MemoryStore
         private set
 
+    lateinit var animusRuntime: AnimusRuntime
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         Log.i(TAG, "[init] Initializing AnimusApplication singletons")
+
+        com.animus.smartroom.diagnostics.DiagnosticBus.logSink = { tag, stage, message ->
+            when (stage) {
+                com.animus.smartroom.diagnostics.DiagnosticStage.FAILED -> Log.e(tag, "[${stage.name}] $message")
+                else -> Log.i(tag, "[${stage.name}] $message")
+            }
+        }
 
         bluetoothController = BluetoothAudioDeviceManager(this)
         musicController = MusicController(this)
@@ -136,8 +151,34 @@ class AnimusApplication : Application() {
             persistentStore = com.animus.smartroom.core.port.AndroidPersistentStore(this)
         )
 
+        animusRuntime = AnimusRuntimeImpl()
+
+        // Create notification channel early so service can use it immediately
+        AndroidNotificationAdapter.createNotificationChannel(this)
+
         // Restore any pending alarms across process startup
         routineEngine.restorePersistedRoutines()
         deviceSchedulerEngine.restorePersistedActions()
+    }
+
+    /**
+     * Start the AnimusRuntimeService foreground service on demand.
+     * Call when Animus needs persistent background capability beyond AlarmManager.
+     * Safe to call multiple times — service handles idempotency.
+     */
+    fun startRuntime() {
+        Log.i(TAG, "[runtime] Starting AnimusRuntimeService")
+        val intent = AnimusRuntimeService.startIntent(this)
+        startForegroundService(intent)
+    }
+
+    /**
+     * Stop the AnimusRuntimeService. The runtime state in AnimusRuntimeImpl
+     * will persist until the next startRuntime() call.
+     */
+    fun stopRuntime() {
+        Log.i(TAG, "[runtime] Stopping AnimusRuntimeService")
+        val intent = AnimusRuntimeService.stopIntent(this)
+        startService(intent)
     }
 }

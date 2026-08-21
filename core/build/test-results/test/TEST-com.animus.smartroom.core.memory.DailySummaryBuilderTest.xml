@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.memory.DailySummaryBuilderTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T14:18:25" hostname="ANIMUS" time="0.009">
+<testsuite name="com.animus.smartroom.core.memory.DailySummaryBuilderTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.018">
   <properties/>
-  <testcase name="Empty day produces zero metrics" classname="com.animus.smartroom.core.memory.DailySummaryBuilderTest" time="0.0"/>
-  <testcase name="Mixed events populate corresponding highlights and unfinished items" classname="com.animus.smartroom.core.memory.DailySummaryBuilderTest" time="0.009"/>
+  <testcase name="Empty day produces zero metrics" classname="com.animus.smartroom.core.memory.DailySummaryBuilderTest" time="0.003"/>
+  <testcase name="Mixed events populate corresponding highlights and unfinished items" classname="com.animus.smartroom.core.memory.DailySummaryBuilderTest" time="0.015"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

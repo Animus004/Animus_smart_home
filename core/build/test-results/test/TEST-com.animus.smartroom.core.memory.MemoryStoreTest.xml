@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.memory.MemoryStoreTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-21T14:18:25" hostname="ANIMUS" time="0.02">
+<testsuite name="com.animus.smartroom.core.memory.MemoryStoreTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.019">
   <properties/>
-  <testcase name="Record and retrieve single learning event" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.002"/>
-  <testcase name="Clear store removes all items" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.002"/>
+  <testcase name="Record and retrieve single learning event" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.001"/>
+  <testcase name="Clear store removes all items" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.001"/>
   <testcase name="Delete event by id removes only target event" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.001"/>
-  <testcase name="Query respects descending timestamp ordering by default" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.001"/>
+  <testcase name="Query respects descending timestamp ordering by default" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.002"/>
   <testcase name="Concurrent recording is thread-safe" classname="com.animus.smartroom.core.memory.MemoryStoreTest" time="0.014"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
