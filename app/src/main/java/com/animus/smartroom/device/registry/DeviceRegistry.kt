@@ -6,6 +6,8 @@ import com.animus.smartroom.device.model.DeviceCapability
 import com.animus.smartroom.device.model.DeviceCommandResult
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.device.model.RoomDevice
+import com.animus.smartroom.diagnostics.DiagnosticBus
+import com.animus.smartroom.diagnostics.DiagnosticStage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -180,42 +182,92 @@ class DeviceRegistry {
         capability: DeviceCapability,
         value: Any?
     ): DeviceCommandResult {
-        Log.i(TAG, "[execute] Target='$targetQuery', Capability=${capability.name}, Value='$value'")
+        DiagnosticBus.log(
+            tag = "device-registry",
+            stage = DiagnosticStage.REQUESTED,
+            message = "Target='$targetQuery', Capability=${capability.name}, Value='$value'"
+        )
 
         val lookup = findDeviceByNameOrAlias(targetQuery)
         return when (lookup) {
             is DeviceLookupResult.Match -> {
                 val device = lookup.device
+                DiagnosticBus.log(
+                    tag = "device-registry",
+                    stage = DiagnosticStage.RESOLVING,
+                    message = "Resolved device '${device.displayName}' (Type=${device.type})"
+                )
+
                 if (!device.supportsCapability(capability)) {
-                    Log.w(TAG, "[execute] Rejected: ${device.displayName} does NOT support ${capability.name}")
+                    val msg = "${device.displayName} does not support capability ${capability.name}."
+                    DiagnosticBus.log(
+                        tag = "device-registry",
+                        stage = DiagnosticStage.FAILED,
+                        message = msg
+                    )
                     return DeviceCommandResult(
                         success = false,
-                        message = "${device.displayName} does not support capability ${capability.name}."
+                        message = msg
                     )
                 }
 
                 val adapter = getAdapterForDevice(device)
                 if (adapter == null) {
-                    Log.e(TAG, "[execute] Error: No adapter registered for ${device.displayName} (Type=${device.type})")
+                    val msg = "No adapter registered for ${device.displayName} (Type=${device.type})."
+                    DiagnosticBus.log(
+                        tag = "device-registry",
+                        stage = DiagnosticStage.FAILED,
+                        message = msg
+                    )
                     return DeviceCommandResult(
                         success = false,
-                        message = "No adapter registered for ${device.displayName}."
+                        message = msg
                     )
                 }
 
-                adapter.executeCapability(device, capability, value)
+                DiagnosticBus.log(
+                    tag = "device-registry",
+                    stage = DiagnosticStage.EXECUTING,
+                    message = "Dispatching ${capability.name}=$value to adapter ${adapter::class.simpleName}"
+                )
+
+                val result = adapter.executeCapability(device, capability, value)
+                if (result.success) {
+                    DiagnosticBus.log(
+                        tag = "device-registry",
+                        stage = DiagnosticStage.COMPLETED,
+                        message = "Capability ${capability.name} executed successfully: ${result.message}"
+                    )
+                } else {
+                    DiagnosticBus.log(
+                        tag = "device-registry",
+                        stage = DiagnosticStage.FAILED,
+                        message = "Capability ${capability.name} execution failed: ${result.message}"
+                    )
+                }
+                result
             }
             is DeviceLookupResult.Ambiguous -> {
+                DiagnosticBus.log(
+                    tag = "device-registry",
+                    stage = DiagnosticStage.FAILED,
+                    message = "Ambiguous target query: '$targetQuery' -> ${lookup.question}"
+                )
                 DeviceCommandResult(
                     success = false,
                     message = lookup.question
                 )
             }
             is DeviceLookupResult.NotFound -> {
-                Log.w(TAG, "[execute] Device target not found for query: '$targetQuery'")
+                val msg = "Device '$targetQuery' not found in registered devices."
+                DiagnosticBus.log(
+                    tag = "device-registry",
+                    stage = DiagnosticStage.FAILED,
+                    message = msg
+                )
                 DeviceCommandResult(
                     success = false,
-                    message = "Device '$targetQuery' not found in registered devices."
+                    message = msg
                 )
             }
         }

@@ -15,3 +15,5 @@
 /jdk/
 /jdk.zip
 *.log
+/scratch/
+/bin/

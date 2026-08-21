@@ -22,7 +22,9 @@ class CommandRouter(
     private val bluetoothManager: BluetoothAudioDeviceManager? = null,
     private val musicController: MusicController? = null,
     private val musicResolver: YouTubeMusicResolver? = null,
-    private val deviceRegistry: DeviceRegistry? = null
+    private val deviceRegistry: DeviceRegistry? = null,
+    private val routineEngine: com.animus.smartroom.routine.RoutineEngine? = null,
+    private val deviceSchedulerEngine: com.animus.smartroom.scheduler.DeviceSchedulerEngine? = null
 ) {
 
     companion object {
@@ -154,6 +156,44 @@ class CommandRouter(
         }
     }
 
+    fun orderCommandsForExecution(commands: List<AnimusCommand>): List<AnimusCommand> {
+        if (commands.size <= 1) return commands
+
+        val hasConnection = commands.any { it is AnimusCommand.ConnectBluetoothDevice || it is AnimusCommand.SwitchBluetoothDevice }
+        val hasPlayback = commands.any { it is AnimusCommand.PlayMusic || it is AnimusCommand.ResumeMusic }
+
+        if (!hasConnection || !hasPlayback) {
+            return commands
+        }
+
+        // If both connection and playback are in the batch, move connection commands ahead of playback
+        val connectionCommands = commands.filter { it is AnimusCommand.ConnectBluetoothDevice || it is AnimusCommand.SwitchBluetoothDevice }
+        val otherCommands = commands.filterNot { it is AnimusCommand.ConnectBluetoothDevice || it is AnimusCommand.SwitchBluetoothDevice }
+
+        return connectionCommands + otherCommands
+    }
+
+    private fun getCommandSummary(command: AnimusCommand): String {
+        return when (command) {
+            is AnimusCommand.PlayMusic -> "PlayMusic(title='${command.title}', artist='${command.artist}')"
+            is AnimusCommand.PauseMusic -> "PauseMusic"
+            is AnimusCommand.ResumeMusic -> "ResumeMusic"
+            is AnimusCommand.NextTrack -> "NextTrack"
+            is AnimusCommand.PreviousTrack -> "PreviousTrack"
+            is AnimusCommand.SetVolume -> "SetVolume(percentage=${command.percentage}%)"
+            is AnimusCommand.ConnectBluetoothDevice -> "ConnectBluetoothDevice(target='${command.deviceName}')"
+            is AnimusCommand.DisconnectBluetoothDevice -> "DisconnectBluetoothDevice"
+            is AnimusCommand.SwitchBluetoothDevice -> "SwitchBluetoothDevice(target='${command.deviceName}')"
+            is AnimusCommand.SetDeviceCapability -> "SetDeviceCapability(target='${command.target}', capability=${command.capability.name}, value='${command.value}')"
+            is AnimusCommand.ActivateSleepMode -> "ActivateSleepMode(duration=${command.durationMinutes}, wakeTime='${command.wakeTime}')"
+            is AnimusCommand.CancelSleepMode -> "CancelSleepMode"
+            is AnimusCommand.ScheduleDeviceAction -> "ScheduleDeviceAction(target='${command.target}', action='${command.action}', delay=${command.delayMinutes}, time='${command.scheduledTime}')"
+            is AnimusCommand.CancelScheduledAction -> "CancelScheduledAction(target='${command.target}')"
+            is AnimusCommand.QueryScheduledAction -> "QueryScheduledAction(target='${command.target}')"
+            is AnimusCommand.UnknownCommand -> "UnknownCommand(raw='${command.rawText}')"
+        }
+    }
+
     suspend fun execute(command: AnimusCommand): CommandExecutionResult {
         return execute(listOf(command))
     }
@@ -166,13 +206,30 @@ class CommandRouter(
             return CommandExecutionResult(success = false, message = "No commands received.")
         }
 
+        val ordered = orderCommandsForExecution(commands)
         val messages = mutableListOf<String>()
         var allSuccess = true
 
-        commands.forEachIndexed { index, cmd ->
-            val order = index + 1
-            Log.i(TAG, "[command-router] Execution order #$order/$count -> Type: ${cmd::class.simpleName}")
-            val res = executeSingle(cmd)
+        for (i in 0 until count) {
+            val cmd = ordered[i]
+            val order = i + 1
+            val summary = getCommandSummary(cmd)
+            Log.i(TAG, "[multi-debug] command $order/$count START: $summary")
+
+            val res: CommandExecutionResult = try {
+                val singleRes = executeSingle(cmd)
+                Log.i(TAG, "[multi-debug] command $order/$count RESULT: success=${singleRes.success}, message='${singleRes.message}'")
+                singleRes
+            } catch (e: Exception) {
+                Log.e(TAG, "[multi-debug] command $order/$count EXCEPTION: ${e.message}", e)
+                CommandExecutionResult(
+                    success = false,
+                    message = "Error executing ${cmd::class.simpleName}: ${e.message}"
+                )
+            } finally {
+                Log.i(TAG, "[multi-debug] command $order/$count END: $summary")
+            }
+
             if (res.message.isNotBlank()) {
                 messages.add(res.message)
             }
@@ -314,11 +371,19 @@ class CommandRouter(
                             message = "Already connected to $targetName"
                         )
                     } else {
-                        btMgr.connect()
-                        CommandExecutionResult(
-                            success = true,
-                            message = "Connecting to $targetName..."
-                        )
+                        val connected = btMgr.connectAndAwait()
+                        if (connected) {
+                            musicController?.updateOutputDevice(targetName, true)
+                            CommandExecutionResult(
+                                success = true,
+                                message = "Connected to $targetName"
+                            )
+                        } else {
+                            CommandExecutionResult(
+                                success = false,
+                                message = "Could not connect to $targetName."
+                            )
+                        }
                     }
                 } else {
                     when (val resolution = resolveDeviceTarget(command.deviceName, paired)) {
@@ -327,16 +392,25 @@ class CommandRouter(
                             Log.i(TAG, "[ai] Found matching paired device for '${command.deviceName}': ${target.displayName} (${target.macAddress})")
                             btMgr.selectDevice(target.macAddress)
                             if (target.isConnected) {
+                                musicController?.updateOutputDevice(target.displayName, true)
                                 CommandExecutionResult(
                                     success = true,
                                     message = "Already connected to ${target.displayName}"
                                 )
                             } else {
-                                btMgr.connect()
-                                CommandExecutionResult(
-                                    success = true,
-                                    message = "Connecting to ${target.displayName}..."
-                                )
+                                val connected = btMgr.connectAndAwait()
+                                if (connected) {
+                                    musicController?.updateOutputDevice(target.displayName, true)
+                                    CommandExecutionResult(
+                                        success = true,
+                                        message = "Connected to ${target.displayName}"
+                                    )
+                                } else {
+                                    CommandExecutionResult(
+                                        success = false,
+                                        message = "Could not connect to ${target.displayName}."
+                                    )
+                                }
                             }
                         }
                         is DeviceResolutionResult.Ambiguous -> {
@@ -394,16 +468,25 @@ class CommandRouter(
                         btMgr.selectDevice(target.macAddress)
 
                         if (isAlreadyConnected) {
+                            musicController?.updateOutputDevice(target.displayName, true)
                             CommandExecutionResult(
                                 success = true,
                                 message = "Switched to ${target.displayName}"
                             )
                         } else {
-                            btMgr.connect()
-                            CommandExecutionResult(
-                                success = true,
-                                message = "Connecting to ${target.displayName}..."
-                            )
+                            val connected = btMgr.connectAndAwait()
+                            if (connected) {
+                                musicController?.updateOutputDevice(target.displayName, true)
+                                CommandExecutionResult(
+                                    success = true,
+                                    message = "Connected to ${target.displayName}"
+                                )
+                            } else {
+                                CommandExecutionResult(
+                                    success = false,
+                                    message = "Could not connect to ${target.displayName}."
+                                )
+                            }
                         }
                     }
                     is DeviceResolutionResult.Ambiguous -> {
@@ -439,6 +522,134 @@ class CommandRouter(
                     CommandExecutionResult(
                         success = result.success,
                         message = result.message
+                    )
+                }
+            }
+
+            is AnimusCommand.ActivateSleepMode -> {
+                Log.i(TAG, "[ai] Executing ActivateSleepMode (duration=${command.durationMinutes}, wakeTime='${command.wakeTime}')")
+                val engine = routineEngine
+                if (engine == null) {
+                    CommandExecutionResult(
+                        success = false,
+                        message = "Routine engine is not initialized."
+                    )
+                } else {
+                    engine.activateSleep(command.durationMinutes, command.wakeTime)
+                }
+            }
+
+            is AnimusCommand.CancelSleepMode -> {
+                Log.i(TAG, "[ai] Executing CancelSleepMode")
+                val engine = routineEngine
+                if (engine == null) {
+                    CommandExecutionResult(
+                        success = false,
+                        message = "Routine engine is not initialized."
+                    )
+                } else {
+                    engine.cancelSleep()
+                }
+            }
+
+            is AnimusCommand.ScheduleDeviceAction -> {
+                Log.i(TAG, "[ai] Executing ScheduleDeviceAction: Target='${command.target}', Action='${command.action}', Delay=${command.delayMinutes}, Time='${command.scheduledTime}'")
+                val scheduler = deviceSchedulerEngine
+                if (scheduler == null) {
+                    CommandExecutionResult(
+                        success = false,
+                        message = "Scheduler engine is not initialized."
+                    )
+                } else {
+                    val targetType = when (command.target.trim().lowercase(Locale.ROOT)) {
+                        "ac", "air conditioner", "cooler" -> com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
+                        "speaker", "bluetooth", "audio" -> com.animus.smartroom.device.model.DeviceType.BLUETOOTH_AUDIO
+                        else -> com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
+                    }
+                    val actionType = com.animus.smartroom.scheduler.model.DeviceActionType.fromString(command.action)
+                        ?: com.animus.smartroom.scheduler.model.DeviceActionType.POWER_OFF
+
+                    when (val res = scheduler.scheduleAction(
+                        targetDeviceType = targetType,
+                        actionType = actionType,
+                        delayMinutes = command.delayMinutes,
+                        scheduledTime = command.scheduledTime,
+                        recurrence = command.recurrence,
+                        parameters = command.parameters
+                    )) {
+                        is com.animus.smartroom.scheduler.ActionScheduleResult.Success -> {
+                            val actionDesc = when (actionType) {
+                                com.animus.smartroom.scheduler.model.DeviceActionType.POWER_OFF -> "turn off"
+                                com.animus.smartroom.scheduler.model.DeviceActionType.POWER_ON -> "turn on"
+                                else -> actionType.name.lowercase(Locale.ROOT)
+                            }
+                            val timeDesc = if (command.delayMinutes != null) {
+                                "in ${command.delayMinutes} minute${if (command.delayMinutes > 1) "s" else ""}"
+                            } else {
+                                "at ${command.scheduledTime}"
+                            }
+                            CommandExecutionResult(
+                                success = true,
+                                message = "AC scheduled to $actionDesc $timeDesc."
+                            )
+                        }
+                        is com.animus.smartroom.scheduler.ActionScheduleResult.Error -> {
+                            CommandExecutionResult(
+                                success = false,
+                                message = "Failed to schedule action: ${res.message}"
+                            )
+                        }
+                    }
+                }
+            }
+
+            is AnimusCommand.CancelScheduledAction -> {
+                Log.i(TAG, "[ai] Executing CancelScheduledAction: Target='${command.target}'")
+                val scheduler = deviceSchedulerEngine
+                if (scheduler == null) {
+                    CommandExecutionResult(
+                        success = false,
+                        message = "Scheduler engine is not initialized."
+                    )
+                } else {
+                    val targetType = when (command.target.trim().lowercase(Locale.ROOT)) {
+                        "ac", "air conditioner", "cooler" -> com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
+                        "speaker", "bluetooth", "audio" -> com.animus.smartroom.device.model.DeviceType.BLUETOOTH_AUDIO
+                        else -> com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
+                    }
+                    val cancelledCount = scheduler.cancelActionsForDevice(targetType)
+                    if (cancelledCount > 0) {
+                        CommandExecutionResult(
+                            success = true,
+                            message = "Cancelled active timer for ${command.target.uppercase(Locale.ROOT)}."
+                        )
+                    } else {
+                        CommandExecutionResult(
+                            success = true,
+                            message = "No active timer found for ${command.target.uppercase(Locale.ROOT)}."
+                        )
+                    }
+                }
+            }
+
+            is AnimusCommand.QueryScheduledAction -> {
+                Log.i(TAG, "[ai] Executing QueryScheduledAction: Target='${command.target}'")
+                val scheduler = deviceSchedulerEngine
+                if (scheduler == null) {
+                    CommandExecutionResult(
+                        success = false,
+                        message = "Scheduler engine is not initialized."
+                    )
+                } else {
+                    val targetType = when (command.target.trim().lowercase(Locale.ROOT)) {
+                        "ac", "air conditioner", "cooler" -> com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
+                        "speaker", "bluetooth", "audio" -> com.animus.smartroom.device.model.DeviceType.BLUETOOTH_AUDIO
+                        else -> com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
+                    }
+                    val reply = scheduler.queryRemainingTime(targetType)
+                    CommandExecutionResult(
+                        success = true,
+                        message = reply
                     )
                 }
             }

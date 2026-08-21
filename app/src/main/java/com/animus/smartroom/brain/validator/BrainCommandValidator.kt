@@ -164,6 +164,73 @@ object BrainCommandValidator {
                 }
             }
 
+            BrainCommandDto.CMD_SLEEP_MODE -> {
+                val duration = dto.durationMinutes
+                val wakeTime = dto.wakeTime?.trim()?.let { if (it.equals("null", ignoreCase = true) || it.isBlank()) null else it }
+
+                if (duration != null && duration <= 0) {
+                    BrainValidationResult.Invalid("SLEEP_MODE durationMinutes must be a positive integer, received: $duration.")
+                } else if (duration != null && duration > 1440) {
+                    BrainValidationResult.Invalid("SLEEP_MODE duration cannot exceed 24 hours (1440 minutes), received: $duration.")
+                } else {
+                    BrainValidationResult.Valid(
+                        AnimusCommand.ActivateSleepMode(
+                            durationMinutes = duration,
+                            wakeTime = wakeTime
+                        )
+                    )
+                }
+            }
+
+            BrainCommandDto.CMD_CANCEL_SLEEP -> {
+                BrainValidationResult.Valid(AnimusCommand.CancelSleepMode)
+            }
+
+            BrainCommandDto.CMD_SCHEDULE_DEVICE_ACTION -> {
+                val target = dto.target?.trim()?.ifBlank { null } ?: "AC"
+                val actionStr = dto.action?.trim()?.uppercase(Locale.ROOT) ?: "POWER_OFF"
+                val delay = dto.delayMinutes
+                val time = dto.scheduledTime?.trim()?.ifBlank { null }
+                val recurrence = dto.recurrence?.trim()?.ifBlank { null }
+
+                if (delay == null && time == null) {
+                    BrainValidationResult.Invalid("SCHEDULE_DEVICE_ACTION requires either 'delayMinutes' or 'scheduledTime'.")
+                } else if (delay != null && delay <= 0) {
+                    BrainValidationResult.Invalid("SCHEDULE_DEVICE_ACTION delayMinutes must be positive, received: $delay.")
+                } else {
+                    BrainValidationResult.Valid(
+                        AnimusCommand.ScheduleDeviceAction(
+                            target = target,
+                            action = actionStr,
+                            delayMinutes = delay,
+                            scheduledTime = time,
+                            recurrence = recurrence,
+                            parameters = dto.parameters
+                        )
+                    )
+                }
+            }
+
+            BrainCommandDto.CMD_CANCEL_SCHEDULED_ACTION -> {
+                val target = dto.target?.trim()?.ifBlank { null } ?: "AC"
+                val actionType = dto.action?.trim()?.ifBlank { null }
+                BrainValidationResult.Valid(
+                    AnimusCommand.CancelScheduledAction(
+                        target = target,
+                        actionType = actionType
+                    )
+                )
+            }
+
+            BrainCommandDto.CMD_QUERY_SCHEDULED_ACTION -> {
+                val target = dto.target?.trim()?.ifBlank { null } ?: "AC"
+                BrainValidationResult.Valid(
+                    AnimusCommand.QueryScheduledAction(
+                        target = target
+                    )
+                )
+            }
+
             BrainCommandDto.CMD_UNKNOWN -> {
                 val raw = dto.rawText ?: "unknown"
                 BrainValidationResult.Valid(AnimusCommand.UnknownCommand(rawText = raw))
@@ -206,6 +273,11 @@ object BrainCommandValidator {
             if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
         } else null
 
+        val action = if (json.has("action") && !json.isNull("action")) {
+            val s = json.optString("action").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
         val value = if (json.has("value") && !json.isNull("value")) {
             val v = json.opt("value")
             when (v) {
@@ -217,6 +289,49 @@ object BrainCommandValidator {
 
         val valueString = if (json.has("value") && !json.isNull("value")) {
             val s = json.optString("value").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val delayMinutes = if (json.has("delayMinutes") && !json.isNull("delayMinutes")) {
+            val v = json.opt("delayMinutes")
+            when (v) {
+                is Number -> v.toInt()
+                is String -> v.toIntOrNull()
+                else -> null
+            }
+        } else null
+
+        val scheduledTime = if (json.has("scheduledTime") && !json.isNull("scheduledTime")) {
+            val s = json.optString("scheduledTime").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else if (json.has("time") && !json.isNull("time")) {
+            val s = json.optString("time").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val recurrence = if (json.has("recurrence") && !json.isNull("recurrence")) {
+            val s = json.optString("recurrence").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
+        val durationMinutes = if (json.has("durationMinutes") && !json.isNull("durationMinutes")) {
+            val v = json.opt("durationMinutes")
+            when (v) {
+                is Number -> v.toInt()
+                is String -> v.toIntOrNull()
+                else -> null
+            }
+        } else if (json.has("duration") && !json.isNull("duration")) {
+            val v = json.opt("duration")
+            when (v) {
+                is Number -> v.toInt()
+                is String -> v.toIntOrNull()
+                else -> null
+            }
+        } else null
+
+        val wakeTime = if (json.has("wakeTime") && !json.isNull("wakeTime")) {
+            val s = json.optString("wakeTime").trim()
             if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
         } else null
 
@@ -235,6 +350,14 @@ object BrainCommandValidator {
             if (s.equals("null", ignoreCase = true)) null else s
         } else null
 
+        val params = mutableMapOf<String, Any>()
+        if (json.has("parameters") && !json.isNull("parameters")) {
+            val pObj = json.optJSONObject("parameters")
+            pObj?.keys()?.forEach { k ->
+                params[k] = pObj.get(k)
+            }
+        }
+
         return BrainCommandDto(
             command = command,
             title = title,
@@ -243,9 +366,16 @@ object BrainCommandValidator {
             capability = capability,
             value = value,
             valueString = valueString,
+            action = action,
+            delayMinutes = delayMinutes,
+            scheduledTime = scheduledTime,
+            recurrence = recurrence,
+            durationMinutes = durationMinutes,
+            wakeTime = wakeTime,
             playbackUrl = playbackUrl,
             directVideoId = directVideoId,
-            rawText = rawText
+            rawText = rawText,
+            parameters = params
         )
     }
 

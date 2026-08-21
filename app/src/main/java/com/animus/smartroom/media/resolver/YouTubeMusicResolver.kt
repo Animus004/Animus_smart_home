@@ -2,6 +2,9 @@ package com.animus.smartroom.media.resolver
 
 import android.util.Log
 import com.animus.smartroom.brain.validator.YouTubeVideoIdExtractor
+import com.animus.smartroom.diagnostics.DiagnosticBus
+import com.animus.smartroom.diagnostics.DiagnosticStage
+import java.util.Locale
 
 sealed interface ResolutionSource {
     data object DirectCommand : ResolutionSource
@@ -15,7 +18,8 @@ sealed interface MusicResolutionResult {
         val title: String,
         val artist: String?,
         val source: ResolutionSource,
-        val channelTitle: String? = null
+        val channelTitle: String? = null,
+        val score: Int = 0
     ) : MusicResolutionResult
 
     data class FallbackSearch(
@@ -37,19 +41,37 @@ class YouTubeMusicResolver(
         fun buildSearchQuery(title: String, artist: String?): String {
             val cleanTitle = title.trim()
             val cleanArtist = artist?.trim()
-            return when {
-                cleanArtist.isNullOrBlank() -> "$cleanTitle official"
-                else -> "$cleanTitle $cleanArtist official"
+            val tLower = cleanTitle.lowercase(Locale.ROOT)
+
+            val hasExplicitModifier = tLower.contains("cover") ||
+                    tLower.contains("remix") ||
+                    tLower.contains("acoustic") ||
+                    tLower.contains("unplugged") ||
+                    tLower.contains("live") ||
+                    tLower.contains("karaoke") ||
+                    tLower.contains("instrumental") ||
+                    tLower.contains("soundtrack") ||
+                    tLower.contains("official")
+
+            val base = when {
+                cleanArtist.isNullOrBlank() -> cleanTitle
+                else -> "$cleanTitle $cleanArtist"
+            }
+
+            return if (hasExplicitModifier) {
+                base
+            } else {
+                "$base official audio"
             }
         }
     }
 
     /**
-     * Resolves a natural-language track request to a verified YouTube video ID.
+     * Resolves a natural-language track request to a verified, scored YouTube Music video ID.
      * Order of resolution:
      * 1. Existing directVideoId (if valid)
      * 2. Persistent Bounded Cache hit
-     * 3. YouTube Data API v3 search.list
+     * 3. YouTube Data API v3 (search.list maxResults=5 + videos.list batch metadata + Candidate Scoring)
      * 4. Graceful Fallback (Search and play)
      */
     suspend fun resolveTrack(
@@ -62,15 +84,27 @@ class YouTubeMusicResolver(
             return MusicResolutionResult.FallbackSearch(title, artist, "Title is empty.")
         }
 
+        DiagnosticBus.log(
+            tag = "youtube-resolver",
+            stage = DiagnosticStage.RESOLVING,
+            message = "title='$trimmedTitle', artist='${artist ?: ""}'"
+        )
+
         // 1. Check explicit directVideoId
         if (!explicitDirectId.isNullOrBlank()) {
             if (YouTubeVideoIdExtractor.isValidVideoId(explicitDirectId)) {
                 Log.i(TAG, "[music-resolver] Using explicit valid direct video ID '$explicitDirectId' for '$trimmedTitle'")
+                DiagnosticBus.log(
+                    tag = "youtube-resolver",
+                    stage = DiagnosticStage.SELECTED,
+                    message = "explicit videoId='$explicitDirectId'"
+                )
                 return MusicResolutionResult.Resolved(
                     videoId = explicitDirectId,
                     title = trimmedTitle,
                     artist = artist,
-                    source = ResolutionSource.DirectCommand
+                    source = ResolutionSource.DirectCommand,
+                    score = 100
                 )
             } else {
                 Log.w(TAG, "[music-resolver] Explicit video ID '$explicitDirectId' is invalid. Proceeding to cache/API resolution.")
@@ -81,16 +115,22 @@ class YouTubeMusicResolver(
         val cached = cache.get(trimmedTitle, artist)
         if (cached != null && YouTubeVideoIdExtractor.isValidVideoId(cached.videoId)) {
             Log.i(TAG, "[music-resolver] Cache hit for '$trimmedTitle' by '$artist' -> videoId='${cached.videoId}' (${cached.channelTitle})")
+            DiagnosticBus.log(
+                tag = "youtube-resolver",
+                stage = DiagnosticStage.SELECTED,
+                message = "cache hit videoId='${cached.videoId}'"
+            )
             return MusicResolutionResult.Resolved(
                 videoId = cached.videoId,
                 title = trimmedTitle,
                 artist = artist ?: cached.artist,
                 source = ResolutionSource.Cache,
-                channelTitle = cached.channelTitle
+                channelTitle = cached.channelTitle,
+                score = 100
             )
         }
 
-        // 3. Query YouTube Data API v3
+        // 3. Query YouTube Data API v3 with Batch Metadata & Scoring
         val apiKey = apiKeyProvider()?.trim()
         if (apiKey.isNullOrBlank()) {
             Log.w(TAG, "[music-resolver] YouTube API key is missing. Using graceful search fallback.")
@@ -104,26 +144,59 @@ class YouTubeMusicResolver(
         val searchQuery = buildSearchQuery(trimmedTitle, artist)
         Log.i(TAG, "[music-resolver] Querying YouTube Data API for query: '$searchQuery'")
 
-        val searchResult = apiClient.searchVideo(apiKey, searchQuery)
+        val searchResult = apiClient.searchCandidates(apiKey, searchQuery, maxResults = 5)
         return searchResult.fold(
-            onSuccess = { candidate ->
-                if (YouTubeVideoIdExtractor.isValidVideoId(candidate.videoId)) {
-                    Log.i(TAG, "[music-resolver] YouTube API resolved '$trimmedTitle' -> videoId='${candidate.videoId}', channel='${candidate.channelTitle}'")
+            onSuccess = { candidates ->
+                if (candidates.isEmpty()) {
+                    Log.w(TAG, "[music-resolver] No candidates returned for '$searchQuery'")
+                    return@fold MusicResolutionResult.FallbackSearch(
+                        title = trimmedTitle,
+                        artist = artist,
+                        reason = "No candidates found from YouTube search."
+                    )
+                }
+
+                // Score candidates using user-intent aware MusicCandidateScorer
+                val scoredCandidates = candidates.map { candidate ->
+                    val score = MusicCandidateScorer.score(trimmedTitle, candidate)
+                    candidate.copy(score = score)
+                }.sortedByDescending { it.score }
+
+                val bestCandidate = scoredCandidates.first()
+
+                DiagnosticBus.log(
+                    tag = "youtube-resolver",
+                    stage = DiagnosticStage.SCORING,
+                    message = "Evaluated ${scoredCandidates.size} candidates. Best: '${bestCandidate.title}' (Score: ${bestCandidate.score}, Channel: '${bestCandidate.channelTitle}')"
+                )
+
+                if (YouTubeVideoIdExtractor.isValidVideoId(bestCandidate.videoId)) {
+                    Log.i(TAG, "[music-resolver] Selected candidate: videoId='${bestCandidate.videoId}', title='${bestCandidate.title}', score=${bestCandidate.score}")
+
+                    // Cache verified candidate
                     cache.put(
                         title = trimmedTitle,
                         artist = artist,
-                        videoId = candidate.videoId,
-                        channelTitle = candidate.channelTitle
+                        videoId = bestCandidate.videoId,
+                        channelTitle = bestCandidate.channelTitle
                     )
+
+                    DiagnosticBus.log(
+                        tag = "youtube-resolver",
+                        stage = DiagnosticStage.CACHED,
+                        message = "Cached videoId='${bestCandidate.videoId}' for '$trimmedTitle'"
+                    )
+
                     MusicResolutionResult.Resolved(
-                        videoId = candidate.videoId,
+                        videoId = bestCandidate.videoId,
                         title = trimmedTitle,
                         artist = artist,
                         source = ResolutionSource.YouTubeDataApi,
-                        channelTitle = candidate.channelTitle
+                        channelTitle = bestCandidate.channelTitle,
+                        score = bestCandidate.score
                     )
                 } else {
-                    Log.w(TAG, "[music-resolver] YouTube API returned invalid video ID: '${candidate.videoId}'")
+                    Log.w(TAG, "[music-resolver] Top candidate contained invalid video ID: '${bestCandidate.videoId}'")
                     MusicResolutionResult.FallbackSearch(
                         title = trimmedTitle,
                         artist = artist,
@@ -143,10 +216,15 @@ class YouTubeMusicResolver(
     }
 
     /**
-     * Invalidate cache entry and re-query the YouTube API if a cached video ID is found to be dead/unavailable at playback time.
+     * Invalidate cache entry and re-query the YouTube API if a video ID is found to fail playback.
      */
     suspend fun reResolveOnPlaybackFailure(title: String, artist: String?): MusicResolutionResult {
         Log.i(TAG, "[music-resolver] Invalidating cache and re-resolving for '$title' by '$artist'")
+        DiagnosticBus.log(
+            tag = "youtube-resolver",
+            stage = DiagnosticStage.FAILED,
+            message = "Playback failed for '$title'. Invalidating cache and re-resolving."
+        )
         cache.invalidate(title, artist)
         return resolveTrack(title, artist, explicitDirectId = null)
     }

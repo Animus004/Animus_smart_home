@@ -36,6 +36,14 @@ class TuyaAirConditionerAdapterTest {
         override suspend fun sendCommands(deviceId: String, commands: List<Map<String, Any>>): Result<Boolean> {
             return if (shouldSucceed) {
                 sentCommands.addAll(commands)
+                val newStatus = statusToReturn.toMutableList()
+                for (cmd in commands) {
+                    val code = cmd["code"]?.toString() ?: continue
+                    val value = cmd["value"] ?: continue
+                    newStatus.removeAll { it.code == code }
+                    newStatus.add(TuyaDeviceStatusItem(code, value))
+                }
+                statusToReturn = newStatus
                 Result.success(true)
             } else {
                 Result.failure(RuntimeException("Command write error"))
@@ -151,6 +159,19 @@ class TuyaAirConditionerAdapterTest {
     }
 
     @Test
+    fun testSetTemperature24ExactControlledWrite() = runBlocking {
+        val singleClient = FakeTuyaApiClient()
+        val singleAdapter = TuyaAirConditionerAdapter(singleClient, allowWriteCommands = true)
+
+        val result = singleAdapter.setTemperature(testDevice, 24)
+        assertTrue(result.success)
+        assertEquals(1, singleClient.sentCommands.size)
+        assertEquals("temp_set", singleClient.sentCommands[0]["code"])
+        assertEquals(24, singleClient.sentCommands[0]["value"])
+        assertEquals(24, singleAdapter.acState.value.targetTemperature)
+    }
+
+    @Test
     fun testInvalidTemperatureRejection() = runBlocking {
         // Below 16°C
         val result15 = adapter.setTemperature(testDevice, 15)
@@ -251,5 +272,22 @@ class TuyaAirConditionerAdapterTest {
         assertTrue(resultTemp.message.contains("23°C"))
         assertEquals(0, fakeClient.sentCommands.size)
         assertEquals(23, readOnlyAdapter.acState.value.targetTemperature)
+    }
+
+    @Test
+    fun testReadbackMismatchRejection() = runBlocking {
+        // When cloud accepts command but status returns old value (verification failure)
+        val staticClient = object : TuyaApiClient {
+            override suspend fun fetchStatus(deviceId: String): Result<List<TuyaDeviceStatusItem>> {
+                return Result.success(listOf(TuyaDeviceStatusItem("switch", false)))
+            }
+            override suspend fun sendCommands(deviceId: String, commands: List<Map<String, Any>>): Result<Boolean> {
+                return Result.success(true)
+            }
+        }
+        val mismatchAdapter = TuyaAirConditionerAdapter(staticClient, allowWriteCommands = true)
+        val result = mismatchAdapter.setPower(testDevice, true)
+        assertFalse(result.success)
+        assertTrue(result.message.contains("readback power was not ON"))
     }
 }

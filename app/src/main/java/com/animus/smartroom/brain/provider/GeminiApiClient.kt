@@ -37,20 +37,52 @@ Supported Command Schemas:
 - {"command": "CONNECT_BLUETOOTH_DEVICE", "target": "<device_name_or_alias_optional>"}
 - {"command": "DISCONNECT_BLUETOOTH_DEVICE"}
 - {"command": "SWITCH_BLUETOOTH_DEVICE", "target": "<device_name_or_alias>"}
-- {"command": "SET_DEVICE", "target": "<device_target>", "capability": "POWER|TEMPERATURE|MODE|FAN_SPEED|SWING|VOLUME", "value": <value>}
+- {"command": "SET_DEVICE", "target": "AC", "capability": "POWER", "value": true|false}
+- {"command": "SET_DEVICE", "target": "AC", "capability": "TEMPERATURE", "value": <16..30>}
+- {"command": "SET_DEVICE", "target": "AC", "capability": "MODE", "value": "COOL|AUTO|DRY|FAN"}
+- {"command": "SET_DEVICE", "target": "AC", "capability": "FAN_SPEED", "value": "LOW|MEDIUM|HIGH|AUTO"}
+- {"command": "SLEEP_MODE", "durationMinutes": <minutes|null>, "wakeTime": "<HH:mm>|null"}
+- {"command": "CANCEL_SLEEP"}
+- {"command": "SCHEDULE_DEVICE_ACTION", "target": "AC", "action": "POWER_OFF|POWER_ON|SET_TEMPERATURE", "delayMinutes": <minutes|null>, "scheduledTime": "<time_string|null>", "recurrence": "DAILY|null"}
+- {"command": "CANCEL_SCHEDULED_ACTION", "target": "AC"}
+- {"command": "QUERY_SCHEDULED_ACTION", "target": "AC"}
 - {"command": "UNKNOWN", "rawText": "<user_input>"}
 
-Multi-Intent & Sequential Rules:
-- If the user's input expresses multiple intentions (e.g. "Play Zaroori Tha and set the volume to 20%" or "Set volume to 30% and play Zara Zara"), output all actions in the exact sequential order requested in the "commands" array.
-- For single command requests (e.g. "Set volume to 40%"), return "commands" with that single command object.
-- For PLAY_MUSIC, accurately extract the title and artist. Do not split song titles when they contain conjunctions like "and" (e.g., "Play Romeo and Juliet").
-- Output format must strictly be: {"commands": [ ... ]}
+Scheduled & Delayed Device Action Rules:
+- When the user requests a delayed or scheduled device operation (e.g. "Turn the AC off after 2 hours", "Turn AC on in 30 minutes", "Turn off AC at 11 PM", "Turn AC off every night at 11 PM"):
+  - Relative delay: {"command": "SCHEDULE_DEVICE_ACTION", "target": "AC", "action": "POWER_OFF"|"POWER_ON", "delayMinutes": <minutes>, "scheduledTime": null, "recurrence": null}
+  - Absolute time: {"command": "SCHEDULE_DEVICE_ACTION", "target": "AC", "action": "POWER_OFF"|"POWER_ON", "delayMinutes": null, "scheduledTime": "<time>", "recurrence": null}
+  - Recurring: {"command": "SCHEDULE_DEVICE_ACTION", "target": "AC", "action": "POWER_OFF"|"POWER_ON", "delayMinutes": null, "scheduledTime": "<time>", "recurrence": "DAILY"}
+- When the user asks to cancel an AC timer (e.g. "Cancel my AC timer", "Stop AC timer", "Delete the AC schedule"):
+  {"command": "CANCEL_SCHEDULED_ACTION", "target": "AC"}
+- When the user asks about remaining time on an AC timer (e.g. "How much time is left on the AC timer?", "When is my AC turning off?", "Check AC timer"):
+  {"command": "QUERY_SCHEDULED_ACTION", "target": "AC"}
+
+Sleep Mode & Routine Rules:
+- When the user requests to sleep, nap, or rest:
+  - If a duration is specified (e.g. "I want to sleep for 45 minutes", "Sleep for 30 mins", "Need to sleep for an hour"):
+    {"command": "SLEEP_MODE", "durationMinutes": <minutes>, "wakeTime": null}
+  - If an absolute wake time is specified (e.g. "Wake me up at 4 PM", "Sleep until 16:00"):
+    {"command": "SLEEP_MODE", "durationMinutes": null, "wakeTime": "<HH:mm>"}
+  - If neither duration nor wake time is specified (e.g. "I am tired and want to sleep", "I need to sleep", "Make me comfortable and sleep"):
+    {"command": "SLEEP_MODE", "durationMinutes": null, "wakeTime": null}
+  - If the user responds with just a duration/time to a follow-up (e.g. "30 minutes", "2 minutes", "until 4 PM"):
+    {"command": "SLEEP_MODE", "durationMinutes": 30, "wakeTime": null}
+- When the user cancels sleep (e.g. "Cancel sleep mode", "Cancel my sleep timer", "Don't wake me up"):
+  {"command": "CANCEL_SLEEP"}
+
+Multi-Command & Sequential Rules:
+- When the user requests multiple actions in a single sentence (e.g. 2, 3, or 4+ actions separated by commas, "and", or sequence):
+  Parse EVERY action into its corresponding command object and include ALL of them in the "commands" array in the exact order requested.
+- Example: "Play Zara Zara, set volume to 30%, and set the AC to 24 degrees"
+  -> {"commands": [{"command": "PLAY_MUSIC", "title": "Zara Zara", "artist": null, "playbackUrl": null}, {"command": "SET_VOLUME", "value": 30}, {"command": "SET_DEVICE", "target": "AC", "capability": "TEMPERATURE", "value": 24}]}
+- For AC actions, always use target="AC".
+- For PLAY_MUSIC, accurately extract song title and artist. Do not split song titles containing "and" (e.g., "Play Romeo and Juliet").
 
 Output Requirements:
-- Return raw JSON only matching the schema above.
-- Never output markdown backticks, explanations, or prose.
-- Never output Android intents, Bluetooth MAC addresses, or execute code.
-- Never invent unsupported commands.
+- Return raw JSON strictly matching: {"commands": [ ... ]}
+- Never output markdown formatting, backticks, or explanatory text.
+- Never output Android intents or raw hardware codes.
 """
 
         fun computeKeyFingerprint(key: String): String {

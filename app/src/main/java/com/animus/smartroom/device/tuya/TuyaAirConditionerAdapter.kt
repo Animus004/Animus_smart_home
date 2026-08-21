@@ -11,6 +11,8 @@ import com.animus.smartroom.device.model.RoomDevice
 import com.animus.smartroom.device.tuya.client.TuyaApiClient
 import com.animus.smartroom.device.tuya.model.TuyaAcState
 import com.animus.smartroom.device.tuya.model.TuyaDeviceStatusItem
+import com.animus.smartroom.diagnostics.DiagnosticBus
+import com.animus.smartroom.diagnostics.DiagnosticStage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -133,42 +135,123 @@ class TuyaAirConditionerAdapter(
     }
 
     override suspend fun setPower(device: RoomDevice, on: Boolean): DeviceCommandResult {
+        val targetStateStr = if (on) "ON" else "OFF"
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.REQUESTED,
+            message = "Set power = $targetStateStr"
+        )
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.VALIDATING,
+            message = "Power action $targetStateStr is valid"
+        )
+
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_SWITCH,
             "value" to on
         )
 
         if (!allowWriteCommands) {
-            Log.i(TAG, "[read-only-guard] Simulated setPower($on) for ${device.displayName}")
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.EXECUTING,
+                message = "[read-only-guard] Simulated setPower($on) for ${device.displayName}"
+            )
             _acState.value = _acState.value.copy(power = on)
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.COMPLETED,
+                message = "power=$targetStateStr (Simulated)"
+            )
             return DeviceCommandResult(
                 success = true,
-                message = "${device.displayName} power set to ${if (on) "ON" else "OFF"} (Verified mapping: $tuyaCommand)"
+                message = "${device.displayName} power set to $targetStateStr (Verified mapping: $tuyaCommand)"
             )
         }
 
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.EXECUTING,
+            message = "Sending power command ($targetStateStr)"
+        )
         val result = apiClient.sendCommands(device.id, listOf(tuyaCommand))
+
         return if (result.isSuccess) {
-            _acState.value = _acState.value.copy(power = on)
-            DeviceCommandResult(
-                success = true,
-                message = "${device.displayName} is now ${if (on) "ON" else "OFF"}."
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.DEVICE_RESPONSE,
+                message = "Tuya command accepted"
             )
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.VERIFYING,
+                message = "Reading AC state"
+            )
+
+            // Read back state from Tuya with retry to handle propagation latency
+            val currentState = verifyReadbackWithRetry(device.id, { it.power == on })
+
+            if (currentState.power == on) {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.COMPLETED,
+                    message = "power=$targetStateStr verified"
+                )
+                DeviceCommandResult(
+                    success = true,
+                    message = "${device.displayName} is now turned $targetStateStr."
+                )
+            } else {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.FAILED,
+                    message = "Command accepted but readback did not match requested power state ($targetStateStr)"
+                )
+                DeviceCommandResult(
+                    success = false,
+                    message = "Command accepted but ${device.displayName} readback power was not $targetStateStr."
+                )
+            }
         } else {
+            val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = "Failed to set power: $errMsg"
+            )
             DeviceCommandResult(
                 success = false,
-                message = "Failed to set ${device.displayName} power: ${result.exceptionOrNull()?.message}"
+                message = "Failed to set ${device.displayName} power: $errMsg"
             )
         }
     }
 
     override suspend fun setTemperature(device: RoomDevice, celsius: Int): DeviceCommandResult {
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.REQUESTED,
+            message = "Set temperature = $celsius°C"
+        )
+
         if (celsius < MIN_TEMPERATURE || celsius > MAX_TEMPERATURE) {
+            val errMsg = "Temperature $celsius°C is outside supported range $MIN_TEMPERATURE–$MAX_TEMPERATURE°C"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = errMsg
+            )
             return DeviceCommandResult(
                 success = false,
                 message = "Invalid temperature: $celsius°C. ${device.displayName} only supports $MIN_TEMPERATURE°C to $MAX_TEMPERATURE°C."
             )
         }
+
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.VALIDATING,
+            message = "Temperature $celsius°C within $MIN_TEMPERATURE–$MAX_TEMPERATURE°C"
+        )
 
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_TEMP_SET,
@@ -176,43 +259,118 @@ class TuyaAirConditionerAdapter(
         )
 
         if (!allowWriteCommands) {
-            Log.i(TAG, "[read-only-guard] Simulated setTemperature($celsius°C) for ${device.displayName}")
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.EXECUTING,
+                message = "[read-only-guard] Simulated setTemperature($celsius°C) for ${device.displayName}"
+            )
             _acState.value = _acState.value.copy(targetTemperature = celsius)
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.COMPLETED,
+                message = "targetTemperature=$celsius°C (Simulated)"
+            )
             return DeviceCommandResult(
                 success = true,
                 message = "${device.displayName} temperature set to $celsius°C (Verified mapping: $tuyaCommand)"
             )
         }
 
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.EXECUTING,
+            message = "Sending semantic temperature command ($celsius°C)"
+        )
         val result = apiClient.sendCommands(device.id, listOf(tuyaCommand))
+
         return if (result.isSuccess) {
-            _acState.value = _acState.value.copy(targetTemperature = celsius)
-            DeviceCommandResult(
-                success = true,
-                message = "${device.displayName} set to $celsius°C."
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.DEVICE_RESPONSE,
+                message = "Tuya command accepted"
             )
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.VERIFYING,
+                message = "Reading AC state"
+            )
+
+            // Read back state from Tuya with retry to confirm live synchronization
+            val currentState = verifyReadbackWithRetry(device.id, { it.targetTemperature == celsius })
+
+            if (currentState.targetTemperature == celsius) {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.COMPLETED,
+                    message = "targetTemperature=$celsius°C verified"
+                )
+                DeviceCommandResult(
+                    success = true,
+                    message = "${device.displayName} temperature set to $celsius°C."
+                )
+            } else {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.FAILED,
+                    message = "Command accepted but readback temperature (${currentState.targetTemperature}°C) did not match requested $celsius°C"
+                )
+                DeviceCommandResult(
+                    success = false,
+                    message = "Command accepted but readback temperature was ${currentState.targetTemperature}°C instead of $celsius°C."
+                )
+            }
         } else {
+            val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = "Failed to set temperature: $errMsg"
+            )
             DeviceCommandResult(
                 success = false,
-                message = "Failed to set ${device.displayName} temperature: ${result.exceptionOrNull()?.message}"
+                message = "Failed to set ${device.displayName} temperature: $errMsg"
             )
         }
     }
 
     override suspend fun setMode(device: RoomDevice, mode: AcMode): DeviceCommandResult {
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.REQUESTED,
+            message = "Set mode = ${mode.name}"
+        )
+
         if (mode == AcMode.HEAT) {
+            val errMsg = "${device.displayName} is an inverter cooling unit and does not support heating mode"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = errMsg
+            )
             return DeviceCommandResult(
                 success = false,
-                message = "${device.displayName} is an inverter cooling unit and does not support heating mode."
+                message = "$errMsg."
             )
         }
 
         val tuyaCode = MODE_ANIMUS_TO_TUYA[mode] ?: run {
+            val errMsg = "${device.displayName} does not support mode '${mode.name}'"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = errMsg
+            )
             return DeviceCommandResult(
                 success = false,
-                message = "${device.displayName} does not support mode '${mode.name}'."
+                message = "$errMsg."
             )
         }
+
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.VALIDATING,
+            message = "Mode ${mode.name} mapped to Tuya code '$tuyaCode'"
+        )
 
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_MODE,
@@ -220,36 +378,105 @@ class TuyaAirConditionerAdapter(
         )
 
         if (!allowWriteCommands) {
-            Log.i(TAG, "[read-only-guard] Simulated setMode($mode -> $tuyaCode) for ${device.displayName}")
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.EXECUTING,
+                message = "[read-only-guard] Simulated setMode(${mode.name}) for ${device.displayName}"
+            )
             _acState.value = _acState.value.copy(mode = mode)
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.COMPLETED,
+                message = "mode=${mode.name} (Simulated)"
+            )
             return DeviceCommandResult(
                 success = true,
                 message = "${device.displayName} mode set to ${mode.name} (Verified mapping: $tuyaCommand)"
             )
         }
 
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.EXECUTING,
+            message = "Sending mode command (${mode.name})"
+        )
         val result = apiClient.sendCommands(device.id, listOf(tuyaCommand))
+
         return if (result.isSuccess) {
-            _acState.value = _acState.value.copy(mode = mode)
-            DeviceCommandResult(
-                success = true,
-                message = "${device.displayName} mode set to ${mode.name}."
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.DEVICE_RESPONSE,
+                message = "Tuya command accepted"
             )
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.VERIFYING,
+                message = "Reading AC state"
+            )
+
+            // Read back state from Tuya with retry to confirm live synchronization
+            val currentState = verifyReadbackWithRetry(device.id, { it.mode == mode })
+
+            if (currentState.mode == mode) {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.COMPLETED,
+                    message = "mode=${mode.name} verified"
+                )
+                DeviceCommandResult(
+                    success = true,
+                    message = "${device.displayName} mode set to ${mode.name}."
+                )
+            } else {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.FAILED,
+                    message = "Command accepted but readback mode (${currentState.mode.name}) did not match requested ${mode.name}"
+                )
+                DeviceCommandResult(
+                    success = false,
+                    message = "Command accepted but readback mode was ${currentState.mode.name}."
+                )
+            }
         } else {
+            val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = "Failed to set mode: $errMsg"
+            )
             DeviceCommandResult(
                 success = false,
-                message = "Failed to set ${device.displayName} mode: ${result.exceptionOrNull()?.message}"
+                message = "Failed to set ${device.displayName} mode: $errMsg"
             )
         }
     }
 
     override suspend fun setFanSpeed(device: RoomDevice, speed: AcFanSpeed): DeviceCommandResult {
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.REQUESTED,
+            message = "Set fan speed = ${speed.name}"
+        )
+
         val tuyaCode = FAN_ANIMUS_TO_TUYA[speed] ?: run {
+            val errMsg = "${device.displayName} does not support fan speed '${speed.name}'"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = errMsg
+            )
             return DeviceCommandResult(
                 success = false,
-                message = "${device.displayName} does not support fan speed '${speed.name}'."
+                message = "$errMsg."
             )
         }
+
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.VALIDATING,
+            message = "Fan speed ${speed.name} mapped to Tuya code '$tuyaCode'"
+        )
 
         val tuyaCommand = mapOf<String, Any>(
             "code" to CODE_FAN_SPEED,
@@ -257,34 +484,117 @@ class TuyaAirConditionerAdapter(
         )
 
         if (!allowWriteCommands) {
-            Log.i(TAG, "[read-only-guard] Simulated setFanSpeed($speed -> $tuyaCode) for ${device.displayName}")
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.EXECUTING,
+                message = "[read-only-guard] Simulated setFanSpeed(${speed.name}) for ${device.displayName}"
+            )
             _acState.value = _acState.value.copy(fanSpeed = speed)
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.COMPLETED,
+                message = "fanSpeed=${speed.name} (Simulated)"
+            )
             return DeviceCommandResult(
                 success = true,
-                message = "${device.displayName} fan set to ${speed.name} (Verified mapping: $tuyaCommand)"
+                message = "${device.displayName} fan speed set to ${speed.name} (Verified mapping: $tuyaCommand)"
             )
         }
 
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.EXECUTING,
+            message = "Sending fan speed command (${speed.name})"
+        )
         val result = apiClient.sendCommands(device.id, listOf(tuyaCommand))
+
         return if (result.isSuccess) {
-            _acState.value = _acState.value.copy(fanSpeed = speed)
-            DeviceCommandResult(
-                success = true,
-                message = "${device.displayName} fan set to ${speed.name}."
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.DEVICE_RESPONSE,
+                message = "Tuya command accepted"
             )
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.VERIFYING,
+                message = "Reading AC state"
+            )
+
+            // Read back state from Tuya with retry to confirm live synchronization
+            val currentState = verifyReadbackWithRetry(device.id, { it.fanSpeed == speed })
+
+            if (currentState.fanSpeed == speed) {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.COMPLETED,
+                    message = "fanSpeed=${speed.name} verified"
+                )
+                DeviceCommandResult(
+                    success = true,
+                    message = "${device.displayName} fan speed set to ${speed.name}."
+                )
+            } else {
+                DiagnosticBus.log(
+                    tag = "ac",
+                    stage = DiagnosticStage.FAILED,
+                    message = "Command accepted but readback fan speed (${currentState.fanSpeed.name}) did not match requested ${speed.name}"
+                )
+                DeviceCommandResult(
+                    success = false,
+                    message = "Command accepted but readback fan speed was ${currentState.fanSpeed.name}."
+                )
+            }
         } else {
+            val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+            DiagnosticBus.log(
+                tag = "ac",
+                stage = DiagnosticStage.FAILED,
+                message = "Failed to set fan speed: $errMsg"
+            )
             DeviceCommandResult(
                 success = false,
-                message = "Failed to set ${device.displayName} fan speed: ${result.exceptionOrNull()?.message}"
+                message = "Failed to set ${device.displayName} fan speed: $errMsg"
             )
         }
     }
 
     override suspend fun setSwing(device: RoomDevice, swing: AcSwing): DeviceCommandResult {
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.REQUESTED,
+            message = "Set swing = ${swing.name}"
+        )
+        val errMsg = "${device.displayName} has manual louvers and does not support motorized swing control"
+        DiagnosticBus.log(
+            tag = "ac",
+            stage = DiagnosticStage.FAILED,
+            message = errMsg
+        )
         return DeviceCommandResult(
             success = false,
-            message = "${device.displayName} has manual louvers and does not support motorized swing control."
+            message = "$errMsg."
         )
+    }
+
+    suspend fun verifyReadbackWithRetry(
+        deviceId: String,
+        predicate: (TuyaAcState) -> Boolean,
+        maxRetries: Int = 3,
+        initialDelayMs: Long = 400L,
+        retryDelayMs: Long = 500L
+    ): TuyaAcState {
+        kotlinx.coroutines.delay(initialDelayMs)
+        for (i in 0 until maxRetries) {
+            val refreshed = refreshState(deviceId)
+            val currentState = refreshed.getOrNull() ?: _acState.value
+            if (predicate(currentState)) {
+                return currentState
+            }
+            if (i < maxRetries - 1) {
+                kotlinx.coroutines.delay(retryDelayMs)
+            }
+        }
+        return _acState.value
     }
 
     /**

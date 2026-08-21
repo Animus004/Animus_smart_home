@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleCommandIntent(intent)
         setContent {
             AnimusSmartRoomTheme {
                 Surface(
@@ -67,6 +68,16 @@ class MainActivity : ComponentActivity() {
                     val voiceInputState by viewModel.voiceInputState.collectAsStateWithLifecycle()
                     val activeBrainProvider by viewModel.activeBrainProvider.collectAsStateWithLifecycle()
                     val maskedApiKey by viewModel.maskedApiKey.collectAsStateWithLifecycle()
+                    val activeRoutine by viewModel.activeRoutine.collectAsStateWithLifecycle()
+                    val registeredDevices by viewModel.registeredDevices.collectAsStateWithLifecycle()
+                    val tuyaAcState by viewModel.tuyaAcState.collectAsStateWithLifecycle()
+                    val isAcOperating by viewModel.isAcOperating.collectAsStateWithLifecycle()
+                    val diagnosticEvents by viewModel.diagnosticEvents.collectAsStateWithLifecycle()
+                    val scheduledActions by viewModel.scheduledActions.collectAsStateWithLifecycle()
+
+                    val activeAcTimer = scheduledActions.firstOrNull {
+                        it.targetDeviceType == com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER && it.isPending
+                    }
 
                     HomeScreen(
                         bluetoothState = bluetoothUiState,
@@ -75,6 +86,21 @@ class MainActivity : ComponentActivity() {
                         voiceState = voiceInputState,
                         activeBrainProvider = activeBrainProvider,
                         maskedApiKey = maskedApiKey,
+                        activeRoutine = activeRoutine,
+                        registeredDevices = registeredDevices,
+                        tuyaAcState = tuyaAcState,
+                        isAcOperating = isAcOperating,
+                        diagnosticEvents = diagnosticEvents,
+                        activeAcTimer = activeAcTimer,
+                        onCancelRoutine = { viewModel.cancelActiveRoutine() },
+                        onStopAlarm = { viewModel.stopAlarm() },
+                        onClearDiagnostics = { viewModel.clearDiagnostics() },
+                        onSetAcPower = { on -> viewModel.setAcPower(on) },
+                        onSetAcTemperature = { temp -> viewModel.setAcTemperature(temp) },
+                        onSetAcMode = { mode -> viewModel.setAcMode(mode) },
+                        onSetAcFanSpeed = { speed -> viewModel.setAcFanSpeed(speed) },
+                        onScheduleAcTimer = { mins, on -> viewModel.scheduleAcTimer(mins, on) },
+                        onCancelAcTimer = { viewModel.cancelAcTimer() },
                         onConnectClick = { viewModel.onConnectClicked() },
                         onDisconnectClick = { viewModel.onDisconnectClicked() },
                         onDeviceSelected = { mac -> viewModel.onDeviceSelected(mac) },
@@ -100,6 +126,35 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCommandIntent(intent)
+    }
+
+    private fun handleCommandIntent(intent: Intent?) {
+        val rawCommand = intent?.getStringExtra("command")
+        val b64Command = intent?.getStringExtra("command_b64")
+        val command = when {
+            !b64Command.isNullOrBlank() -> {
+                try {
+                    String(android.util.Base64.decode(b64Command, android.util.Base64.DEFAULT), Charsets.UTF_8)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            !rawCommand.isNullOrBlank() -> rawCommand
+            else -> null
+        }
+
+        if (!command.isNullOrBlank()) {
+            android.util.Log.i("MainActivity", "[intent-cmd] Received command: '$command'")
+            viewModel.onExecuteCommand(command)
+        } else {
+            android.util.Log.d("MainActivity", "[intent-cmd] No command extra found in intent")
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         viewModel.refreshState()
@@ -114,6 +169,21 @@ fun HomeScreen(
     voiceState: VoiceInputState,
     activeBrainProvider: com.animus.smartroom.brain.model.BrainProviderType,
     maskedApiKey: String?,
+    activeRoutine: com.animus.smartroom.routine.model.RoutineState? = null,
+    registeredDevices: List<com.animus.smartroom.device.model.RoomDevice> = emptyList(),
+    tuyaAcState: com.animus.smartroom.device.tuya.model.TuyaAcState = com.animus.smartroom.device.tuya.model.TuyaAcState(),
+    isAcOperating: Boolean = false,
+    diagnosticEvents: List<com.animus.smartroom.diagnostics.DiagnosticEvent> = emptyList(),
+    activeAcTimer: com.animus.smartroom.scheduler.model.ScheduledDeviceAction? = null,
+    onCancelRoutine: () -> Unit = {},
+    onStopAlarm: () -> Unit = {},
+    onClearDiagnostics: () -> Unit = {},
+    onSetAcPower: (Boolean) -> Unit = {},
+    onSetAcTemperature: (Int) -> Unit = {},
+    onSetAcMode: (com.animus.smartroom.device.adapter.AcMode) -> Unit = {},
+    onSetAcFanSpeed: (com.animus.smartroom.device.adapter.AcFanSpeed) -> Unit = {},
+    onScheduleAcTimer: (delayMinutes: Int, powerOn: Boolean) -> Unit = { _, _ -> },
+    onCancelAcTimer: () -> Unit = {},
     onConnectClick: () -> Unit,
     onDisconnectClick: () -> Unit,
     onDeviceSelected: (String) -> Unit,
@@ -137,6 +207,9 @@ fun HomeScreen(
     val context = LocalContext.current
     var showDevicePicker by remember { mutableStateOf(false) }
     var showBrainSettings by remember { mutableStateOf(false) }
+    var showDeviceDrawer by remember { mutableStateOf(false) }
+    var showAcRemote by remember { mutableStateOf(false) }
+    var showDiagnosticLogs by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -162,7 +235,7 @@ fun HomeScreen(
             Column {
                 Text(
                     text = "Animus Smart Room",
-                    fontSize = 25.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -174,9 +247,48 @@ fun HomeScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Devices Drawer Button
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF38BDF8).copy(alpha = 0.15f))
+                        .clickable { showDeviceDrawer = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Devices,
+                        contentDescription = "Room Devices",
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Diagnostics Button
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { showDiagnosticLogs = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BugReport,
+                        contentDescription = "Diagnostics",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Brain Settings Button
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { showBrainSettings = true },
@@ -186,15 +298,16 @@ fun HomeScreen(
                         imageVector = Icons.Default.Psychology,
                         contentDescription = "Brain Settings",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
+                // Bluetooth Settings Button
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable {
@@ -206,10 +319,22 @@ fun HomeScreen(
                         imageVector = Icons.Default.SettingsBluetooth,
                         contentDescription = "Bluetooth Settings",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
+        }
+
+        android.util.Log.i("HomeScreen", "[compose] activeRoutine: id=${activeRoutine?.id}, status=${activeRoutine?.status}, isActive=${activeRoutine?.isActive}")
+
+        // Active Routine Card (if active)
+        if (activeRoutine != null && activeRoutine.isActive) {
+            ActiveRoutineCard(
+                routine = activeRoutine,
+                onCancelClick = onCancelRoutine,
+                onStopAlarm = onStopAlarm
+            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         // 1. Voice-First AI Command Layer: "Ask Animus"
@@ -289,6 +414,42 @@ fun HomeScreen(
             onSaveApiKey = { key -> onSaveGeminiApiKey(key) },
             onTestConnection = onTestGeminiConnection,
             onDismiss = { showBrainSettings = false }
+        )
+    }
+
+    if (showDeviceDrawer) {
+        com.animus.smartroom.ui.device.DeviceDrawerSheet(
+            devices = registeredDevices,
+            acState = tuyaAcState,
+            bluetoothState = bluetoothState,
+            onDismiss = { showDeviceDrawer = false },
+            onOpenAcRemote = { showAcRemote = true },
+            onOpenBluetoothManager = {
+                context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            }
+        )
+    }
+
+    if (showAcRemote) {
+        com.animus.smartroom.ui.device.AirConditionerRemoteSheet(
+            state = tuyaAcState,
+            isOperating = isAcOperating,
+            activeTimer = activeAcTimer,
+            onDismiss = { showAcRemote = false },
+            onPowerToggle = onSetAcPower,
+            onTemperatureChange = onSetAcTemperature,
+            onModeSelect = onSetAcMode,
+            onFanSpeedSelect = onSetAcFanSpeed,
+            onScheduleTimer = onScheduleAcTimer,
+            onCancelTimer = onCancelAcTimer
+        )
+    }
+
+    if (showDiagnosticLogs) {
+        com.animus.smartroom.ui.diagnostics.DiagnosticLogSheet(
+            events = diagnosticEvents,
+            onDismiss = { showDiagnosticLogs = false },
+            onClear = onClearDiagnostics
         )
     }
 }
@@ -1727,6 +1888,167 @@ fun AliasEditDialog(
                     ) {
                         Text("Save")
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ActiveRoutineCard(
+    routine: com.animus.smartroom.routine.model.RoutineState,
+    onCancelClick: () -> Unit,
+    onStopAlarm: () -> Unit = {}
+) {
+    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(routine.scheduledWakeTime, routine.status) {
+        while (true) {
+            currentTime = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000L)
+        }
+    }
+
+    val remainingMillis = ((routine.scheduledWakeTime ?: currentTime) - currentTime).coerceAtLeast(0L)
+    val isRinging = routine.isAlarming || (routine.status == com.animus.smartroom.routine.model.RoutineStatus.ACTIVE && routine.scheduledWakeTime != null && currentTime >= routine.scheduledWakeTime)
+
+    if (isRinging) {
+        // Unmistakable urgent alarm card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF7F1D1D)
+            ),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(2.dp, Color(0xFFEF4444))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "🔔",
+                    fontSize = 38.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "WAKE UP, BUDDY",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Alarm is ringing",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFFECACA)
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = onStopAlarm,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFDC2626),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
+                ) {
+                    Text(
+                        text = "STOP ALARM",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+            }
+        }
+    } else {
+        // Active countdown card
+        val remainingSeconds = (remainingMillis / 1000L) % 60
+        val remainingMinutes = (remainingMillis / (1000L * 60)) % 60
+        val remainingHours = (remainingMillis / (1000L * 3600))
+        val countdownText = if (remainingHours > 0) {
+            String.format(java.util.Locale.getDefault(), "%d:%02d:%02d", remainingHours, remainingMinutes, remainingSeconds)
+        } else {
+            String.format(java.util.Locale.getDefault(), "%02d:%02d", remainingMinutes, remainingSeconds)
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF1E293B)
+            ),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "😴",
+                        fontSize = 26.sp
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = "Sleep Mode",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = countdownText,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF38BDF8)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "remaining",
+                                fontSize = 12.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                        val wakeText = routine.scheduledWakeTime?.let {
+                            val sdf = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+                            "Wake-up: ${sdf.format(java.util.Date(it))}"
+                        } ?: "Status: Active"
+                        Text(
+                            text = wakeText,
+                            fontSize = 12.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onCancelClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFEF4444).copy(alpha = 0.2f),
+                        contentColor = Color(0xFFF87171)
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text(text = "Cancel", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }

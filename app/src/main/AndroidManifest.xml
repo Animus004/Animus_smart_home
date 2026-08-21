@@ -17,6 +17,13 @@
     <!-- Microphone permission for Voice interaction layer -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Alarm, Notification, and Boot permissions for Schedulers -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Legacy permissions for Android 11 (API 30) and lower -->
     <uses-permission
         android:name="android.permission.BLUETOOTH"
@@ -55,6 +62,7 @@
     </queries>
 
     <application
+        android:name=".AnimusApplication"
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -62,11 +70,38 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".routine.receiver.SleepWakeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.animus.smartroom.ACTION_SLEEP_WAKE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".scheduler.receiver.ScheduledDeviceActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.animus.smartroom.ACTION_EXECUTE_SCHEDULED_DEVICE_ACTION" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".scheduler.receiver.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

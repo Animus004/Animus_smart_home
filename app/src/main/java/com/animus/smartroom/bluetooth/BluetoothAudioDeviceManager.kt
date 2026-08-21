@@ -22,10 +22,14 @@ import androidx.core.content.ContextCompat
 import com.animus.smartroom.bluetooth.model.BluetoothAudioDevice
 import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.bluetooth.model.BluetoothUiState
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeout
 import java.lang.reflect.Method
 
 class BluetoothAudioDeviceManager(
@@ -534,6 +538,39 @@ class BluetoothAudioDeviceManager(
 
         cancelTimeout()
         connectInternal(selected.macAddress)
+    }
+
+    /**
+     * Suspends until the Bluetooth connection reaches Connected or Error state,
+     * or until the timeout expires.
+     */
+    suspend fun awaitConnection(timeoutMs: Long = 6000L): Boolean {
+        if (_uiState.value.connectionState is BluetoothDeviceState.Connected) {
+            return true
+        }
+
+        return try {
+            withTimeout(timeoutMs) {
+                _uiState.filter {
+                    it.connectionState is BluetoothDeviceState.Connected ||
+                            it.connectionState is BluetoothDeviceState.Error
+                }.first().connectionState is BluetoothDeviceState.Connected
+            }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "[awaitConnection] Timed out after ${timeoutMs}ms waiting for Bluetooth connection")
+            _uiState.value.connectionState is BluetoothDeviceState.Connected
+        }
+    }
+
+    /**
+     * Connects to the selected device and awaits completion.
+     */
+    suspend fun connectAndAwait(timeoutMs: Long = 6000L): Boolean {
+        if (_uiState.value.connectionState is BluetoothDeviceState.Connected) {
+            return true
+        }
+        connect()
+        return awaitConnection(timeoutMs)
     }
 
     @SuppressLint("MissingPermission")

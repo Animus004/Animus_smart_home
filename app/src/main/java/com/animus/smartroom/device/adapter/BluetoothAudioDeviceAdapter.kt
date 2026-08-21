@@ -24,11 +24,18 @@ class BluetoothAudioDeviceAdapter(
         return when (capability) {
             DeviceCapability.Connect -> {
                 bluetoothManager.selectDevice(device.id)
-                bluetoothManager.connect()
-                DeviceCommandResult(
-                    success = true,
-                    message = "Connecting to ${device.displayName}..."
-                )
+                val isConnected = bluetoothManager.connectAndAwait()
+                if (isConnected) {
+                    DeviceCommandResult(
+                        success = true,
+                        message = "Connected to ${device.displayName}"
+                    )
+                } else {
+                    DeviceCommandResult(
+                        success = false,
+                        message = "Failed to connect to ${device.displayName}"
+                    )
+                }
             }
             DeviceCapability.Disconnect -> {
                 bluetoothManager.selectDevice(device.id)

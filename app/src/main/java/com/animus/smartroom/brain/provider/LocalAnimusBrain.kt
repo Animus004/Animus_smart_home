@@ -63,6 +63,32 @@ class LocalAnimusBrain(
                     value = parsedCommand.value as? Int,
                     valueString = parsedCommand.value?.toString()
                 )
+                is AnimusCommand.ActivateSleepMode -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_SLEEP_MODE,
+                    durationMinutes = parsedCommand.durationMinutes,
+                    wakeTime = parsedCommand.wakeTime
+                )
+                is AnimusCommand.CancelSleepMode -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_CANCEL_SLEEP
+                )
+                is AnimusCommand.ScheduleDeviceAction -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_SCHEDULE_DEVICE_ACTION,
+                    target = parsedCommand.target,
+                    action = parsedCommand.action,
+                    delayMinutes = parsedCommand.delayMinutes,
+                    scheduledTime = parsedCommand.scheduledTime,
+                    recurrence = parsedCommand.recurrence,
+                    parameters = parsedCommand.parameters
+                )
+                is AnimusCommand.CancelScheduledAction -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_CANCEL_SCHEDULED_ACTION,
+                    target = parsedCommand.target,
+                    action = parsedCommand.actionType
+                )
+                is AnimusCommand.QueryScheduledAction -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_QUERY_SCHEDULED_ACTION,
+                    target = parsedCommand.target
+                )
                 is AnimusCommand.UnknownCommand -> BrainCommandDto(
                     command = BrainCommandDto.CMD_UNKNOWN,
                     rawText = parsedCommand.rawText

@@ -61,19 +61,30 @@ class YouTubeMusicProvider(
     override fun supportsDirectPlayback(): Boolean = true
 
     /**
-     * Direct track playback using the proven YouTube Music MediaPlay intent.
+     * Direct track playback using the verified YouTube Music ACTION_VIEW intent.
      */
     override fun playDirectTrack(videoId: String, title: String?, artist: String?): ProviderResult {
         if (!isInstalled()) {
             Log.w(TAG, "[ytmusic] YouTube Music ($PACKAGE_NAME) is not installed.")
+            com.animus.smartroom.diagnostics.DiagnosticBus.log(
+                tag = "youtube",
+                stage = com.animus.smartroom.diagnostics.DiagnosticStage.FAILED,
+                message = "YouTube Music is not installed"
+            )
             return ProviderResult.AppNotInstalled
         }
 
         val watchUri = Uri.parse("https://music.youtube.com/watch?v=$videoId")
         Log.i(TAG, "[ytmusic] Launching direct track playback: videoId='$videoId', uri='$watchUri'")
 
-        // Proven Intent Configuration (MEDIA_PLAY + Package + MusicActivity + CATEGORY_DEFAULT)
-        val directIntent = Intent(ACTION_MEDIA_PLAY, watchUri).apply {
+        com.animus.smartroom.diagnostics.DiagnosticBus.log(
+            tag = "youtube",
+            stage = com.animus.smartroom.diagnostics.DiagnosticStage.INTENT,
+            message = "act=ACTION_VIEW, uri=https://music.youtube.com/watch?v=$videoId"
+        )
+
+        // Verified Intent Configuration (ACTION_VIEW + Package + MusicActivity)
+        val directIntent = Intent(Intent.ACTION_VIEW, watchUri).apply {
             setPackage(PACKAGE_NAME)
             component = ComponentName(PACKAGE_NAME, MUSIC_ACTIVITY)
             addCategory(Intent.CATEGORY_DEFAULT)
@@ -85,18 +96,33 @@ class YouTubeMusicProvider(
             if (directIntent.resolveActivity(packageManager) != null) {
                 context.startActivity(directIntent)
                 Log.i(TAG, "[ytmusic] Direct track intent launched successfully.")
+                com.animus.smartroom.diagnostics.DiagnosticBus.log(
+                    tag = "youtube",
+                    stage = com.animus.smartroom.diagnostics.DiagnosticStage.PLAYBACK,
+                    message = "Direct play intent dispatched to $PACKAGE_NAME"
+                )
                 ProviderResult.DirectPlayIntentLaunched
             } else {
                 Log.w(TAG, "[ytmusic] Explicit component not resolvable, falling back to package intent.")
-                val packageIntent = Intent(ACTION_MEDIA_PLAY, watchUri).apply {
+                val packageIntent = Intent(Intent.ACTION_VIEW, watchUri).apply {
                     setPackage(PACKAGE_NAME)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(packageIntent)
+                com.animus.smartroom.diagnostics.DiagnosticBus.log(
+                    tag = "youtube",
+                    stage = com.animus.smartroom.diagnostics.DiagnosticStage.PLAYBACK,
+                    message = "Package play intent dispatched to $PACKAGE_NAME"
+                )
                 ProviderResult.DirectPlayIntentLaunched
             }
         } catch (e: Exception) {
             Log.w(TAG, "[ytmusic] Direct track playback failed, falling back to search", e)
+            com.animus.smartroom.diagnostics.DiagnosticBus.log(
+                tag = "youtube",
+                stage = com.animus.smartroom.diagnostics.DiagnosticStage.FAILED,
+                message = "Direct track playback failed: ${e.message}"
+            )
             openSearch(title ?: videoId, artist)
         }
     }
