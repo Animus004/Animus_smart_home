@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.memory.PrivacyDiagnosticTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.002">
+<testsuite name="com.animus.smartroom.core.memory.PrivacyDiagnosticTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.002">
   <properties/>
   <testcase name="Memory diagnostic logging contains only safe high-level metadata" classname="com.animus.smartroom.core.memory.PrivacyDiagnosticTest" time="0.001"/>
   <testcase name="Preference diagnostics do not log credentials or sensitive tokens" classname="com.animus.smartroom.core.memory.PrivacyDiagnosticTest" time="0.001"/>

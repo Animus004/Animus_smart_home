@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.diagnostics.EventLifecycleTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.005">
+<testsuite name="com.animus.smartroom.core.diagnostics.EventLifecycleTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.005">
   <properties/>
   <testcase name="cancelled action records CANCELLED stage and status" classname="com.animus.smartroom.core.diagnostics.EventLifecycleTest" time="0.001"/>
   <testcase name="standard action progresses through complete lifecycle successfully" classname="com.animus.smartroom.core.diagnostics.EventLifecycleTest" time="0.003"/>

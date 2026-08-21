@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.067">
+<testsuite name="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.066">
   <properties/>
-  <testcase name="AudioOutputAdapter connects and disconnects" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.042"/>
-  <testcase name="DeviceTransport sends commands and reads state successfully" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.003"/>
-  <testcase name="AirConditionerDeviceAdapter automatically powers on when temperature is set while OFF" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.009"/>
-  <testcase name="AirConditionerDeviceAdapter executes modes and fan speeds" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.004"/>
+  <testcase name="AudioOutputAdapter connects and disconnects" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.04"/>
+  <testcase name="DeviceTransport sends commands and reads state successfully" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.002"/>
+  <testcase name="AirConditionerDeviceAdapter automatically powers on when temperature is set while OFF" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.008"/>
+  <testcase name="AirConditionerDeviceAdapter executes modes and fan speeds" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.005"/>
   <testcase name="DeviceTransport handles transport write and read failures" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.001"/>
-  <testcase name="DeviceRegistry lookups and command execution" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.001"/>
+  <testcase name="DeviceRegistry lookups and command execution" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.003"/>
   <testcase name="MusicPlaybackPort basic operations" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.002"/>
   <testcase name="AirConditionerDeviceAdapter executes power and temperature commands" classname="com.animus.smartroom.core.device.CoreDeviceBoundaryTest" time="0.003"/>
   <system-out><![CDATA[]]></system-out>

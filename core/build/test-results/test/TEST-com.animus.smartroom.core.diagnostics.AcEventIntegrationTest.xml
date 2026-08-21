@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.diagnostics.AcEventIntegrationTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.008">
+<testsuite name="com.animus.smartroom.core.diagnostics.AcEventIntegrationTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.009">
   <properties/>
-  <testcase name="setting temperature on OFF AC emits precondition and completion events" classname="com.animus.smartroom.core.diagnostics.AcEventIntegrationTest" time="0.008"/>
+  <testcase name="setting temperature on OFF AC emits precondition and completion events" classname="com.animus.smartroom.core.diagnostics.AcEventIntegrationTest" time="0.009"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

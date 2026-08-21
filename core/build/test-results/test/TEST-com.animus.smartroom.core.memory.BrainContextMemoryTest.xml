@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.memory.BrainContextMemoryTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.013">
+<testsuite name="com.animus.smartroom.core.memory.BrainContextMemoryTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.013">
   <properties/>
-  <testcase name="BrainContext bounds memory events to maximum limit" classname="com.animus.smartroom.core.memory.BrainContextMemoryTest" time="0.013"/>
+  <testcase name="BrainContext bounds memory events to maximum limit" classname="com.animus.smartroom.core.memory.BrainContextMemoryTest" time="0.012"/>
   <testcase name="BrainContext handles empty memory gracefully" classname="com.animus.smartroom.core.memory.BrainContextMemoryTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

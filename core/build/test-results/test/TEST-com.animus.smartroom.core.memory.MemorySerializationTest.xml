@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.memory.MemorySerializationTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.01">
+<testsuite name="com.animus.smartroom.core.memory.MemorySerializationTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.009">
   <properties/>
   <testcase name="RoutineHistoryEvent roundtrip serialization" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.002"/>
   <testcase name="PreferenceEvent roundtrip serialization" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.001"/>
@@ -7,8 +7,8 @@
   <testcase name="DailyActivityEvent roundtrip serialization" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.001"/>
   <testcase name="LearningEvent roundtrip serialization" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.001"/>
   <testcase name="ProjectProgressEvent roundtrip serialization" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.001"/>
-  <testcase name="Malformed or unknown JSON returns null without throwing" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.0"/>
-  <testcase name="SystemMilestoneEvent roundtrip serialization" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.001"/>
+  <testcase name="Malformed or unknown JSON returns null without throwing" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.001"/>
+  <testcase name="SystemMilestoneEvent roundtrip serialization" classname="com.animus.smartroom.core.memory.MemorySerializationTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

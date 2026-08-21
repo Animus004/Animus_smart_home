@@ -27,6 +27,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Required on Android 14+ for typed foreground services (dataSync = network I/O to Tuya) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Required for Floating Control Surface Overlay -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Legacy permissions for Android 11 (API 30) and lower -->
     <uses-permission
@@ -115,5 +117,11 @@
             android:name=".runtime.AnimusRuntimeService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- FloatingAnimusService: started explicitly by user.
+             Hosts the floating translucent control surface over other apps. -->
+        <service
+            android:name=".overlay.service.FloatingAnimusService"
+            android:exported="false" />
     </application>
 </manifest>

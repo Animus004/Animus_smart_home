@@ -421,10 +421,11 @@ class CommandRouter(
                         }
                     }
                 } else {
-                    when (val resolution = resolveDeviceTarget(command.deviceName, paired)) {
+                    val reqDeviceName = command.deviceName ?: ""
+                    when (val resolution = resolveDeviceTarget(reqDeviceName, paired)) {
                         is DeviceResolutionResult.Match -> {
                             val target = resolution.device
-                            Log.i(TAG, "[ai] Found matching paired device for '${command.deviceName}': ${target.displayName} (${target.macAddress})")
+                            Log.i(TAG, "[ai] Found matching paired device for '$reqDeviceName': ${target.displayName} (${target.macAddress})")
                             btMgr.selectDevice(target.macAddress)
                             if (target.isConnected) {
                                 musicController?.updateOutputDevice(target.displayName, true)
@@ -618,8 +619,9 @@ class CommandRouter(
                                 com.animus.smartroom.scheduler.model.DeviceActionType.POWER_ON -> "turn on"
                                 else -> actionType.name.lowercase(Locale.ROOT)
                             }
-                            val timeDesc = if (command.delayMinutes != null) {
-                                "in ${command.delayMinutes} minute${if (command.delayMinutes > 1) "s" else ""}"
+                            val delay = command.delayMinutes
+                            val timeDesc = if (delay != null) {
+                                "in $delay minute${if (delay > 1) "s" else ""}"
                             } else {
                                 "at ${command.scheduledTime}"
                             }

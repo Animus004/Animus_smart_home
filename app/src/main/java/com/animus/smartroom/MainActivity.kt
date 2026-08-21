@@ -119,7 +119,8 @@ class MainActivity : ComponentActivity() {
                         onCancelVoiceListening = { viewModel.onCancelVoiceListening() },
                         onSetBrainProvider = { type -> viewModel.setBrainProvider(type) },
                         onSaveGeminiApiKey = { key -> viewModel.onSaveGeminiApiKey(key) },
-                        onTestGeminiConnection = { key, callback -> viewModel.onTestGeminiConnection(key, callback) }
+                        onTestGeminiConnection = { key, callback -> viewModel.onTestGeminiConnection(key, callback) },
+                        onToggleFloatingOverlay = { onPermissionNeeded -> viewModel.toggleFloatingOverlay(onPermissionNeeded) }
                     )
                 }
             }
@@ -202,7 +203,8 @@ fun HomeScreen(
     onCancelVoiceListening: () -> Unit,
     onSetBrainProvider: (com.animus.smartroom.brain.model.BrainProviderType) -> Unit,
     onSaveGeminiApiKey: (String?) -> Unit,
-    onTestGeminiConnection: (String?, (Boolean, String) -> Unit) -> Unit
+    onTestGeminiConnection: (String?, (Boolean, String) -> Unit) -> Unit,
+    onToggleFloatingOverlay: (onPermissionNeeded: () -> Unit) -> Unit = {}
 ) {
     val context = LocalContext.current
     var showDevicePicker by remember { mutableStateOf(false) }
@@ -210,6 +212,7 @@ fun HomeScreen(
     var showDeviceDrawer by remember { mutableStateOf(false) }
     var showAcRemote by remember { mutableStateOf(false) }
     var showDiagnosticLogs by remember { mutableStateOf(false) }
+    var showOverlayPermissionDialog by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -279,6 +282,29 @@ fun HomeScreen(
                         imageVector = Icons.Default.BugReport,
                         contentDescription = "Diagnostics",
                         tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Floating Overlay Button
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFA855F7).copy(alpha = 0.15f))
+                        .clickable {
+                            onToggleFloatingOverlay {
+                                showOverlayPermissionDialog = true
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PictureInPicture,
+                        contentDescription = "Floating Control Surface",
+                        tint = Color(0xFFA855F7),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -403,6 +429,43 @@ fun HomeScreen(
                 onSetDeviceAlias(mac, alias)
             },
             onDismiss = { showDevicePicker = false }
+        )
+    }
+
+    if (showOverlayPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverlayPermissionDialog = false },
+            title = {
+                Text(
+                    text = "Overlay Permission Required",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "Animus needs permission to appear over other apps so the floating controller can remain visible while you use YouTube Music or other apps.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showOverlayPermissionDialog = false
+                        val port = com.animus.smartroom.overlay.permission.AndroidOverlayPermissionPort(context)
+                        context.startActivity(port.createPermissionIntent())
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("ALLOW OVER OTHER APPS")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOverlayPermissionDialog = false }) {
+                    Text("CANCEL")
+                }
+            }
         )
     }
 

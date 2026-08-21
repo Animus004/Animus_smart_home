@@ -19,9 +19,22 @@ import com.animus.smartroom.routine.storage.RoutineStorage
 import com.animus.smartroom.notification.AndroidNotificationAdapter
 import com.animus.smartroom.runtime.AnimusRuntimeImpl
 import com.animus.smartroom.runtime.AnimusRuntimeService
+import com.animus.smartroom.runtime.RuntimeControlPortImpl
 import com.animus.smartroom.scheduler.DeviceSchedulerEngine
 import com.animus.smartroom.scheduler.storage.ScheduledActionStorage
 import com.animus.smartroom.core.runtime.AnimusRuntime
+import com.animus.smartroom.core.runtime.RuntimeControlPort
+import com.animus.smartroom.core.port.OverlayPermissionPort
+import com.animus.smartroom.overlay.permission.AndroidOverlayPermissionPort
+import com.animus.smartroom.overlay.service.FloatingAnimusService
+import com.animus.smartroom.brain.AnimusBrainManager
+import com.animus.smartroom.brain.provider.CloudAnimusBrain
+import com.animus.smartroom.brain.provider.GeminiApiClient
+import com.animus.smartroom.brain.provider.GeminiApiKeyStorage
+import com.animus.smartroom.brain.provider.LocalAnimusBrain
+import com.animus.smartroom.command.router.CommandRouter
+import com.animus.smartroom.media.resolver.MusicResolutionCache
+import com.animus.smartroom.media.resolver.YouTubeMusicResolver
 
 class AnimusApplication : Application() {
 
@@ -65,6 +78,18 @@ class AnimusApplication : Application() {
         private set
 
     lateinit var animusRuntime: AnimusRuntime
+        private set
+
+    lateinit var runtimeControlPort: RuntimeControlPort
+        private set
+
+    lateinit var overlayPermissionPort: OverlayPermissionPort
+        private set
+
+    lateinit var brainManager: AnimusBrainManager
+        private set
+
+    lateinit var commandRouter: CommandRouter
         private set
 
     override fun onCreate() {
@@ -151,6 +176,43 @@ class AnimusApplication : Application() {
             persistentStore = com.animus.smartroom.core.port.AndroidPersistentStore(this)
         )
 
+        val apiKeyStorage = GeminiApiKeyStorage(this)
+        val geminiApiClient = GeminiApiClient()
+        val localBrain = LocalAnimusBrain()
+        val cloudBrain = CloudAnimusBrain(
+            apiKeyProvider = { apiKeyStorage.getApiKey() },
+            apiClient = geminiApiClient
+        )
+        brainManager = AnimusBrainManager(
+            localBrain = localBrain,
+            cloudBrain = cloudBrain,
+            initialProvider = apiKeyStorage.getSelectedProvider(),
+            onProviderChanged = { apiKeyStorage.saveSelectedProvider(it) }
+        )
+
+        val musicResolutionCache = MusicResolutionCache.create(this)
+        val musicResolver = YouTubeMusicResolver(
+            apiKeyProvider = { BuildConfig.YOUTUBE_API_KEY.ifBlank { null } },
+            cache = musicResolutionCache
+        )
+
+        commandRouter = CommandRouter(
+            bluetoothManager = bluetoothController,
+            musicController = musicController,
+            musicResolver = musicResolver,
+            deviceRegistry = deviceRegistry,
+            routineEngine = routineEngine,
+            deviceSchedulerEngine = deviceSchedulerEngine
+        )
+
+        runtimeControlPort = RuntimeControlPortImpl(
+            brainManager = brainManager,
+            commandRouter = commandRouter,
+            deviceSchedulerEngine = deviceSchedulerEngine
+        )
+
+        overlayPermissionPort = AndroidOverlayPermissionPort(this)
+
         animusRuntime = AnimusRuntimeImpl()
 
         // Create notification channel early so service can use it immediately
@@ -181,4 +243,33 @@ class AnimusApplication : Application() {
         val intent = AnimusRuntimeService.stopIntent(this)
         startService(intent)
     }
+
+    /**
+     * Start the FloatingAnimusService if permission is granted.
+     * Returns true if service launch attempted, false if permission missing.
+     */
+    fun startFloatingOverlay(): Boolean {
+        if (!overlayPermissionPort.canDrawOverlays()) {
+            Log.w(TAG, "[overlay] Cannot start floating overlay: SYSTEM_ALERT_WINDOW permission missing")
+            return false
+        }
+        Log.i(TAG, "[overlay] Starting FloatingAnimusService")
+        val intent = FloatingAnimusService.startIntent(this)
+        startService(intent)
+        return true
+    }
+
+    /**
+     * Stop the FloatingAnimusService and remove overlay window.
+     */
+    fun stopFloatingOverlay() {
+        Log.i(TAG, "[overlay] Stopping FloatingAnimusService")
+        val intent = FloatingAnimusService.stopIntent(this)
+        startService(intent)
+    }
+
+    /**
+     * Check whether the floating overlay service is currently running.
+     */
+    fun isFloatingOverlayRunning(): Boolean = FloatingAnimusService.isRunning
 }

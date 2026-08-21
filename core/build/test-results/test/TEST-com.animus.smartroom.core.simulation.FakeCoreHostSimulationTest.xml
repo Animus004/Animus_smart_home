@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.simulation.FakeCoreHostSimulationTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:07" hostname="ANIMUS" time="0.016">
+<testsuite name="com.animus.smartroom.core.simulation.FakeCoreHostSimulationTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.016">
   <properties/>
-  <testcase name="Simulate scenario Play Zara Zara on future host" classname="com.animus.smartroom.core.simulation.FakeCoreHostSimulationTest" time="0.003"/>
+  <testcase name="Simulate scenario Play Zara Zara on future host" classname="com.animus.smartroom.core.simulation.FakeCoreHostSimulationTest" time="0.002"/>
   <testcase name="Simulate scenario Memory, Daily Summary and Morning Briefing on future host" classname="com.animus.smartroom.core.simulation.FakeCoreHostSimulationTest" time="0.001"/>
   <testcase name="Simulate scenario Turn AC off after 2 minutes on future host" classname="com.animus.smartroom.core.simulation.FakeCoreHostSimulationTest" time="0.01"/>
   <testcase name="Simulate scenario Set AC to 24 degrees on future host" classname="com.animus.smartroom.core.simulation.FakeCoreHostSimulationTest" time="0.001"/>

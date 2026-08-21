@@ -72,48 +72,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Device registry — application-scoped, survives Activity recreation. */
     val deviceRegistry = app.deviceRegistry
 
-    // ─── Brain (ViewModel-scoped — holds no network state) ───────────────────
+    // ─── Brain & Command Router (from AnimusApplication singletons) ─────────
     private val apiKeyStorage = GeminiApiKeyStorage(application.applicationContext)
     private val geminiApiClient = GeminiApiClient()
-    private val localBrain = LocalAnimusBrain()
-    private val cloudBrain = CloudAnimusBrain(
-        apiKeyProvider = { apiKeyStorage.getApiKey() },
-        apiClient = geminiApiClient
-    )
+    val brainManager: AnimusBrainManager = app.brainManager
     private val initialBrainProvider = apiKeyStorage.getSelectedProvider()
-    private val brainManager = AnimusBrainManager(
-        localBrain = localBrain,
-        cloudBrain = cloudBrain,
-        initialProvider = initialBrainProvider,
-        onProviderChanged = { apiKeyStorage.saveSelectedProvider(it) }
-    )
 
-    // ─── Music resolver (ViewModel-scoped, cache is application-context-backed) ─
-    private val musicResolutionCache = MusicResolutionCache.create(application.applicationContext)
-    private val musicResolver = YouTubeMusicResolver(
-        apiKeyProvider = { BuildConfig.YOUTUBE_API_KEY.ifBlank { null } },
-        cache = musicResolutionCache
-    )
+    // ─── Command Router & RuntimeControlPort ──────────────────────────────────
+    private val commandRouter: CommandRouter = app.commandRouter
+    val runtimeControlPort: com.animus.smartroom.core.runtime.RuntimeControlPort = app.runtimeControlPort
+    val overlayPermissionPort: com.animus.smartroom.core.port.OverlayPermissionPort = app.overlayPermissionPort
 
-    // ─── Routine engine — application-scoped ─────────────────────────────────
-    val routineEngine = app.routineEngine
-    val activeRoutine: StateFlow<com.animus.smartroom.routine.model.RoutineState?> = routineEngine.activeRoutine
-
-    // ─── Scheduler — application-scoped ──────────────────────────────────────
+    // ─── Scheduler & Routine (from AnimusApplication singletons) ─────────────
     val scheduledActionStorage = app.scheduledActionStorage
     val deviceSchedulerEngine = app.deviceSchedulerEngine
+    val routineEngine = app.routineEngine
+    val activeRoutine: StateFlow<com.animus.smartroom.routine.model.RoutineState?> = routineEngine.activeRoutine
     val scheduledActions: StateFlow<List<com.animus.smartroom.scheduler.model.ScheduledDeviceAction>> =
         scheduledActionStorage.actionsFlow
-
-    // ─── Command router ───────────────────────────────────────────────────────
-    private val commandRouter = CommandRouter(
-        bluetoothManager = bluetoothManager,
-        musicController = musicController,
-        musicResolver = musicResolver,
-        deviceRegistry = deviceRegistry,
-        routineEngine = routineEngine,
-        deviceSchedulerEngine = deviceSchedulerEngine
-    )
 
     // ─── Registered devices (from application-scoped registry) ───────────────
     val registeredDevices: StateFlow<List<RoomDevice>> = MutableStateFlow<List<RoomDevice>>(emptyList()).apply {
@@ -432,6 +408,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearCommandResult() {
         _aiCommandState.update { it.copy(lastResultMessage = null, isSuccess = null) }
+    }
+
+    // ─── Floating Overlay Control ─────────────────────────────────────────────
+
+    fun canDrawOverlays(): Boolean = app.overlayPermissionPort.canDrawOverlays()
+
+    fun isFloatingOverlayRunning(): Boolean = app.isFloatingOverlayRunning()
+
+    fun toggleFloatingOverlay(onPermissionNeeded: () -> Unit) {
+        if (!app.overlayPermissionPort.canDrawOverlays()) {
+            onPermissionNeeded()
+            return
+        }
+        if (app.isFloatingOverlayRunning()) {
+            app.stopFloatingOverlay()
+        } else {
+            app.startFloatingOverlay()
+        }
     }
 
     // ─── Voice ────────────────────────────────────────────────────────────────

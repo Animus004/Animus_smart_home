@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.runtime.RuntimeStateTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:02:06" hostname="ANIMUS" time="0.001">
+<testsuite name="com.animus.smartroom.core.runtime.RuntimeStateTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.0">
   <properties/>
-  <testcase name="lastActionEventId can be set and cleared" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.001"/>
+  <testcase name="lastActionEventId can be set and cleared" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
   <testcase name="RuntimeState is a value type — structural equality" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
   <testcase name="IDLE state has expected defaults" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
   <testcase name="state transitions preserve other fields" classname="com.animus.smartroom.core.runtime.RuntimeStateTest" time="0.0"/>
