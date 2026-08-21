@@ -8,7 +8,7 @@ import android.content.SharedPreferences
  */
 class AndroidPersistentStore(
     context: Context,
-    prefsName: String
+    prefsName: String = "animus_prefs"
 ) : PersistentStore {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)

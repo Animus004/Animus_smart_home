@@ -56,6 +56,9 @@ class AnimusApplication : Application() {
     lateinit var deviceSchedulerEngine: DeviceSchedulerEngine
         private set
 
+    lateinit var memoryStore: com.animus.smartroom.core.memory.store.MemoryStore
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -127,6 +130,10 @@ class AnimusApplication : Application() {
         deviceSchedulerEngine = DeviceSchedulerEngine(
             context = this,
             storage = scheduledActionStorage
+        )
+
+        memoryStore = com.animus.smartroom.core.memory.store.AndroidMemoryStore(
+            persistentStore = com.animus.smartroom.core.port.AndroidPersistentStore(this)
         )
 
         // Restore any pending alarms across process startup

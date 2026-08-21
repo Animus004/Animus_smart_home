@@ -169,4 +169,71 @@ class FakeCoreHostSimulationTest {
         assertEquals("Zara Zara", musicPort.currentTrack?.title)
         assertEquals("IWjbBSMsQJg", musicPort.currentTrack?.videoId)
     }
+
+    @Test
+    fun `Simulate scenario Memory, Daily Summary and Morning Briefing on future host`() = runBlocking {
+        val memoryStore = com.animus.smartroom.core.memory.store.InMemoryMemoryStore()
+
+        // 1. Record learning event
+        val learnEvent = com.animus.smartroom.core.memory.model.LearningEvent(
+            timestamp = clock.currentTimeMillis(),
+            topic = "SQL",
+            subtopic = "Window Functions",
+            action = "Practiced ROW_NUMBER() and DENSE_RANK()",
+            status = com.animus.smartroom.core.memory.model.LearningStatus.PRACTICED
+        )
+        memoryStore.record(learnEvent)
+
+        // 2. Record project milestone
+        val projEvent = com.animus.smartroom.core.memory.model.ProjectProgressEvent(
+            timestamp = clock.currentTimeMillis() + 1000L,
+            projectName = "Animus",
+            milestone = "Phase 5C",
+            action = "Implemented Memory & Learning foundation",
+            status = com.animus.smartroom.core.memory.model.ProjectStatus.COMPLETED
+        )
+        memoryStore.record(projEvent)
+
+        // 3. Record routine history
+        val routineEvent = com.animus.smartroom.core.memory.model.RoutineHistoryEvent(
+            timestamp = clock.currentTimeMillis() + 2000L,
+            routineName = "Sleep Mode",
+            startedAt = clock.currentTimeMillis(),
+            completedAt = clock.currentTimeMillis() + 2000L,
+            outcome = "COMPLETED"
+        )
+        memoryStore.record(routineEvent)
+
+        // 4. Advance fake clock to next day
+        clock.advanceTime(24 * 60 * 60 * 1000L)
+
+        // 5. Query yesterday's memory events
+        val allEvents = memoryStore.query(com.animus.smartroom.core.memory.query.MemoryQuery(ascending = true))
+        assertEquals(3, allEvents.size)
+
+        // 6. Build DailySummary for yesterday
+        val dailySummary = com.animus.smartroom.core.memory.summary.DailySummaryBuilder.build("2026-08-21", allEvents)
+        assertEquals(1, dailySummary.learningHighlights.size)
+        assertEquals("SQL: Practiced ROW_NUMBER() and DENSE_RANK()", dailySummary.learningHighlights.first())
+        assertEquals(1, dailySummary.projectHighlights.size)
+        assertEquals("Animus — Phase 5C (completed)", dailySummary.projectHighlights.first())
+        assertEquals(1, dailySummary.completedRoutines.size)
+
+        // 7. Build MorningBriefing for today
+        val briefing = com.animus.smartroom.core.memory.summary.MorningBriefingBuilder.build(
+            dateStr = "2026-08-22",
+            yesterdaySummary = dailySummary,
+            allLearningEvents = listOf(learnEvent),
+            recentProjectEvents = listOf(projEvent),
+            activeScheduledSummary = "No active AC timer"
+        )
+
+        assertEquals("2026-08-22", briefing.date)
+        assertEquals(3, briefing.yesterdayHighlights.size)
+        assertEquals(1, briefing.activeLearningTopics.size)
+        val text = briefing.formatPlainText()
+        assertTrue(text.contains("Morning Briefing for 2026-08-22"))
+        assertTrue(text.contains("SQL: Practiced ROW_NUMBER() and DENSE_RANK()"))
+        assertTrue(text.contains("Animus — Phase 5C (completed)"))
+    }
 }
