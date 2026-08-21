@@ -100,11 +100,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.asStateFlow()
 
-    // ─── Voice ────────────────────────────────────────────────────────────────
-    private val speechRecognitionManager = SpeechRecognitionManager(application.applicationContext) { spokenText ->
-        onExecuteCommand(spokenText)
-    }
-
     // ─── Runtime state (from AnimusApplication singleton) ────────────────────
     val animusRuntime: AnimusRuntime = app.animusRuntime
     val runtimeState: StateFlow<RuntimeState> = animusRuntime.state
@@ -114,7 +109,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val bluetoothUiState: StateFlow<BluetoothUiState> = bluetoothManager.uiState
     val musicUiState: StateFlow<MusicUiState> = musicController.uiState
     val activeBrainProvider: StateFlow<BrainProviderType> = brainManager.activeProvider
-    val voiceInputState: StateFlow<VoiceInputState> = speechRecognitionManager.state
+
+    // ─── Voice (application-scoped single authoritative owner) ───────────────
+    val voiceInputPort: com.animus.smartroom.core.port.VoiceInputPort = app.voiceInputPort
+    val voicePortState: StateFlow<com.animus.smartroom.core.port.VoicePortState> = voiceInputPort.state
+
+    val voiceInputState: StateFlow<VoiceInputState> = MutableStateFlow<VoiceInputState>(VoiceInputState.Idle).apply {
+        viewModelScope.launch {
+            voicePortState.collectLatest { portState ->
+                value = when (portState) {
+                    is com.animus.smartroom.core.port.VoicePortState.Idle -> VoiceInputState.Idle
+                    is com.animus.smartroom.core.port.VoicePortState.Listening -> VoiceInputState.Listening(portState.rmsDb)
+                    is com.animus.smartroom.core.port.VoicePortState.Recognizing -> VoiceInputState.Recognizing(portState.partialText ?: "")
+                    is com.animus.smartroom.core.port.VoicePortState.Success -> VoiceInputState.Success(portState.recognizedText)
+                    is com.animus.smartroom.core.port.VoicePortState.Error -> VoiceInputState.Error(portState.message)
+                    is com.animus.smartroom.core.port.VoicePortState.Unavailable -> VoiceInputState.Unavailable
+                    is com.animus.smartroom.core.port.VoicePortState.PermissionDenied -> VoiceInputState.PermissionDenied
+                }
+            }
+        }
+    }.asStateFlow()
 
     /** Legacy diagnostic events stream (for backward-compatible UI rendering). */
     val diagnosticEvents: StateFlow<List<com.animus.smartroom.diagnostics.DiagnosticEvent>> =
@@ -430,9 +444,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ─── Voice ────────────────────────────────────────────────────────────────
 
-    fun onStartVoiceListening() { speechRecognitionManager.startListening() }
-    fun onStopVoiceListening() { speechRecognitionManager.stopListening() }
-    fun onCancelVoiceListening() { speechRecognitionManager.cancel() }
+    fun onStartVoiceListening() { voiceInputPort.startListening() }
+    fun onStopVoiceListening() { voiceInputPort.stopListening() }
+    fun onCancelVoiceListening() { voiceInputPort.cancel() }
 
     // ─── Bluetooth ────────────────────────────────────────────────────────────
 
@@ -487,6 +501,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         bluetoothManager.stopListening()
         musicController.stopListening()
-        speechRecognitionManager.destroy()
     }
 }

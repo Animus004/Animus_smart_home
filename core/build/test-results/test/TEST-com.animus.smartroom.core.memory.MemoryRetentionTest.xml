@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.memory.MemoryRetentionTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.003">
+<testsuite name="com.animus.smartroom.core.memory.MemoryRetentionTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T16:19:42" hostname="ANIMUS" time="0.002">
   <properties/>
-  <testcase name="InMemoryMemoryStore evicts oldest events when maxCapacity is exceeded" classname="com.animus.smartroom.core.memory.MemoryRetentionTest" time="0.003"/>
+  <testcase name="InMemoryMemoryStore evicts oldest events when maxCapacity is exceeded" classname="com.animus.smartroom.core.memory.MemoryRetentionTest" time="0.002"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.diagnostics.SchedulerEventIntegrationTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.009">
+<testsuite name="com.animus.smartroom.core.diagnostics.SchedulerEventIntegrationTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-08-21T16:19:42" hostname="ANIMUS" time="0.007">
   <properties/>
-  <testcase name="scheduled action execution emits scheduled, triggered, and completed lifecycle" classname="com.animus.smartroom.core.diagnostics.SchedulerEventIntegrationTest" time="0.008"/>
+  <testcase name="scheduled action execution emits scheduled, triggered, and completed lifecycle" classname="com.animus.smartroom.core.diagnostics.SchedulerEventIntegrationTest" time="0.006"/>
   <testcase name="scheduled action on already OFF AC emits NO_CHANGE status" classname="com.animus.smartroom.core.diagnostics.SchedulerEventIntegrationTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

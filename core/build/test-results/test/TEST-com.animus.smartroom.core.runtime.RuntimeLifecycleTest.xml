@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-21T15:23:01" hostname="ANIMUS" time="0.005">
+<testsuite name="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-21T16:19:42" hostname="ANIMUS" time="0.004">
   <properties/>
-  <testcase name="initial runtime state is IDLE" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.002"/>
-  <testcase name="start-stop-start cycle works correctly" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.001"/>
-  <testcase name="updateState applies transformation correctly" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.001"/>
+  <testcase name="initial runtime state is IDLE" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.001"/>
+  <testcase name="start-stop-start cycle works correctly" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.002"/>
+  <testcase name="updateState applies transformation correctly" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.0"/>
   <testcase name="repeated onStarted calls are handled gracefully" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.0"/>
-  <testcase name="actionEvents backed by DiagnosticBus 2_0" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.001"/>
+  <testcase name="actionEvents backed by DiagnosticBus 2_0" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.0"/>
   <testcase name="onStarted transitions state to running" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.0"/>
   <testcase name="onStopped transitions state to not running" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.0"/>
   <testcase name="repeated onStopped calls are handled gracefully" classname="com.animus.smartroom.core.runtime.RuntimeLifecycleTest" time="0.0"/>

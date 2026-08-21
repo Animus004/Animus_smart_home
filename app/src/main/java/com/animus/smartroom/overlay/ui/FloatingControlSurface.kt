@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -25,10 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.animus.smartroom.core.diagnostics.model.ActionStatus
 import com.animus.smartroom.core.diagnostics.sanitizer.EventSanitizer
+import com.animus.smartroom.core.port.VoicePortState
 import com.animus.smartroom.overlay.model.FloatingOverlayState
+import com.animus.smartroom.overlay.model.FloatingOverlayVisibility
 import com.animus.smartroom.overlay.model.SubActionItem
-import com.animus.smartroom.voice.VoiceInputState
-import kotlinx.coroutines.delay
 
 private val GlassSurfaceBg = Color(0xF212141A)
 private val GlassBorderColor = Color(0x3338BDF8)
@@ -47,27 +46,44 @@ fun FloatingControlSurface(
     onCloseOverlay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (state.visibility == FloatingOverlayVisibility.HIDDEN) {
+        // Render nothing / 0 size when hidden
+        Spacer(modifier = Modifier.size(0.dp))
+        return
+    }
+
     Box(
         modifier = modifier
             .wrapContentSize()
             .clip(RoundedCornerShape(20.dp))
             .background(GlassSurfaceBg)
     ) {
-        if (!state.isExpanded) {
-            CollapsedOverlayView(
-                state = state,
-                onToggleExpand = onToggleExpand,
-                onMicClick = onMicClick
-            )
-        } else {
-            ExpandedOverlayView(
-                state = state,
-                onToggleExpand = onToggleExpand,
-                onMicClick = onMicClick,
-                onCancelTimer = onCancelTimer,
-                onOpenApp = onOpenApp,
-                onCloseOverlay = onCloseOverlay
-            )
+        when {
+            state.visibility == FloatingOverlayVisibility.COLLAPSED -> {
+                CollapsedOverlayView(
+                    state = state,
+                    onToggleExpand = onToggleExpand,
+                    onMicClick = onMicClick
+                )
+            }
+            state.visibility == FloatingOverlayVisibility.MUSIC_PERSISTENT && !state.isExpanded -> {
+                MusicCollapsedOverlayView(
+                    state = state,
+                    onToggleExpand = onToggleExpand,
+                    onMicClick = onMicClick
+                )
+            }
+            else -> {
+                // EXPANDED or MUSIC_PERSISTENT with expanded true or LISTENING
+                ExpandedOverlayView(
+                    state = state,
+                    onToggleExpand = onToggleExpand,
+                    onMicClick = onMicClick,
+                    onCancelTimer = onCancelTimer,
+                    onOpenApp = onOpenApp,
+                    onCloseOverlay = onCloseOverlay
+                )
+            }
         }
     }
 }
@@ -106,8 +122,8 @@ fun CollapsedOverlayView(
         ) {
             // Status Dot
             val dotColor = when {
-                state.voiceState is VoiceInputState.Listening -> RedAccent
-                state.voiceState is VoiceInputState.Recognizing -> AmberAccent
+                state.voiceState is VoicePortState.Listening -> RedAccent
+                state.voiceState is VoicePortState.Recognizing -> AmberAccent
                 state.activeTimer != null -> CyanAccent
                 state.activeCommandCard?.overallStatus == ActionStatus.IN_PROGRESS -> AmberAccent
                 state.activeCommandCard?.overallStatus == ActionStatus.SUCCESS -> GreenAccent
@@ -119,7 +135,7 @@ fun CollapsedOverlayView(
                     .size(10.dp)
                     .clip(CircleShape)
                     .background(
-                        if (state.voiceState is VoiceInputState.Listening)
+                        if (state.voiceState is VoicePortState.Listening)
                             dotColor.copy(alpha = pulseAlpha)
                         else
                             dotColor
@@ -128,8 +144,8 @@ fun CollapsedOverlayView(
 
             // Short status pill text
             val pillText = when {
-                state.voiceState is VoiceInputState.Listening -> "Listening..."
-                state.voiceState is VoiceInputState.Recognizing -> "Processing..."
+                state.voiceState is VoicePortState.Listening -> "Listening..."
+                state.voiceState is VoicePortState.Recognizing -> "Processing..."
                 state.activeTimer != null -> "⏱ ${state.activeTimer.formattedRemaining()}"
                 state.activeCommandCard != null -> {
                     val first = state.activeCommandCard.subActions.firstOrNull()
@@ -171,6 +187,67 @@ fun CollapsedOverlayView(
 }
 
 @Composable
+fun MusicCollapsedOverlayView(
+    state: FloatingOverlayState,
+    onToggleExpand: () -> Unit,
+    onMicClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = GlassSurfaceBg,
+        border = BorderStroke(1.dp, CyanAccent.copy(alpha = 0.6f)),
+        modifier = modifier
+            .semantics { contentDescription = "Animus Music Floating Pill" }
+            .clickable { onToggleExpand() }
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = CyanAccent,
+                modifier = Modifier.size(16.dp)
+            )
+
+            val track = state.musicSummary.trackTitle ?: "Music"
+            val dev = state.musicSummary.outputDeviceName ?: "Speaker"
+            val text = "$track • $dev"
+
+            Text(
+                text = EventSanitizer.sanitizeText(text) ?: "Music",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(CyanAccent.copy(alpha = 0.2f))
+                    .clickable { onMicClick() }
+                    .semantics { contentDescription = "Activate Voice Command" },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = CyanAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun ExpandedOverlayView(
     state: FloatingOverlayState,
     onToggleExpand: () -> Unit,
@@ -192,205 +269,165 @@ fun ExpandedOverlayView(
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Header Row
-            Row(
+            // Drag Handle & Header Row
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(CyanAccent)
-                    )
-                    Text(
-                        text = "ANIMUS",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                }
+                // Visual drag pill handle
+                Box(
+                    modifier = Modifier
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = 0.3f))
+                )
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(
-                        onClick = onOpenApp,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .semantics { contentDescription = "Open Full Animus App" }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.OpenInNew,
-                            contentDescription = null,
-                            tint = CyanAccent,
-                            modifier = Modifier.size(18.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(CyanAccent)
+                        )
+                        Text(
+                            text = "ANIMUS",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
                         )
                     }
 
-                    IconButton(
-                        onClick = onToggleExpand,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .semantics { contentDescription = "Collapse Floating Overlay" }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(18.dp)
-                        )
+                        IconButton(
+                            onClick = onOpenApp,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .semantics { contentDescription = "Open Full Animus App" }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInNew,
+                                contentDescription = null,
+                                tint = CyanAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onToggleExpand,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .semantics { contentDescription = "Collapse Floating Overlay" }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            // Voice Command Banner / Prompt
-            VoiceStateSection(
+            // Voice Interaction Bar
+            VoiceInputSection(
                 voiceState = state.voiceState,
+                isVoiceProcessing = state.isVoiceProcessing,
                 onMicClick = onMicClick
             )
 
-            // Correlated Command Execution Card (if available)
-            if (state.activeCommandCard != null) {
-                CorrelatedCommandView(card = state.activeCommandCard)
-            } else if (state.recentCompletedActions.isNotEmpty()) {
-                RecentActionsView(actions = state.recentCompletedActions)
+            // Active Correlated Command Card
+            state.activeCommandCard?.let { card ->
+                CorrelatedCommandCardView(card = card)
             }
 
-            // Active Scheduler Countdown Card
-            if (state.activeTimer != null) {
-                ActiveTimerView(
-                    timer = state.activeTimer,
-                    onCancel = { onCancelTimer(state.activeTimer.actionId) }
+            // Active Scheduled Timer Card
+            state.activeTimer?.let { timer ->
+                OverlayTimerCardView(
+                    timer = timer,
+                    onCancel = { onCancelTimer(timer.actionId) }
                 )
             }
 
-            // Music / Output Status Card
-            if (state.musicSummary.isPlaying || state.musicSummary.outputDeviceName != null) {
-                MusicSummaryView(summary = state.musicSummary)
-            }
-
-            // Bottom Actions Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(
-                    onClick = onMicClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = CyanAccent.copy(alpha = 0.2f),
-                        contentColor = CyanAccent
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                    modifier = Modifier.semantics { contentDescription = "Tap to Speak Voice Command" }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = when (state.voiceState) {
-                            is VoiceInputState.Listening -> "Listening..."
-                            is VoiceInputState.Recognizing -> "Thinking..."
-                            else -> "Voice Command"
-                        },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                TextButton(
-                    onClick = onOpenApp,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    modifier = Modifier.semantics { contentDescription = "Open Animus Main App" }
-                ) {
-                    Text(
-                        text = "OPEN APP",
-                        color = CyanAccent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            // Music Summary Card
+            if (state.musicSummary.isPlaying || !state.musicSummary.trackTitle.isNullOrBlank()) {
+                MusicSummaryCardView(summary = state.musicSummary)
             }
         }
     }
 }
 
 @Composable
-fun VoiceStateSection(
-    voiceState: VoiceInputState,
-    onMicClick: () -> Unit
+fun VoiceInputSection(
+    voiceState: VoicePortState,
+    isVoiceProcessing: Boolean,
+    onMicClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E222D),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0x221E293B),
+        border = BorderStroke(1.dp, GlassBorderColor.copy(alpha = 0.3f)),
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Box(
+            Column(modifier = Modifier.weight(1f)) {
+                val promptText = when (voiceState) {
+                    is VoicePortState.Listening -> "Listening for command..."
+                    is VoicePortState.Recognizing -> voiceState.partialText ?: "Processing speech..."
+                    is VoicePortState.Success -> "“${voiceState.recognizedText}”"
+                    is VoicePortState.Error -> voiceState.message
+                    else -> if (isVoiceProcessing) "Executing command..." else "Tap mic to speak"
+                }
+
+                Text(
+                    text = EventSanitizer.sanitizeText(promptText) ?: "",
+                    color = when (voiceState) {
+                        is VoicePortState.Listening -> CyanAccent
+                        is VoicePortState.Error -> RedAccent
+                        else -> Color.White.copy(alpha = 0.8f)
+                    },
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            IconButton(
+                onClick = onMicClick,
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(
-                        when (voiceState) {
-                            is VoiceInputState.Listening -> RedAccent.copy(alpha = 0.25f)
-                            is VoiceInputState.Recognizing -> AmberAccent.copy(alpha = 0.25f)
-                            else -> CyanAccent.copy(alpha = 0.15f)
-                        }
+                        if (voiceState is VoicePortState.Listening) RedAccent.copy(alpha = 0.25f)
+                        else CyanAccent.copy(alpha = 0.2f)
                     )
-                    .clickable { onMicClick() },
-                contentAlignment = Alignment.Center
+                    .semantics { contentDescription = "Activate Voice Command" }
             ) {
                 Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = "Microphone",
-                    tint = when (voiceState) {
-                        is VoiceInputState.Listening -> RedAccent
-                        is VoiceInputState.Recognizing -> AmberAccent
-                        else -> CyanAccent
-                    },
+                    imageVector = if (voiceState is VoicePortState.Listening) Icons.Default.MicOff else Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = if (voiceState is VoicePortState.Listening) RedAccent else CyanAccent,
                     modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                val label = when (voiceState) {
-                    is VoiceInputState.Listening -> "🎙 Listening for command..."
-                    is VoiceInputState.Recognizing -> "⌛ Understanding..."
-                    is VoiceInputState.Error -> "⚠ ${EventSanitizer.sanitizeText(voiceState.message)}"
-                    is VoiceInputState.Unavailable -> "Mic unavailable"
-                    else -> "Tap mic to speak to Animus"
-                }
-
-                Text(
-                    text = label,
-                    color = when (voiceState) {
-                        is VoiceInputState.Error -> RedAccent
-                        is VoiceInputState.Listening -> RedAccent
-                        is VoiceInputState.Recognizing -> AmberAccent
-                        else -> Color.White.copy(alpha = 0.85f)
-                    },
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -398,157 +435,117 @@ fun VoiceStateSection(
 }
 
 @Composable
-fun CorrelatedCommandView(
-    card: com.animus.smartroom.overlay.model.CorrelatedCommandCard
+fun CorrelatedCommandCardView(
+    card: com.animus.smartroom.overlay.model.CorrelatedCommandCard,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E222D),
-        border = BorderStroke(1.dp, Color(0x2238BDF8)),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0x330F172A),
+        border = BorderStroke(1.dp, GlassBorderColor.copy(alpha = 0.5f)),
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (!card.rawPrompt.isNullOrBlank()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "🎙 \"${EventSanitizer.sanitizeText(card.rawPrompt)}\"",
-                    color = CyanAccent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Divider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
-            }
-
-            card.subActions.forEach { sub ->
-                SubActionRow(sub = sub)
-            }
-
-            // Overall Status footer if multi-action
-            if (card.subActions.size > 1) {
-                val overallText = when (card.overallStatus) {
-                    ActionStatus.SUCCESS -> "✓ All actions completed"
-                    ActionStatus.FAILED -> "⚠ Completed with partial failure"
-                    ActionStatus.IN_PROGRESS -> "⚙ Executing actions..."
-                    else -> "✓ Finished"
-                }
-                Text(
-                    text = overallText,
-                    color = when (card.overallStatus) {
-                        ActionStatus.SUCCESS -> GreenAccent
-                        ActionStatus.FAILED -> AmberAccent
-                        else -> CyanAccent
-                    },
+                    text = "COMMAND RESULT",
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.SemiBold,
+                    color = CyanAccent,
+                    letterSpacing = 0.5.sp
                 )
+
+                val statusText = when (card.overallStatus) {
+                    ActionStatus.SUCCESS -> "VERIFIED"
+                    ActionStatus.FAILED -> "FAILED"
+                    ActionStatus.IN_PROGRESS -> "RUNNING"
+                    else -> "PENDING"
+                }
+
+                val statusColor = when (card.overallStatus) {
+                    ActionStatus.SUCCESS -> GreenAccent
+                    ActionStatus.FAILED -> RedAccent
+                    else -> AmberAccent
+                }
+
+                Text(
+                    text = statusText,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = statusColor
+                )
+            }
+
+            // Sub-Actions List
+            card.subActions.forEach { sub ->
+                SubActionRow(subAction = sub)
             }
         }
     }
 }
 
 @Composable
-fun SubActionRow(sub: SubActionItem) {
+fun SubActionRow(
+    subAction: SubActionItem,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val iconTint = when (sub.status) {
-                ActionStatus.SUCCESS -> GreenAccent
-                ActionStatus.FAILED -> RedAccent
-                ActionStatus.IN_PROGRESS -> AmberAccent
-                ActionStatus.NO_CHANGE -> CyanAccent
-                else -> Color.White.copy(alpha = 0.7f)
-            }
-
-            val icon = when (sub.status) {
-                ActionStatus.SUCCESS -> Icons.Default.CheckCircle
-                ActionStatus.FAILED -> Icons.Default.Warning
-                ActionStatus.IN_PROGRESS -> Icons.Default.HourglassEmpty
-                ActionStatus.NO_CHANGE -> Icons.Default.Info
-                else -> Icons.Default.Check
-            }
-
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(14.dp)
-            )
-
-            Text(
-                text = EventSanitizer.sanitizeText(sub.description) ?: "",
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        val (icon, color) = when (subAction.status) {
+            ActionStatus.SUCCESS -> Icons.Default.CheckCircle to GreenAccent
+            ActionStatus.FAILED -> Icons.Default.Error to RedAccent
+            ActionStatus.NO_CHANGE -> Icons.Default.CheckCircle to GreenAccent
+            else -> Icons.Default.HourglassEmpty to AmberAccent
         }
 
-        if (sub.verified) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(14.dp)
+        )
+
+        Text(
+            text = EventSanitizer.sanitizeText(subAction.description) ?: "",
+            color = Color.White,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        if (subAction.verified) {
             Text(
-                text = "Verified",
+                text = "✓ Verified",
                 color = GreenAccent,
                 fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Medium
             )
         }
     }
 }
 
 @Composable
-fun RecentActionsView(actions: List<SubActionItem>) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E222D),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = "Recent Activity",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            actions.take(3).forEach { sub ->
-                SubActionRow(sub = sub)
-            }
-        }
-    }
-}
-
-@Composable
-fun ActiveTimerView(
+fun OverlayTimerCardView(
     timer: com.animus.smartroom.overlay.model.OverlayTimerCard,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    // Local ticker that updates every second without publishing DiagnosticBus events
-    var remainingText by remember(timer) { mutableStateOf(timer.formattedRemaining()) }
-
-    LaunchedEffect(timer) {
-        while (true) {
-            delay(1000L)
-            remainingText = timer.formattedRemaining()
-        }
-    }
-
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E222D),
-        border = BorderStroke(1.dp, CyanAccent.copy(alpha = 0.3f)),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0x330F172A),
+        border = BorderStroke(1.dp, CyanAccent.copy(alpha = 0.4f)),
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
@@ -565,32 +562,41 @@ fun ActiveTimerView(
                     imageVector = Icons.Default.Timer,
                     contentDescription = null,
                     tint = CyanAccent,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
+
                 Column {
                     Text(
-                        text = "⏱ AC Timer: $remainingText",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "AC TIMER",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.7f),
+                        letterSpacing = 0.5.sp
                     )
                     Text(
-                        text = "Action: ${timer.actionType.replace("_", " ")}",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 11.sp
+                        text = timer.formattedRemaining(),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CyanAccent
                     )
                 }
             }
 
-            TextButton(
+            Button(
                 onClick = onCancel,
-                colors = ButtonDefaults.textButtonColors(contentColor = RedAccent),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                modifier = Modifier.semantics { contentDescription = "Cancel Active Timer" }
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = RedAccent.copy(alpha = 0.2f),
+                    contentColor = RedAccent
+                ),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier
+                    .height(28.dp)
+                    .semantics { contentDescription = "Cancel Active Timer" }
             ) {
                 Text(
                     text = "CANCEL",
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -599,44 +605,54 @@ fun ActiveTimerView(
 }
 
 @Composable
-fun MusicSummaryView(
-    summary: com.animus.smartroom.overlay.model.OverlayMusicSummary
+fun MusicSummaryCardView(
+    summary: com.animus.smartroom.overlay.model.OverlayMusicSummary,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E222D),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0x330F172A),
+        border = BorderStroke(1.dp, GlassBorderColor.copy(alpha = 0.4f)),
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.MusicNote,
                 contentDescription = null,
                 tint = CyanAccent,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(20.dp)
             )
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = summary.trackTitle ?: "Audio Output",
+                    text = EventSanitizer.sanitizeText(summary.trackTitle ?: "No Music") ?: "No Music",
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                val outputText = if (summary.isConnected) {
+                    "${summary.outputDeviceName ?: "Speaker"} • Connected"
+                } else if (!summary.outputDeviceName.isNullOrBlank()) {
+                    "⚠ ${summary.outputDeviceName} disconnected"
+                } else {
+                    "No speaker"
+                }
+
                 Text(
-                    text = if (summary.outputDeviceName != null) {
-                        "${summary.outputDeviceName} • ${if (summary.isConnected) "Connected" else "Disconnected"}"
-                    } else {
-                        "Output speaker ready"
-                    },
-                    color = if (summary.isConnected) GreenAccent else Color.White.copy(alpha = 0.5f),
-                    fontSize = 11.sp
+                    text = EventSanitizer.sanitizeText(outputText) ?: "",
+                    color = if (summary.isConnected) GreenAccent else AmberAccent,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

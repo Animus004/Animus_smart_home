@@ -9,15 +9,21 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
+import com.animus.smartroom.core.port.VoiceInputPort
+import com.animus.smartroom.core.port.VoicePortState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 
+/**
+ * Single authoritative SpeechRecognitionManager implementing [VoiceInputPort].
+ * Owned by AnimusApplication so both MainActivity and FloatingAnimusService share the exact same instance.
+ */
 class SpeechRecognitionManager(
     private val context: Context,
-    private val onResultDispatched: (String) -> Unit
-) {
+    private var onResultDispatched: ((String) -> Unit)? = null
+) : VoiceInputPort {
 
     companion object {
         private const val TAG = "SpeechRecognitionMgr"
@@ -26,10 +32,14 @@ class SpeechRecognitionManager(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var speechRecognizer: SpeechRecognizer? = null
 
-    private val _state = MutableStateFlow<VoiceInputState>(VoiceInputState.Idle)
-    val state: StateFlow<VoiceInputState> = _state.asStateFlow()
+    private val _state = MutableStateFlow<VoicePortState>(VoicePortState.Idle)
+    override val state: StateFlow<VoicePortState> = _state.asStateFlow()
 
-    fun isAvailable(): Boolean {
+    fun setOnResultDispatched(callback: (String) -> Unit) {
+        this.onResultDispatched = callback
+    }
+
+    override fun isAvailable(): Boolean {
         return try {
             SpeechRecognizer.isRecognitionAvailable(context)
         } catch (e: Exception) {
@@ -38,15 +48,14 @@ class SpeechRecognitionManager(
         }
     }
 
-    fun startListening() {
+    override fun startListening() {
         mainHandler.post {
             if (!isAvailable()) {
                 Log.w(TAG, "SpeechRecognizer is NOT available on this device.")
-                _state.value = VoiceInputState.Unavailable
+                _state.value = VoicePortState.Unavailable
                 return@post
             }
 
-            // Cleanup any existing instance
             cleanupRecognizer()
 
             try {
@@ -61,38 +70,38 @@ class SpeechRecognitionManager(
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 }
 
-                _state.value = VoiceInputState.Listening(rmsDb = 0f)
+                _state.value = VoicePortState.Listening(rmsDb = 0f)
                 speechRecognizer?.startListening(intent)
                 Log.i(TAG, "Started speech recognition listener.")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start speech recognition", e)
-                _state.value = VoiceInputState.Error("Failed to initialize speech recognition: ${e.localizedMessage}")
+                _state.value = VoicePortState.Error("Failed to initialize speech recognition: ${e.localizedMessage}")
             }
         }
     }
 
-    fun stopListening() {
+    override fun stopListening() {
         mainHandler.post {
             try {
                 speechRecognizer?.stopListening()
-                _state.value = VoiceInputState.Recognizing()
+                _state.value = VoicePortState.Recognizing()
             } catch (e: Exception) {
                 Log.w(TAG, "Error while stopping speech recognition", e)
             }
         }
     }
 
-    fun cancel() {
+    override fun cancel() {
         mainHandler.post {
             cleanupRecognizer()
-            _state.value = VoiceInputState.Idle
+            _state.value = VoicePortState.Idle
         }
     }
 
-    fun destroy() {
+    override fun destroy() {
         mainHandler.post {
             cleanupRecognizer()
-            _state.value = VoiceInputState.Idle
+            _state.value = VoicePortState.Idle
         }
     }
 
@@ -110,17 +119,17 @@ class SpeechRecognitionManager(
     private fun createListener(): RecognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
             Log.d(TAG, "onReadyForSpeech")
-            _state.value = VoiceInputState.Listening(rmsDb = 0f)
+            _state.value = VoicePortState.Listening(rmsDb = 0f)
         }
 
         override fun onBeginningOfSpeech() {
             Log.d(TAG, "onBeginningOfSpeech")
-            _state.value = VoiceInputState.Listening(rmsDb = 0f)
+            _state.value = VoicePortState.Listening(rmsDb = 0f)
         }
 
         override fun onRmsChanged(rmsdB: Float) {
-            if (_state.value is VoiceInputState.Listening) {
-                _state.value = VoiceInputState.Listening(rmsDb = rmsdB)
+            if (_state.value is VoicePortState.Listening) {
+                _state.value = VoicePortState.Listening(rmsDb = rmsdB)
             }
         }
 
@@ -128,20 +137,20 @@ class SpeechRecognitionManager(
 
         override fun onEndOfSpeech() {
             Log.d(TAG, "onEndOfSpeech")
-            _state.value = VoiceInputState.Recognizing()
+            _state.value = VoicePortState.Recognizing()
         }
 
         override fun onError(errorCode: Int) {
             Log.w(TAG, "Speech recognition error code: $errorCode")
             val errorState = when (errorCode) {
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoiceInputState.PermissionDenied
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoicePortState.PermissionDenied
                 SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> VoiceInputState.Error("I couldn't hear anything. Try again.")
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> VoicePortState.Error("I couldn't hear anything. Try again.")
                 SpeechRecognizer.ERROR_NETWORK,
-                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> VoiceInputState.Error("Network connection error.")
-                SpeechRecognizer.ERROR_AUDIO -> VoiceInputState.Error("Microphone audio error.")
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> VoiceInputState.Error("Microphone is currently busy.")
-                else -> VoiceInputState.Error("Speech recognition error ($errorCode).")
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> VoicePortState.Error("Network connection error.")
+                SpeechRecognizer.ERROR_AUDIO -> VoicePortState.Error("Microphone audio error.")
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> VoicePortState.Error("Microphone is currently busy.")
+                else -> VoicePortState.Error("Speech recognition error ($errorCode).")
             }
             _state.value = errorState
             cleanupRecognizer()
@@ -153,11 +162,11 @@ class SpeechRecognitionManager(
 
             if (!recognized.isNullOrBlank()) {
                 Log.i(TAG, "Speech recognized successfully: '$recognized'")
-                _state.value = VoiceInputState.Success(recognized)
-                onResultDispatched(recognized)
+                _state.value = VoicePortState.Success(recognized)
+                onResultDispatched?.invoke(recognized)
             } else {
                 Log.w(TAG, "Speech results were empty.")
-                _state.value = VoiceInputState.Error("I couldn't hear anything. Try again.")
+                _state.value = VoicePortState.Error("I couldn't hear anything. Try again.")
             }
             cleanupRecognizer()
         }
@@ -167,7 +176,7 @@ class SpeechRecognitionManager(
             val partial = matches?.firstOrNull()?.trim()
             if (!partial.isNullOrBlank()) {
                 Log.d(TAG, "Partial speech: '$partial'")
-                _state.value = VoiceInputState.Recognizing(partialText = partial)
+                _state.value = VoicePortState.Recognizing(partialText = partial)
             }
         }
 

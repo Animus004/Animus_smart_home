@@ -35,6 +35,9 @@ import com.animus.smartroom.brain.provider.LocalAnimusBrain
 import com.animus.smartroom.command.router.CommandRouter
 import com.animus.smartroom.media.resolver.MusicResolutionCache
 import com.animus.smartroom.media.resolver.YouTubeMusicResolver
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class AnimusApplication : Application() {
 
@@ -90,6 +93,9 @@ class AnimusApplication : Application() {
         private set
 
     lateinit var commandRouter: CommandRouter
+        private set
+
+    lateinit var voiceInputPort: com.animus.smartroom.core.port.VoiceInputPort
         private set
 
     override fun onCreate() {
@@ -214,6 +220,13 @@ class AnimusApplication : Application() {
         overlayPermissionPort = AndroidOverlayPermissionPort(this)
 
         animusRuntime = AnimusRuntimeImpl()
+
+        voiceInputPort = com.animus.smartroom.voice.SpeechRecognitionManager(this) { spokenText ->
+            Log.i(TAG, "[voice] Global voice input recognized: '$spokenText'")
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                runtimeControlPort.submitCommand(spokenText)
+            }
+        }
 
         // Create notification channel early so service can use it immediately
         AndroidNotificationAdapter.createNotificationChannel(this)

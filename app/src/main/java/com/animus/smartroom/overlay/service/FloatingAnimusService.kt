@@ -26,34 +26,60 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.animus.smartroom.AnimusApplication
 import com.animus.smartroom.MainActivity
+import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.core.diagnostics.model.ActionStage
 import com.animus.smartroom.core.diagnostics.model.ActionStatus
 import com.animus.smartroom.core.diagnostics.model.AnimusActionEvent
+import com.animus.smartroom.core.overlay.OverlayEventAction
+import com.animus.smartroom.core.overlay.OverlayEventPolicy
+import com.animus.smartroom.core.port.VoicePortState
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.diagnostics.DiagnosticBus
-import com.animus.smartroom.overlay.model.*
+import com.animus.smartroom.overlay.model.CorrelatedCommandCard
+import com.animus.smartroom.overlay.model.FloatingOverlayState
+import com.animus.smartroom.overlay.model.FloatingOverlayVisibility
+import com.animus.smartroom.overlay.model.OverlayMusicSummary
+import com.animus.smartroom.overlay.model.OverlayTimerCard
+import com.animus.smartroom.overlay.model.SubActionItem
 import com.animus.smartroom.overlay.storage.OverlayPositionStorage
 import com.animus.smartroom.overlay.ui.FloatingControlSurface
-import com.animus.smartroom.scheduler.model.DeviceActionType
 import com.animus.smartroom.scheduler.model.ScheduledActionStatus
-import com.animus.smartroom.voice.SpeechRecognitionManager
-import com.animus.smartroom.voice.VoiceInputState
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
- * Foreground / Overlay Service responsible for displaying the Animus Floating Control Surface.
- * Uses WindowManager TYPE_APPLICATION_OVERLAY and ComposeView.
- * It is strictly a client of AnimusRuntime, DiagnosticBus 2.0, and RuntimeControlPort.
+ * Floating overlay service that hosts [FloatingControlSurface] in the WindowManager.
+ *
+ * Implements:
+ * 1. Explicit visibility state machine: HIDDEN, COLLAPSED, EXPANDED, MUSIC_PERSISTENT, LISTENING.
+ * 2. Auto-collapse after 8s of inactivity, auto-hide after 45s of inactivity (unless in MUSIC_PERSISTENT or active timer).
+ * 3. Event-driven wakeup via [OverlayEventPolicy].
+ * 4. Music persistent companion mode for YouTube Music foreground execution.
+ * 5. Uses shared application [AnimusApplication.voiceInputPort] for background speech recognition.
  */
 class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     companion object {
         private const val TAG = "FloatingAnimusService"
-        const val ACTION_START = "com.animus.smartroom.ACTION_START_FLOATING_OVERLAY"
-        const val ACTION_STOP = "com.animus.smartroom.ACTION_STOP_FLOATING_OVERLAY"
 
+        const val ACTION_START = "com.animus.smartroom.action.START_FLOATING_OVERLAY"
+        const val ACTION_STOP = "com.animus.smartroom.action.STOP_FLOATING_OVERLAY"
+
+        const val AUTO_COLLAPSE_DELAY_MS = 8_000L
+        const val AUTO_HIDE_DELAY_MS = 45_000L
+
+        @Volatile
         var isRunning: Boolean = false
             private set
 
@@ -77,10 +103,12 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
     private var layoutParams: WindowManager.LayoutParams? = null
 
     private lateinit var positionStorage: OverlayPositionStorage
-    private var speechRecognitionManager: SpeechRecognitionManager? = null
 
     private val _overlayState = MutableStateFlow(FloatingOverlayState())
     val overlayState: StateFlow<FloatingOverlayState> = _overlayState.asStateFlow()
+
+    private var autoCollapseJob: Job? = null
+    private var autoHideJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -94,28 +122,43 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         positionStorage = OverlayPositionStorage(this)
 
-        initSpeechRecognizer()
+        initVoiceObserver()
         initOverlayWindow()
         observeEventStreams()
+        startInactivityTimers()
     }
 
-    private fun initSpeechRecognizer() {
-        speechRecognitionManager = SpeechRecognitionManager(this) { spokenText ->
-            Log.i(TAG, "[overlay] Voice input recognized: '$spokenText'")
-            val app = application as? AnimusApplication
-            app?.let {
-                serviceScope.launch {
-                    _overlayState.update { it.copy(isVoiceProcessing = true) }
-                    it.runtimeControlPort.submitCommand(spokenText)
-                    _overlayState.update { it.copy(isVoiceProcessing = false) }
-                }
-            }
-        }
-
-        // Observe voice states
+    private fun initVoiceObserver() {
+        val app = application as? AnimusApplication ?: return
         serviceScope.launch {
-            speechRecognitionManager?.state?.collectLatest { voiceState ->
-                _overlayState.update { it.copy(voiceState = voiceState) }
+            app.voiceInputPort.state.collectLatest { voiceState ->
+                _overlayState.update { current ->
+                    val newVisibility = when (voiceState) {
+                        is VoicePortState.Listening,
+                        is VoicePortState.Recognizing -> FloatingOverlayVisibility.LISTENING
+                        is VoicePortState.Success -> FloatingOverlayVisibility.EXPANDED
+                        is VoicePortState.Error -> {
+                            if (current.isMusicPersistent) FloatingOverlayVisibility.MUSIC_PERSISTENT
+                            else FloatingOverlayVisibility.COLLAPSED
+                        }
+                        is VoicePortState.Idle -> {
+                            if (current.visibility == FloatingOverlayVisibility.LISTENING) {
+                                if (current.isMusicPersistent) FloatingOverlayVisibility.MUSIC_PERSISTENT
+                                else FloatingOverlayVisibility.COLLAPSED
+                            } else {
+                                current.visibility
+                            }
+                        }
+                        else -> current.visibility
+                    }
+
+                    current.copy(
+                        voiceState = voiceState,
+                        visibility = newVisibility,
+                        lastMeaningfulEventTimestamp = System.currentTimeMillis()
+                    )
+                }
+                resetInactivityTimers()
             }
         }
     }
@@ -170,7 +213,6 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
             }
         }
 
-        // Add Drag and Touch listener to container
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
@@ -228,7 +270,7 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
     private fun observeEventStreams() {
         val app = application as? AnimusApplication ?: return
 
-        // 1. Observe DiagnosticBus.actionEvents for live command and recent action updates
+        // 1. Observe DiagnosticBus.actionEvents
         serviceScope.launch {
             DiagnosticBus.actionEvents.collectLatest { events ->
                 processActionEvents(events)
@@ -248,23 +290,62 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
                         actionId = it.id,
                         deviceType = it.targetDeviceType,
                         actionType = it.actionType.name,
-                        targetTimestamp = it.scheduledExecutionTimeMillis
+                        targetTimestamp = it.scheduledExecutionTimeMillis,
+                        formattedTargetTime = ""
                     )
                 }
+
                 _overlayState.update { it.copy(activeTimer = timerCard) }
+                if (timerCard != null && _overlayState.value.visibility == FloatingOverlayVisibility.HIDDEN) {
+                    _overlayState.update { it.copy(visibility = FloatingOverlayVisibility.COLLAPSED) }
+                }
             }
         }
 
-        // 3. Observe MusicController state
+        // 3. Observe MusicUiState for persistent music mode
         serviceScope.launch {
             app.musicController.uiState.collectLatest { musicUi ->
+                val isPlaying = musicUi.playbackStatus == com.animus.smartroom.media.model.PlaybackStatus.PLAYING
                 val summary = OverlayMusicSummary(
                     trackTitle = musicUi.currentTrackTitle,
                     outputDeviceName = musicUi.activeOutputDeviceName,
                     isConnected = musicUi.isOutputConnected,
-                    isPlaying = musicUi.playbackStatus == com.animus.smartroom.media.model.PlaybackStatus.PLAYING
+                    isPlaying = isPlaying
                 )
-                _overlayState.update { it.copy(musicSummary = summary) }
+
+                _overlayState.update { current ->
+                    val newVisibility = when {
+                        isPlaying && current.visibility == FloatingOverlayVisibility.HIDDEN -> FloatingOverlayVisibility.MUSIC_PERSISTENT
+                        isPlaying && current.visibility == FloatingOverlayVisibility.COLLAPSED -> FloatingOverlayVisibility.MUSIC_PERSISTENT
+                        !isPlaying && current.visibility == FloatingOverlayVisibility.MUSIC_PERSISTENT -> FloatingOverlayVisibility.COLLAPSED
+                        else -> current.visibility
+                    }
+
+                    current.copy(
+                        musicSummary = summary,
+                        visibility = newVisibility,
+                        lastMeaningfulEventTimestamp = System.currentTimeMillis()
+                    )
+                }
+                resetInactivityTimers()
+            }
+        }
+
+        // 4. Observe Bluetooth connection state
+        serviceScope.launch {
+            app.bluetoothController.uiState.collectLatest { btUi ->
+                val isConnected = btUi.connectionState is BluetoothDeviceState.Connected
+                val devName = btUi.selectedDevice?.displayName
+                    ?: if (isConnected) (btUi.connectionState as BluetoothDeviceState.Connected).deviceName else null
+
+                _overlayState.update { current ->
+                    current.copy(
+                        musicSummary = current.musicSummary.copy(
+                            outputDeviceName = devName ?: current.musicSummary.outputDeviceName,
+                            isConnected = isConnected
+                        )
+                    )
+                }
             }
         }
     }
@@ -272,31 +353,38 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
     private fun processActionEvents(events: List<AnimusActionEvent>) {
         if (events.isEmpty()) return
 
-        // Find most recent correlation group
         val latestEvent = events.last()
-        val corrId = latestEvent.correlationId
+        val isMusicPlaying = _overlayState.value.musicSummary.isPlaying
+        val eventAction = OverlayEventPolicy.evaluate(latestEvent, isMusicPlaying)
 
-        val correlatedGroup = if (!corrId.isNullOrBlank()) {
+        if (eventAction == OverlayEventAction.IGNORE) return
+
+        // Multi-command grouping by correlation ID
+        val corrId = latestEvent.correlationId
+        val relatedEvents = if (corrId != null) {
             events.filter { it.correlationId == corrId }
         } else {
             listOf(latestEvent)
         }
 
-        val subActions = correlatedGroup.map { evt ->
-            val description = formatEventDescription(evt)
-            val isVerified = evt.metadata["verified"] == "true" || evt.stage == ActionStage.COMPLETED
-            SubActionItem(
-                id = evt.id,
-                deviceType = evt.targetDevice,
-                action = evt.action,
-                description = description,
-                status = evt.status,
-                verified = isVerified
-            )
+        val subActions = relatedEvents
+            .distinctBy { "${it.targetDevice}_${it.action}" }
+            .map { evt ->
+                SubActionItem(
+                    id = evt.id,
+                    deviceType = evt.targetDevice,
+                    action = evt.action,
+                    description = formatEventDescription(evt),
+                    status = evt.status,
+                    verified = evt.metadata["verified"] == "true"
+                )
+            }
+
+        val hasFailure = subActions.any { it.status == ActionStatus.FAILED }
+        val allCompleted = subActions.all {
+            it.status == ActionStatus.SUCCESS || it.status == ActionStatus.NO_CHANGE || it.status == ActionStatus.FAILED
         }
 
-        val hasFailure = correlatedGroup.any { it.status == ActionStatus.FAILED }
-        val allCompleted = correlatedGroup.all { it.stage == ActionStage.COMPLETED || it.stage == ActionStage.FAILED }
         val overallStatus = when {
             hasFailure -> ActionStatus.FAILED
             allCompleted -> ActionStatus.SUCCESS
@@ -311,7 +399,6 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
             timestamp = latestEvent.timestamp
         )
 
-        // Recent completed actions (last 4 terminal events)
         val completed = events.filter { it.stage == ActionStage.COMPLETED || it.stage == ActionStage.FAILED }
             .takeLast(4)
             .map { evt ->
@@ -325,11 +412,66 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 )
             }
 
-        _overlayState.update {
-            it.copy(
+        _overlayState.update { current ->
+            val targetVisibility = when (eventAction) {
+                OverlayEventAction.SURFACE_IMMEDIATELY,
+                OverlayEventAction.SURFACE_TIMER_COMPLETION -> FloatingOverlayVisibility.EXPANDED
+                OverlayEventAction.SURFACE_MUSIC_PERSISTENT -> FloatingOverlayVisibility.MUSIC_PERSISTENT
+                OverlayEventAction.SHOW_ONLY_IF_VISIBLE -> current.visibility
+                OverlayEventAction.IGNORE -> current.visibility
+            }
+
+            current.copy(
                 activeCommandCard = commandCard,
-                recentCompletedActions = completed
+                recentCompletedActions = completed,
+                visibility = if (current.visibility == FloatingOverlayVisibility.HIDDEN && eventAction != OverlayEventAction.SHOW_ONLY_IF_VISIBLE)
+                    targetVisibility else current.visibility,
+                isExpanded = (targetVisibility == FloatingOverlayVisibility.EXPANDED),
+                lastMeaningfulEventTimestamp = System.currentTimeMillis()
             )
+        }
+
+        resetInactivityTimers()
+    }
+
+    private fun startInactivityTimers() {
+        resetInactivityTimers()
+    }
+
+    private fun resetInactivityTimers() {
+        autoCollapseJob?.cancel()
+        autoHideJob?.cancel()
+
+        // 1. Auto-collapse after 8s if in EXPANDED state
+        autoCollapseJob = serviceScope.launch {
+            delay(AUTO_COLLAPSE_DELAY_MS)
+            _overlayState.update { current ->
+                if (current.visibility == FloatingOverlayVisibility.EXPANDED || current.isExpanded) {
+                    val nextVis = if (current.musicSummary.isPlaying)
+                        FloatingOverlayVisibility.MUSIC_PERSISTENT
+                    else
+                        FloatingOverlayVisibility.COLLAPSED
+                    current.copy(visibility = nextVis, isExpanded = false)
+                } else {
+                    current
+                }
+            }
+        }
+
+        // 2. Auto-hide after 45s of total inactivity (unless in MUSIC_PERSISTENT or active timer)
+        autoHideJob = serviceScope.launch {
+            delay(AUTO_HIDE_DELAY_MS)
+            _overlayState.update { current ->
+                val canHide = !current.musicSummary.isPlaying &&
+                        current.activeTimer == null &&
+                        current.voiceState is VoicePortState.Idle
+
+                if (canHide && current.visibility != FloatingOverlayVisibility.HIDDEN) {
+                    current.copy(visibility = FloatingOverlayVisibility.HIDDEN, isExpanded = false)
+                } else {
+                    current
+                }
+            }
         }
     }
 
@@ -354,16 +496,27 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
     }
 
     private fun toggleExpand() {
-        _overlayState.update { it.copy(isExpanded = !it.isExpanded) }
+        _overlayState.update { current ->
+            val nextExpanded = !current.isExpanded
+            val nextVis = if (nextExpanded) FloatingOverlayVisibility.EXPANDED
+            else if (current.musicSummary.isPlaying) FloatingOverlayVisibility.MUSIC_PERSISTENT
+            else FloatingOverlayVisibility.COLLAPSED
+
+            current.copy(isExpanded = nextExpanded, visibility = nextVis)
+        }
+        resetInactivityTimers()
     }
 
     private fun handleMicClick() {
+        val app = application as? AnimusApplication ?: return
         val currentVoiceState = _overlayState.value.voiceState
-        if (currentVoiceState is VoiceInputState.Listening) {
-            speechRecognitionManager?.stopListening()
+        if (currentVoiceState is VoicePortState.Listening) {
+            app.voiceInputPort.stopListening()
         } else {
-            speechRecognitionManager?.startListening()
+            _overlayState.update { it.copy(visibility = FloatingOverlayVisibility.LISTENING) }
+            app.voiceInputPort.startListening()
         }
+        resetInactivityTimers()
     }
 
     private fun cancelScheduledTimer(actionId: String) {
@@ -371,6 +524,7 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
         serviceScope.launch {
             app.runtimeControlPort.cancelAction(actionId)
         }
+        resetInactivityTimers()
     }
 
     private fun openMainActivity() {
@@ -378,7 +532,6 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         startActivity(intent)
-        // Collapse overlay when navigating to main activity
         _overlayState.update { it.copy(isExpanded = false) }
     }
 
@@ -391,6 +544,8 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
             }
             else -> {
                 Log.i(TAG, "[overlay] Floating service running")
+                _overlayState.update { it.copy(visibility = FloatingOverlayVisibility.COLLAPSED) }
+                resetInactivityTimers()
             }
         }
         return START_STICKY
@@ -403,9 +558,6 @@ class FloatingAnimusService : Service(), LifecycleOwner, SavedStateRegistryOwner
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
-
-        speechRecognitionManager?.destroy()
-        speechRecognitionManager = null
 
         overlayView?.let { view ->
             try {

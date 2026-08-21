@@ -2,8 +2,19 @@ package com.animus.smartroom.overlay.model
 
 import com.animus.smartroom.core.diagnostics.model.ActionStatus
 import com.animus.smartroom.core.diagnostics.model.AnimusActionEvent
+import com.animus.smartroom.core.port.VoicePortState
 import com.animus.smartroom.device.model.DeviceType
-import com.animus.smartroom.voice.VoiceInputState
+
+/**
+ * Visibility state machine for the floating control surface.
+ */
+enum class FloatingOverlayVisibility {
+    HIDDEN,
+    COLLAPSED,
+    EXPANDED,
+    MUSIC_PERSISTENT,
+    LISTENING
+}
 
 /**
  * Represents a single sub-action in a command card.
@@ -69,12 +80,18 @@ data class OverlayMusicSummary(
  * Immutable state model for the floating control surface.
  */
 data class FloatingOverlayState(
+    val visibility: FloatingOverlayVisibility = FloatingOverlayVisibility.COLLAPSED,
     val isExpanded: Boolean = false,
-    val voiceState: VoiceInputState = VoiceInputState.Idle,
+    val voiceState: VoicePortState = VoicePortState.Idle,
     val activeCommandCard: CorrelatedCommandCard? = null,
     val recentCompletedActions: List<SubActionItem> = emptyList(),
     val activeTimer: OverlayTimerCard? = null,
     val musicSummary: OverlayMusicSummary = OverlayMusicSummary(),
     val isVoiceProcessing: Boolean = false,
-    val lastStatusMessage: String? = null
-)
+    val lastStatusMessage: String? = null,
+    val lastMeaningfulEventTimestamp: Long = System.currentTimeMillis()
+) {
+    val isMusicPersistent: Boolean
+        get() = visibility == FloatingOverlayVisibility.MUSIC_PERSISTENT ||
+                (musicSummary.isPlaying && visibility != FloatingOverlayVisibility.HIDDEN)
+}
