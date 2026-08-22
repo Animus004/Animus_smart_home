@@ -12,7 +12,9 @@ import com.animus.smartroom.command.parser.CommandParser
 import com.animus.smartroom.command.parser.LocalCommandParser
 
 class LocalAnimusBrain(
-    private val localParser: CommandParser = LocalCommandParser()
+    private val localBrainProvider: LocalBrainProvider? = null,
+    private val localParser: CommandParser = LocalCommandParser(),
+    private val voiceOutputPort: com.animus.smartroom.core.port.VoiceOutputPort? = null
 ) : AnimusBrain {
 
     companion object {
@@ -27,7 +29,89 @@ class LocalAnimusBrain(
             return BrainResult.Success(AnimusCommand.UnknownCommand(input))
         }
 
-        Log.d(TAG, "[local-brain] Interpreting: '$trimmed'")
+        Log.i(TAG, "LOCAL_LLM_DEBUG: [local-brain] Interpreting: '$trimmed'")
+
+        // 1. If LocalBrainProvider is configured, route to LocalBrainProvider (Ollama local LLM with readiness gating)
+        if (localBrainProvider != null) {
+            try {
+                Log.i(TAG, "LOCAL_LLM_DEBUG: Calling LocalBrainProvider.understand for '$trimmed'")
+                val response = localBrainProvider.understand(trimmed, com.animus.smartroom.core.brain.model.BrainContext())
+                Log.i(TAG, "LOCAL_LLM_DEBUG: LocalBrainProvider response: $response")
+
+                when (response) {
+                    is com.animus.smartroom.core.brain.model.BrainResponse.Command -> {
+                        val spoken = response.spokenResponse
+                        if (!spoken.isNullOrBlank()) {
+                            voiceOutputPort?.speak(spoken)
+                        }
+
+                        // Map brain actions to AnimusCommand
+                        val commands = response.actions.mapNotNull { action ->
+                            when (action) {
+                                is com.animus.smartroom.core.brain.model.BrainAction.DeviceCommand -> {
+                                    val cap = com.animus.smartroom.device.model.DeviceCapability.fromString(action.capability)
+                                        ?: com.animus.smartroom.device.model.DeviceCapability.Power
+                                    AnimusCommand.SetDeviceCapability(
+                                        target = action.target,
+                                        capability = cap,
+                                        value = action.value
+                                    )
+                                }
+                                is com.animus.smartroom.core.brain.model.BrainAction.PlayMusic -> {
+                                    AnimusCommand.PlayMusic(title = action.title, artist = action.artist)
+                                }
+                                is com.animus.smartroom.core.brain.model.BrainAction.MusicControl -> {
+                                    when (action.action) {
+                                        com.animus.smartroom.core.brain.model.MusicActionType.PAUSE -> AnimusCommand.PauseMusic
+                                        com.animus.smartroom.core.brain.model.MusicActionType.RESUME -> AnimusCommand.ResumeMusic
+                                        com.animus.smartroom.core.brain.model.MusicActionType.NEXT -> AnimusCommand.NextTrack
+                                        com.animus.smartroom.core.brain.model.MusicActionType.PREVIOUS -> AnimusCommand.PreviousTrack
+                                    }
+                                }
+                                is com.animus.smartroom.core.brain.model.BrainAction.SetVolume -> {
+                                    AnimusCommand.SetVolume(percentage = action.percentage)
+                                }
+                                is com.animus.smartroom.core.brain.model.BrainAction.ScheduleAction -> {
+                                    AnimusCommand.ScheduleDeviceAction(
+                                        target = action.target,
+                                        action = action.action,
+                                        delayMinutes = action.delayMinutes,
+                                        scheduledTime = action.scheduledTime,
+                                        recurrence = action.recurrence,
+                                        parameters = action.parameters
+                                    )
+                                }
+                                is com.animus.smartroom.core.brain.model.BrainAction.CancelScheduledAction -> {
+                                    AnimusCommand.CancelScheduledAction(
+                                        target = action.target,
+                                        actionType = action.actionType
+                                    )
+                                }
+                                else -> null
+                            }
+                        }
+
+                        if (commands.isNotEmpty()) {
+                            return BrainResult.Success(commands)
+                        }
+                    }
+                    is com.animus.smartroom.core.brain.model.BrainResponse.Conversation -> {
+                        voiceOutputPort?.speak(response.spokenResponse)
+                        return BrainResult.Success(AnimusCommand.UnknownCommand(trimmed))
+                    }
+                    is com.animus.smartroom.core.brain.model.BrainResponse.Clarification -> {
+                        voiceOutputPort?.speak(response.question)
+                        return BrainResult.Success(AnimusCommand.UnknownCommand(trimmed))
+                    }
+                    is com.animus.smartroom.core.brain.model.BrainResponse.Failure -> {
+                        voiceOutputPort?.speak(response.reason)
+                        return BrainResult.Failure(response.reason)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "LOCAL_LLM_DEBUG: LocalBrainProvider inference failed, falling back to rule parser", e)
+            }
+        }
 
         return try {
             val parsedCommand = localParser.parse(trimmed)

@@ -1,7 +1,7 @@
 package com.animus.smartroom.core.port
 
 /**
- * In-memory test implementation of [PersistentStore].
+ * In-memory test implementation of [PersistentStore] for app module tests.
  */
 class FakePersistentStore : PersistentStore {
 

@@ -21,7 +21,12 @@ class BootReceiver : BroadcastReceiver() {
             action == "android.intent.action.QUICKBOOT_POWERON"
         ) {
             Log.i(TAG, "[boot] Restoring pending scheduled device actions...")
-            val engine = DeviceSchedulerEngine(context)
+            val engine = (context.applicationContext as? com.animus.smartroom.AnimusApplication)?.deviceSchedulerEngine
+                ?: DeviceSchedulerEngine(
+                    storage = com.animus.smartroom.scheduler.storage.ScheduledActionStorage(com.animus.smartroom.core.port.AndroidPersistentStore(context, com.animus.smartroom.scheduler.storage.ScheduledActionStorage.PREFS_NAME)),
+                    clock = com.animus.smartroom.core.port.AndroidClock(),
+                    platformScheduler = com.animus.smartroom.core.port.AndroidAlarmManagerScheduler(context)
+                )
             engine.restorePersistedActions()
         }
     }

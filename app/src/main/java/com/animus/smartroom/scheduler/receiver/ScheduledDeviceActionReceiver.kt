@@ -71,7 +71,8 @@ class ScheduledDeviceActionReceiver : BroadcastReceiver() {
     }
 
     private suspend fun executeScheduledDeviceAction(appContext: Context, actionId: String) {
-        val storage = ScheduledActionStorage(appContext)
+        val storage = (appContext.applicationContext as? AnimusApplication)?.scheduledActionStorage
+            ?: ScheduledActionStorage(com.animus.smartroom.core.port.AndroidPersistentStore(appContext, ScheduledActionStorage.PREFS_NAME))
         val action = storage.getAction(actionId)
 
         if (action == null) {
@@ -225,12 +226,17 @@ class ScheduledDeviceActionReceiver : BroadcastReceiver() {
         if (recurrence.frequency.equals("DAILY", ignoreCase = true)) {
             val nextTime = action.scheduledExecutionTimeMillis + (24 * 60 * 60 * 1000L)
             Log.i(TAG, "[recurrence] Re-scheduling daily action ${action.id} for next occurrence at $nextTime")
-            val engine = DeviceSchedulerEngine(context)
+            val engine = (context.applicationContext as? com.animus.smartroom.AnimusApplication)?.deviceSchedulerEngine
+                ?: DeviceSchedulerEngine(
+                    storage = com.animus.smartroom.scheduler.storage.ScheduledActionStorage(com.animus.smartroom.core.port.AndroidPersistentStore(context, com.animus.smartroom.scheduler.storage.ScheduledActionStorage.PREFS_NAME)),
+                    clock = com.animus.smartroom.core.port.AndroidClock(),
+                    platformScheduler = com.animus.smartroom.core.port.AndroidAlarmManagerScheduler(context)
+                )
             engine.scheduleAction(
                 targetDeviceType = action.targetDeviceType,
                 actionType = action.actionType,
                 parameters = action.parameters,
-                recurrence = recurrence.frequency,
+                recurrence = recurrence,
                 explicitTimeMillis = nextTime
             )
         }

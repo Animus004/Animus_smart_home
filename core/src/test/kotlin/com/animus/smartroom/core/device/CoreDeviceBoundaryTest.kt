@@ -6,7 +6,7 @@ import com.animus.smartroom.device.model.DeviceCapability
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.device.model.RoomDevice
 import com.animus.smartroom.device.registry.DeviceLookupResult
-import com.animus.smartroom.device.registry.DeviceRegistry
+import com.animus.smartroom.device.registry.CoreDeviceRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,7 +19,7 @@ class CoreDeviceBoundaryTest {
     private lateinit var transport: FakeDeviceTransport
     private lateinit var acAdapter: FakeAirConditionerAdapter
     private lateinit var audioAdapter: FakeAudioOutputAdapter
-    private lateinit var registry: DeviceRegistry
+    private lateinit var registry: CoreDeviceRegistry
 
     private val acDevice = RoomDevice(
         id = "ac_test_123",
@@ -48,7 +48,7 @@ class CoreDeviceBoundaryTest {
         transport = FakeDeviceTransport()
         acAdapter = FakeAirConditionerAdapter(transport)
         audioAdapter = FakeAudioOutputAdapter()
-        registry = DeviceRegistry()
+        registry = CoreDeviceRegistry()
 
         registry.registerDevice(acDevice)
         registry.registerDevice(speakerDevice)
@@ -130,7 +130,7 @@ class CoreDeviceBoundaryTest {
     }
 
     @Test
-    fun `DeviceRegistry lookups and command execution`() = runBlocking {
+    fun `CoreDeviceRegistry lookups and command execution`() = runBlocking {
         val lookup = registry.findDeviceByQuery("bedroom ac")
         assertTrue(lookup is DeviceLookupResult.Match)
         assertEquals(acDevice.id, (lookup as DeviceLookupResult.Match).device.id)

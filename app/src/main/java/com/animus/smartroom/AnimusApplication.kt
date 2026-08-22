@@ -173,10 +173,12 @@ class AnimusApplication : Application() {
             musicResolver = null
         )
 
-        scheduledActionStorage = ScheduledActionStorage(this)
+        val scheduledActionStore = com.animus.smartroom.core.port.AndroidPersistentStore(this, ScheduledActionStorage.PREFS_NAME)
+        scheduledActionStorage = ScheduledActionStorage(scheduledActionStore)
         deviceSchedulerEngine = DeviceSchedulerEngine(
-            context = this,
-            storage = scheduledActionStorage
+            storage = scheduledActionStorage,
+            clock = com.animus.smartroom.core.port.AndroidClock(),
+            platformScheduler = com.animus.smartroom.core.port.AndroidAlarmManagerScheduler(this)
         )
 
         memoryStore = com.animus.smartroom.core.memory.store.AndroidMemoryStore(
@@ -184,8 +186,18 @@ class AnimusApplication : Application() {
         )
 
         val apiKeyStorage = GeminiApiKeyStorage(this)
+        val localBrainConfigStorage = com.animus.smartroom.brain.provider.LocalBrainConfigStorage(this)
+        val localInferenceClient = com.animus.smartroom.brain.provider.LocalInferenceClient { localBrainConfigStorage.getConfig() }
+        val localInferencePort = com.animus.smartroom.brain.provider.AndroidLocalInferencePort(localInferenceClient)
+        // Automatically start real warmup in background on IO dispatcher
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            localInferencePort.warmUp()
+        }
+        val localBrainProvider = com.animus.smartroom.brain.provider.LocalBrainProvider(inferencePort = localInferencePort)
+
+        val voiceOutput = com.animus.smartroom.voice.AndroidVoiceOutputAdapter(this)
         val geminiApiClient = GeminiApiClient()
-        val localBrain = LocalAnimusBrain()
+        val localBrain = LocalAnimusBrain(localBrainProvider = localBrainProvider, voiceOutputPort = voiceOutput)
         val cloudBrain = CloudAnimusBrain(
             apiKeyProvider = { apiKeyStorage.getApiKey() },
             apiClient = geminiApiClient

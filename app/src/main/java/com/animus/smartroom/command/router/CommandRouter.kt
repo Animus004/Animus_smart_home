@@ -609,8 +609,8 @@ class CommandRouter(
                         targetDeviceType = targetType,
                         actionType = actionType,
                         delayMinutes = command.delayMinutes,
-                        scheduledTime = command.scheduledTime,
-                        recurrence = command.recurrence,
+                        scheduledTimeStr = command.scheduledTime,
+                        recurrence = com.animus.smartroom.scheduler.model.RecurrenceRule.fromString(command.recurrence),
                         parameters = command.parameters
                     )) {
                         is com.animus.smartroom.scheduler.ActionScheduleResult.Success -> {

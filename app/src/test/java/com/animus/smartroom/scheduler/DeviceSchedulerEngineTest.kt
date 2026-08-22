@@ -23,9 +23,9 @@ class DeviceSchedulerEngineTest {
 
     @Before
     fun setUp() {
-        storage = ScheduledActionStorage(null)
+        storage = ScheduledActionStorage(com.animus.smartroom.core.port.FakePersistentStore())
         storage.clear()
-        engine = DeviceSchedulerEngine(null, storage)
+        engine = DeviceSchedulerEngine(storage = storage, clock = com.animus.smartroom.core.port.AndroidClock())
     }
 
     // 1. Relative Delay Parsing Tests

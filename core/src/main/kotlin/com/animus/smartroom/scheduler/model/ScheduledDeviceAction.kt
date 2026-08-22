@@ -49,6 +49,11 @@ data class RecurrenceRule(
                 timeOfDay = json.optString("timeOfDay", "").ifBlank { null }
             )
         }
+
+        fun fromString(str: String?): RecurrenceRule? {
+            if (str.isNullOrBlank()) return null
+            return RecurrenceRule(frequency = str)
+        }
     }
 }
 

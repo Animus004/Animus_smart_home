@@ -52,7 +52,11 @@ class MusicResolutionCache(
 
         fun create(context: Context, maxEntries: Int = 100): MusicResolutionCache {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            return MusicResolutionCache(prefs, maxEntries)
+            return MusicResolutionCache(prefs, maxEntries).apply {
+                putSeedTrack("zara zara", "Bombay Jayashri", "IWjbBSMsQJg", "Bombay Jayashri - Topic")
+                putSeedTrack("zara z", null, "IWjbBSMsQJg", "Bombay Jayashri - Topic")
+                putSeedTrack("zara", null, "IWjbBSMsQJg", "Bombay Jayashri - Topic")
+            }
         }
 
         fun normalizeKey(title: String, artist: String?): String {
@@ -75,6 +79,11 @@ class MusicResolutionCache(
 
     init {
         loadFromPrefs()
+    }
+
+    fun putSeedTrack(title: String, artist: String?, videoId: String, channelTitle: String?) {
+        val key = normalizeKey(title, artist)
+        memoryMap[key] = CachedTrack(videoId, title, artist, channelTitle)
     }
 
     @Synchronized

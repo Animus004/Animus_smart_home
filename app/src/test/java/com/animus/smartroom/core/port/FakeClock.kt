@@ -1,7 +1,7 @@
 package com.animus.smartroom.core.port
 
 /**
- * Deterministic test implementation of [Clock].
+ * Deterministic test implementation of [Clock] for app module tests.
  */
 class FakeClock(
     private var currentTime: Long = 0L,

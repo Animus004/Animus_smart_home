@@ -24,7 +24,9 @@ class YouTubeMusicProvider(
         // Production mapping for proven direct-playable presets
         const val ZARA_ZARA_VIDEO_ID = "IWjbBSMsQJg"
         private val DIRECT_TRACK_CATALOG = mapOf(
-            "zara zara" to ZARA_ZARA_VIDEO_ID
+            "zara zara" to ZARA_ZARA_VIDEO_ID,
+            "zara z" to ZARA_ZARA_VIDEO_ID,
+            "zara" to ZARA_ZARA_VIDEO_ID
         )
     }
 

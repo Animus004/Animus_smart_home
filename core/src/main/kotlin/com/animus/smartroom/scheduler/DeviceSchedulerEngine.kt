@@ -117,7 +117,8 @@ open class DeviceSchedulerEngine(
         delayMinutes: Int? = null,
         scheduledTimeStr: String? = null,
         parameters: Map<String, Any> = emptyMap(),
-        recurrence: RecurrenceRule? = null
+        recurrence: RecurrenceRule? = null,
+        explicitTimeMillis: Long? = null
     ): ActionScheduleResult {
         DiagnosticBus.log(
             tag = "scheduler",
@@ -127,7 +128,7 @@ open class DeviceSchedulerEngine(
 
         val currentTime = clock.currentTimeMillis()
         val tzId = clock.timeZoneId()
-        val executionTime = parseExecutionTime(
+        val executionTime = explicitTimeMillis ?: parseExecutionTime(
             delayMinutes = delayMinutes,
             scheduledTimeStr = scheduledTimeStr,
             currentTimeMillis = currentTime,
@@ -188,7 +189,7 @@ open class DeviceSchedulerEngine(
 
     open fun queryRemainingTime(deviceType: DeviceType): String {
         val pending = storage.getPendingActionForDevice(deviceType)
-            ?: return "You have no active timer set for ${deviceType.name.replace('_', ' ').lowercase()}."
+            ?: return if (deviceType == DeviceType.AIR_CONDITIONER) "You don't have an active AC timer." else "You don't have an active ${deviceType.name.replace('_', ' ').lowercase()} timer."
 
         val now = clock.currentTimeMillis()
         val remainingMillis = pending.scheduledExecutionTimeMillis - now
@@ -213,15 +214,13 @@ open class DeviceSchedulerEngine(
             DeviceActionType.PAUSE_MUSIC -> "pause music"
         }
 
-        return if (hours > 0) {
-            if (mins > 0) {
-                "Your $deviceName is scheduled to $actionName in $hours hour${if (hours > 1) "s" else ""} and $mins minute${if (mins > 1) "s" else ""}."
-            } else {
-                "Your $deviceName is scheduled to $actionName in $hours hour${if (hours > 1) "s" else ""}."
-            }
-        } else {
-            "Your $deviceName is scheduled to $actionName in $mins minute${if (mins > 1) "s" else ""}."
+        val timeStr = when {
+            hours > 0 && mins > 0 -> "$hours hour${if (hours > 1) "s" else ""} $mins minute${if (mins > 1) "s" else ""}"
+            hours > 0 -> "$hours hour${if (hours > 1) "s" else ""}"
+            else -> "$mins minute${if (mins > 1) "s" else ""}"
         }
+
+        return "Your $deviceName is scheduled to $actionName in $timeStr."
     }
 
     open fun restorePersistedActions() {

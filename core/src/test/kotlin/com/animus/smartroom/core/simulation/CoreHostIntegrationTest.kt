@@ -20,7 +20,7 @@ import com.animus.smartroom.core.port.PlatformScheduler
 import com.animus.smartroom.device.model.DeviceCapability
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.device.model.RoomDevice
-import com.animus.smartroom.device.registry.DeviceRegistry
+import com.animus.smartroom.device.registry.CoreDeviceRegistry
 import com.animus.smartroom.scheduler.model.DeviceActionType
 import com.animus.smartroom.scheduler.model.ScheduledActionStatus
 import com.animus.smartroom.scheduler.model.ScheduledDeviceAction
@@ -35,7 +35,7 @@ import java.util.TimeZone
 
 /**
  * Pure JVM integration test proving that the complete Animus pipeline
- * (Brain -> Command Parser -> DeviceRegistry -> AC Execution -> Scheduler -> Memory -> DailySummary -> MorningBriefing)
+ * (Brain -> Command Parser -> CoreDeviceRegistry -> AC Execution -> Scheduler -> Memory -> DailySummary -> MorningBriefing)
  * operates entirely independently of the Android SDK / OS runtime.
  */
 class CoreHostIntegrationTest {
@@ -47,7 +47,7 @@ class CoreHostIntegrationTest {
     private lateinit var acAdapter: FakeAirConditionerAdapter
     private lateinit var audioAdapter: FakeAudioOutputAdapter
     private lateinit var musicPort: FakeMusicPlaybackPort
-    private lateinit var registry: DeviceRegistry
+    private lateinit var registry: CoreDeviceRegistry
     private lateinit var parser: LocalCommandParser
 
     private val armedTimers = mutableMapOf<String, Long>()
@@ -92,7 +92,7 @@ class CoreHostIntegrationTest {
         musicPort = FakeMusicPlaybackPort()
         parser = LocalCommandParser()
 
-        registry = DeviceRegistry()
+        registry = CoreDeviceRegistry()
         registry.registerDevice(acDevice)
         registry.registerAdapterForDevice(acDevice.id, acAdapter)
 

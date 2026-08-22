@@ -14,7 +14,7 @@ import com.animus.smartroom.device.model.AcMode
 import com.animus.smartroom.device.model.DeviceCapability
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.device.model.RoomDevice
-import com.animus.smartroom.device.registry.DeviceRegistry
+import com.animus.smartroom.device.registry.CoreDeviceRegistry
 import com.animus.smartroom.scheduler.ActionScheduleResult
 import com.animus.smartroom.scheduler.DeviceSchedulerEngine
 import com.animus.smartroom.scheduler.model.DeviceActionType
@@ -30,7 +30,7 @@ import java.util.Calendar
 import java.util.TimeZone
 
 /**
- * Pure JVM simulation proving that Animus Core contracts (DeviceRegistry, SchedulerEngine,
+ * Pure JVM simulation proving that Animus Core contracts (CoreDeviceRegistry, SchedulerEngine,
  * DeviceAdapter, DeviceTransport, MusicPlaybackPort, Clock, PersistentStore, PlatformScheduler)
  * execute completely independently of the Android SDK / OS runtime.
  */
@@ -43,7 +43,7 @@ class FakeCoreHostSimulationTest {
     private lateinit var acAdapter: FakeAirConditionerAdapter
     private lateinit var audioAdapter: FakeAudioOutputAdapter
     private lateinit var musicPort: FakeMusicPlaybackPort
-    private lateinit var registry: DeviceRegistry
+    private lateinit var registry: CoreDeviceRegistry
     private lateinit var schedulerEngine: DeviceSchedulerEngine
 
     private val armedTimers = mutableMapOf<String, Long>()
@@ -97,7 +97,7 @@ class FakeCoreHostSimulationTest {
         audioAdapter = FakeAudioOutputAdapter()
         musicPort = FakeMusicPlaybackPort()
 
-        registry = DeviceRegistry()
+        registry = CoreDeviceRegistry()
         registry.registerDevice(acDevice)
         registry.registerDevice(soundbarDevice)
         registry.registerAdapterForDevice(acDevice.id, acAdapter)

@@ -33,7 +33,10 @@ class FloatingCommandRoutingTest {
 
         // Mock CommandRouter execution without calling hardware
         val commandRouter = CommandRouter()
-        val scheduler = DeviceSchedulerEngine()
+        val scheduler = DeviceSchedulerEngine(
+            storage = ScheduledActionStorage(com.animus.smartroom.core.port.FakePersistentStore()),
+            clock = com.animus.smartroom.core.port.AndroidClock()
+        )
 
         runtimeControlPort = RuntimeControlPortImpl(
             brainManager = brainManager,

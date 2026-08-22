@@ -71,10 +71,18 @@ open class ScheduledActionStorage(
         return readAllFromStore().filter { it.status == ScheduledActionStatus.SCHEDULED }
     }
 
+    open fun getActiveActions(): List<ScheduledDeviceAction> {
+        return getPendingActions()
+    }
+
     open fun getPendingActionForDevice(deviceType: DeviceType): ScheduledDeviceAction? {
         return readAllFromStore().firstOrNull {
             it.targetDeviceType == deviceType && it.status == ScheduledActionStatus.SCHEDULED
         }
+    }
+
+    open fun getActiveActionForDevice(deviceType: DeviceType): ScheduledDeviceAction? {
+        return getPendingActionForDevice(deviceType)
     }
 
     open fun updateStatus(actionId: String, newStatus: ScheduledActionStatus, failureReason: String? = null) {
@@ -95,6 +103,14 @@ open class ScheduledActionStorage(
         )
     }
 
+    open fun cancelActionsForDevice(deviceType: DeviceType): List<ScheduledDeviceAction> {
+        val active = getPendingActions().filter { it.targetDeviceType == deviceType }
+        active.forEach { action ->
+            cancelAction(action.id)
+        }
+        return active
+    }
+
     open fun deleteAction(actionId: String) {
         store.remove(actionId)
         _globalActionsFlow.value = readAllFromStore()
@@ -106,4 +122,9 @@ open class ScheduledActionStorage(
         }
         _globalActionsFlow.value = emptyList()
     }
+
+    open fun clear() {
+        clearAll()
+    }
 }
+

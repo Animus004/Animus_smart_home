@@ -8,7 +8,7 @@ import com.animus.smartroom.core.diagnostics.query.ActionEventQuery
 import com.animus.smartroom.device.model.DeviceCapability
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.device.model.RoomDevice
-import com.animus.smartroom.device.registry.DeviceRegistry
+import com.animus.smartroom.device.registry.CoreDeviceRegistry
 import com.animus.smartroom.diagnostics.DiagnosticBus
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -19,7 +19,7 @@ import org.junit.Test
 class AcEventIntegrationTest {
 
     private lateinit var adapter: FakeAirConditionerAdapter
-    private lateinit var registry: DeviceRegistry
+    private lateinit var registry: CoreDeviceRegistry
 
     private val acDevice = RoomDevice(
         id = "ac-001",
@@ -32,7 +32,7 @@ class AcEventIntegrationTest {
     fun setup() {
         DiagnosticBus.clear()
         adapter = FakeAirConditionerAdapter(FakeDeviceTransport())
-        registry = DeviceRegistry()
+        registry = CoreDeviceRegistry()
         registry.registerDevice(acDevice)
         registry.registerAdapterForDevice(acDevice.id, adapter)
     }

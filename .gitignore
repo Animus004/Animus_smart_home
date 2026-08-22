@@ -3,11 +3,14 @@
 /local.properties
 /.idea
 .DS_Store
+build/
+*/build/
 /build
+/app/build
+/core/build
 /captures
 .externalNativeBuild
 .cxx
-/app/build
 *.apk
 *.aab
 
@@ -17,3 +20,5 @@
 *.log
 /scratch/
 /bin/
+diagnostic.py
+

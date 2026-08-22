@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.animus.smartroom.core.diagnostics.EventCorrelationTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-21T16:19:42" hostname="ANIMUS" time="0.007">
-  <properties/>
-  <testcase name="composite multi-command request correlates distinct actions under same correlationId" classname="com.animus.smartroom.core.diagnostics.EventCorrelationTest" time="0.007"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
