@@ -71,6 +71,7 @@ class SmartRoomOrchestrator:
         """
         Invoked when mpv reaches End Of File on current stream.
         Deterministically advances to the next track in the queue or triggers auto-radio resolution.
+        Runs asynchronously in a background thread to prevent blocking the IPC listener.
         """
         logger.info(f"[ORCHESTRATOR_EOF_TRIGGER] Track completed (reason='{event_data.get('reason')}'). Evaluating auto-advance...")
 
@@ -79,7 +80,16 @@ class SmartRoomOrchestrator:
             logger.info("[ORCHESTRATOR_EOF_SUPPRESSED] Auto-advance suppressed: Movie Mode is active.")
             return
 
-        # 2. Prevent concurrent auto-advance runs
+        # 2. Run auto-advance in a daemon worker thread
+        threading.Thread(
+            target=self._run_auto_advance_worker,
+            args=(last_track,),
+            name="AutoAdvanceWorker",
+            daemon=True
+        ).start()
+
+    def _run_auto_advance_worker(self, last_track: Optional[Dict[str, Any]] = None):
+        """Worker executing auto-advance under lock."""
         if not self._auto_advance_lock.acquire(blocking=False):
             logger.info("[ORCHESTRATOR_EOF_CONCURRENT] Auto-advance already in progress.")
             return
@@ -178,6 +188,28 @@ class SmartRoomOrchestrator:
             logger.error(f"[ORCHESTRATOR_AUTO_PLAY_FAILED] mpv playback failed for '{resolved.title}': {error_reason}")
             if max_retries > 0:
                 self._advance_next_track(last_track=last_track, max_retries=max_retries - 1)
+
+    def _prepopulate_radio_queue(self, seed_video_id: str):
+        """Pre-fetches related radio tracks in the background to ensure instantaneous queue availability."""
+        if self.queue.size() == 0 and self.queue.auto_radio:
+            try:
+                related = self.resolver.get_related_tracks(seed_video_id, limit=5)
+                if related:
+                    queue_tracks = [
+                        QueueTrack(
+                            video_id=t["video_id"],
+                            title=t["title"],
+                            artist=t["artist"],
+                            duration=t.get("duration"),
+                            thumbnail_url=t.get("thumbnail_url"),
+                            source="radio"
+                        )
+                        for t in related
+                    ]
+                    self.queue.enqueue_multiple(queue_tracks)
+                    logger.info(f"[ORCHESTRATOR_RADIO_PREPOPULATED] Pre-populated {len(queue_tracks)} upcoming tracks into queue.")
+            except Exception as e:
+                logger.warning(f"[ORCHESTRATOR_PREPOPULATE_WARN] Could not pre-populate radio queue: {e}")
 
     def queue_track(
         self,
@@ -463,6 +495,15 @@ class SmartRoomOrchestrator:
         ))
         if hasattr(self.player, "current_track") and isinstance(self.player.current_track, dict):
             self.player.current_track["video_id"] = resolved.video_id
+
+        # 5. Eagerly pre-populate upcoming radio tracks into the queue in background
+        if self.queue.auto_radio and resolved.video_id:
+            threading.Thread(
+                target=self._prepopulate_radio_queue,
+                args=(resolved.video_id,),
+                name="RadioQueuePrepopulateWorker",
+                daemon=True
+            ).start()
 
         self._current_state = RoomAudioState.PLAYING
         logger.info(f"[ORCHESTRATOR_PLAY_CONFIRMED] '{resolved.title}' playing on '{st.get('audio_device_name')}'")

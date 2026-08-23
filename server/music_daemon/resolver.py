@@ -147,6 +147,30 @@ class YouTubeMusicResolver(MusicResolver):
             logger.debug(f"[PC_MUSIC_YTDLP] Using cookies file: {self.cookies_file.name}")
         return opts
 
+    def _execute_with_ytm(self, func):
+        """
+        Executes a YTMusic callable with automatic fallback to unauthenticated guest mode
+        if the active OAuth/headers session has expired, corrupt, or returned HTTP 400/401/403.
+        """
+        if not self.ytm:
+            try:
+                self.ytm = YTMusic()
+            except Exception:
+                return None
+
+        try:
+            return func(self.ytm)
+        except Exception as e:
+            logger.warning(f"[PC_MUSIC_AUTH_DEGRADED] Authenticated YTMusic operation failed ({e}). Falling back to fresh guest client.")
+            try:
+                self.ytm = YTMusic()
+                self.is_authenticated = False
+                self.auth_method = "none"
+                return func(self.ytm)
+            except Exception as e2:
+                logger.warning(f"[PC_MUSIC_GUEST_FAILED] Guest YTMusic operation failed: {e2}")
+                return None
+
     def get_auth_status(self) -> Dict[str, Any]:
         return {
             "is_authenticated": self.is_authenticated,
@@ -165,10 +189,10 @@ class YouTubeMusicResolver(MusicResolver):
         thumbnail_url = None
 
         # 1. Query YouTube Music catalog for exact song metadata
-        if not video_id and self.ytm:
+        if not video_id:
             try:
-                search_results = self.ytm.search(query, filter="songs", limit=5)
-                if search_results:
+                search_results = self._execute_with_ytm(lambda client: client.search(query, filter="songs", limit=5))
+                if search_results and isinstance(search_results, list) and len(search_results) > 0:
                     top_song = search_results[0]
                     video_id = top_song.get("videoId")
                     resolved_title = top_song.get("title", title)
@@ -234,37 +258,34 @@ class YouTubeMusicResolver(MusicResolver):
         related: List[Dict[str, Any]] = []
 
         # 1. Try ytmusicapi get_watch_playlist
-        if self.ytm:
-            try:
-                playlist_data = self.ytm.get_watch_playlist(videoId=video_id, limit=limit + 1)
-                tracks = playlist_data.get("tracks", [])
-                for t in tracks:
-                    vid = t.get("videoId")
-                    # Exclude the seed video itself if it's the first track
-                    if vid and vid != video_id:
-                        title = t.get("title", "Unknown Title")
-                        artist = "Unknown Artist"
-                        artists = t.get("artists")
-                        if artists and isinstance(artists, list) and len(artists) > 0:
-                            artist = artists[0].get("name", artist)
-                        dur = t.get("duration_seconds")
-                        thumb = None
-                        thumbnails = t.get("thumbnails")
-                        if thumbnails and isinstance(thumbnails, list) and len(thumbnails) > 0:
-                            thumb = thumbnails[-1].get("url")
-                        related.append({
-                            "video_id": vid,
-                            "title": title,
-                            "artist": artist,
-                            "duration": dur,
-                            "thumbnail_url": thumb
-                        })
-                        if len(related) >= limit:
-                            break
-                if related:
-                    logger.info(f"[PC_MUSIC_RELATED_FOUND] Found {len(related)} related tracks via YTMusic watch playlist.")
-                    return related
-            except Exception as e:
-                logger.warning(f"[PC_MUSIC_RELATED_WARN] get_watch_playlist failed: {e}. Falling back.")
+        playlist_data = self._execute_with_ytm(lambda client: client.get_watch_playlist(videoId=video_id, limit=limit + 1))
+        if playlist_data and isinstance(playlist_data, dict):
+            tracks = playlist_data.get("tracks", [])
+            for t in tracks:
+                vid = t.get("videoId")
+                # Exclude the seed video itself if it's the first track
+                if vid and vid != video_id:
+                    title = t.get("title", "Unknown Title")
+                    artist = "Unknown Artist"
+                    artists = t.get("artists")
+                    if artists and isinstance(artists, list) and len(artists) > 0:
+                        artist = artists[0].get("name", artist)
+                    dur = t.get("duration_seconds")
+                    thumb = None
+                    thumbnails = t.get("thumbnails")
+                    if thumbnails and isinstance(thumbnails, list) and len(thumbnails) > 0:
+                        thumb = thumbnails[-1].get("url")
+                    related.append({
+                        "video_id": vid,
+                        "title": title,
+                        "artist": artist,
+                        "duration": dur,
+                        "thumbnail_url": thumb
+                    })
+                    if len(related) >= limit:
+                        break
+            if related:
+                logger.info(f"[PC_MUSIC_RELATED_FOUND] Found {len(related)} related tracks via YTMusic watch playlist.")
+                return related
 
         return related

@@ -177,6 +177,7 @@ def test_orchestrator_auto_advance_from_queue(orchestrator, mock_player, mock_re
     # Trigger EOF callback
     last_track = {"title": "Finished Song", "video_id": "fin_123"}
     orchestrator._handle_player_eof(last_track, {"event": "end-file", "reason": "eof"})
+    import time; time.sleep(0.2)
 
     # Verifies player.play was called with next song
     mock_resolver.resolve.assert_called_with(title="Next Song", artist="Next Artist", direct_id="next_1")
@@ -192,6 +193,7 @@ def test_orchestrator_auto_radio_continuation(orchestrator, mock_player, mock_re
 
     last_track = {"title": "Seed Song", "video_id": "seed_999"}
     orchestrator._handle_player_eof(last_track, {"event": "end-file", "reason": "eof"})
+    import time; time.sleep(0.2)
 
     # Verifies related tracks were fetched and next track was played
     mock_resolver.get_related_tracks.assert_called_once_with("seed_999", limit=5)
@@ -205,6 +207,7 @@ def test_movie_mode_suppresses_auto_advance(orchestrator, mock_player):
 
     last_track = {"title": "Last Song", "video_id": "seed_999"}
     orchestrator._handle_player_eof(last_track, {"event": "end-file", "reason": "eof"})
+    import time; time.sleep(0.1)
 
     # Must NOT call play when movie mode owns audio
     mock_player.play.assert_not_called()
@@ -256,6 +259,7 @@ def test_auto_advance_resolution_failure_recovery(orchestrator, mock_player, moc
     ]
 
     orchestrator._handle_player_eof(None, {"event": "end-file", "reason": "eof"})
+    import time; time.sleep(0.2)
 
     # Verifies it skipped bad track and played good track
     assert mock_resolver.resolve.call_count == 2

@@ -145,7 +145,7 @@ class MpvPlayer:
             f"--input-ipc-server={self.PIPE_NAME}",
             f"--audio-device={audio_device_id}",
             "--volume=100",
-            "--keep-open=yes",
+            "--keep-open=no",
         ]
 
         try:
