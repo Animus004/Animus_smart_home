@@ -4,6 +4,7 @@ import android.util.Log
 import com.animus.smartroom.device.adapter.DeviceAdapter
 import com.animus.smartroom.device.model.DeviceCapability
 import com.animus.smartroom.device.model.DeviceCommandResult
+import com.animus.smartroom.device.model.DeviceConnectionState
 import com.animus.smartroom.device.model.DeviceType
 import com.animus.smartroom.device.model.RoomDevice
 import com.animus.smartroom.diagnostics.DiagnosticBus
@@ -52,6 +53,15 @@ class DeviceRegistry {
             current - deviceId
         }
         deviceAdapters.remove(deviceId)
+    }
+
+    fun updateDeviceConnectionState(deviceId: String, state: DeviceConnectionState) {
+        _devices.update { current ->
+            val dev = current[deviceId] ?: return@update current
+            if (dev.connectionState == state) return@update current
+            Log.i(TAG, "[connection] Updating ${dev.displayName} ($deviceId) state: ${dev.connectionState} -> $state")
+            current + (deviceId to dev.copy(connectionState = state))
+        }
     }
 
     fun registerAdapterForDevice(deviceId: String, adapter: DeviceAdapter) {

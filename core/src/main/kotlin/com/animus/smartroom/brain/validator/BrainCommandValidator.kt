@@ -228,6 +228,14 @@ object BrainCommandValidator {
                 )
             }
 
+            BrainCommandDto.CMD_START_MOVIE_MODE -> {
+                BrainValidationResult.Valid(AnimusCommand.StartMovieMode)
+            }
+
+            BrainCommandDto.CMD_STOP_MOVIE_MODE -> {
+                BrainValidationResult.Valid(AnimusCommand.StopMovieMode)
+            }
+
             BrainCommandDto.CMD_UNKNOWN -> {
                 val raw = dto.rawText ?: "unknown"
                 BrainValidationResult.Valid(AnimusCommand.UnknownCommand(rawText = raw))

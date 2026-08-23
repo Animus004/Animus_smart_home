@@ -203,6 +203,31 @@ class LocalCommandParser : CommandParser {
             return AnimusCommand.DisconnectBluetoothDevice
         }
 
+        // 5.5 Movie Mode Commands
+        if (normalized in setOf(
+                "start movie mode",
+                "turn on movie mode",
+                "start a movie",
+                "movie mode on",
+                "enable movie mode",
+                "start movie"
+            )
+        ) {
+            return AnimusCommand.StartMovieMode
+        }
+
+        if (normalized in setOf(
+                "turn movie mode off",
+                "stop movie mode",
+                "turn off movie mode",
+                "movie mode off",
+                "disable movie mode",
+                "stop movie"
+            )
+        ) {
+            return AnimusCommand.StopMovieMode
+        }
+
         // 6. AC Power Commands
         if (normalized in setOf(
                 "turn on ac",

@@ -173,6 +173,12 @@ class LocalAnimusBrain(
                     command = BrainCommandDto.CMD_QUERY_SCHEDULED_ACTION,
                     target = parsedCommand.target
                 )
+                is AnimusCommand.StartMovieMode -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_START_MOVIE_MODE
+                )
+                is AnimusCommand.StopMovieMode -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_STOP_MOVIE_MODE
+                )
                 is AnimusCommand.UnknownCommand -> BrainCommandDto(
                     command = BrainCommandDto.CMD_UNKNOWN,
                     rawText = parsedCommand.rawText

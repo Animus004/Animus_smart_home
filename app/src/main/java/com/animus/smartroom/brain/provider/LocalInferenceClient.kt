@@ -15,9 +15,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class LocalInferenceClient(
-    private val configProvider: () -> LocalBrainConfig
+    val configProvider: () -> LocalBrainConfig
 ) {
-    private val ollamaClient = OllamaLocalLlmClient(configProvider)
+    val ollamaClient = OllamaLocalLlmClient(configProvider)
 
     val lastInferenceDurationMs: Long
         get() = ollamaClient.lastInferenceDurationMs

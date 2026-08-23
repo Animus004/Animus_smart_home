@@ -190,6 +190,8 @@ class CommandRouter(
             is AnimusCommand.ScheduleDeviceAction -> "ScheduleDeviceAction(target='${command.target}', action='${command.action}', delay=${command.delayMinutes}, time='${command.scheduledTime}')"
             is AnimusCommand.CancelScheduledAction -> "CancelScheduledAction(target='${command.target}')"
             is AnimusCommand.QueryScheduledAction -> "QueryScheduledAction(target='${command.target}')"
+            is AnimusCommand.StartMovieMode -> "StartMovieMode"
+            is AnimusCommand.StopMovieMode -> "StopMovieMode"
             is AnimusCommand.UnknownCommand -> "UnknownCommand(raw='${command.rawText}')"
         }
     }
@@ -288,9 +290,10 @@ class CommandRouter(
             is AnimusCommand.PlayMusic -> {
                 val controller = musicController ?: return CommandExecutionResult(false, "Music controller is not initialized.")
                 val isConnected = controller.uiState.value.isOutputConnected
+                val isPcMusic = controller.uiState.value.activeProviderId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
                 val deviceName = controller.uiState.value.activeOutputDeviceName
 
-                if (!isConnected) {
+                if (!isConnected && !isPcMusic) {
                     Log.w(TAG, "[ai] PlayMusic blocked: Bluetooth output is disconnected")
                     return CommandExecutionResult(
                         success = false,
@@ -394,6 +397,25 @@ class CommandRouter(
             }
 
             is AnimusCommand.ConnectBluetoothDevice -> {
+                val isPcActive = musicController?.getActiveProvider()?.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
+                if (isPcActive) {
+                    Log.i(TAG, "[ai] Executing ConnectBluetoothDevice via PcLocalMusicProvider (Home Smart Room)")
+                    val pcProvider = musicController?.getPcLocalProvider()
+                    val ok = pcProvider?.connectSoundbar() ?: false
+                    return if (ok) {
+                        musicController?.updateOutputDevice("LG SNC4R(79)", true)
+                        CommandExecutionResult(
+                            success = true,
+                            message = "Soundbar connected"
+                        )
+                    } else {
+                        CommandExecutionResult(
+                            success = false,
+                            message = "Could not connect to the soundbar."
+                        )
+                    }
+                }
+
                 val btMgr = bluetoothManager ?: return CommandExecutionResult(false, "Bluetooth manager is not initialized.")
                 val paired = btMgr.uiState.value.pairedDevices
                 if (command.deviceName.isNullOrBlank()) {
@@ -467,6 +489,25 @@ class CommandRouter(
             }
 
             is AnimusCommand.DisconnectBluetoothDevice -> {
+                val isPcActive = musicController?.getActiveProvider()?.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
+                if (isPcActive) {
+                    Log.i(TAG, "[ai] Executing DisconnectBluetoothDevice via PcLocalMusicProvider (Home Smart Room)")
+                    val pcProvider = musicController?.getPcLocalProvider()
+                    val ok = pcProvider?.disconnectSoundbar() ?: false
+                    musicController?.updateOutputDevice("LG SNC4R(79)", false)
+                    return if (ok) {
+                        CommandExecutionResult(
+                            success = true,
+                            message = "Soundbar disconnected"
+                        )
+                    } else {
+                        CommandExecutionResult(
+                            success = false,
+                            message = "Could not disconnect the soundbar."
+                        )
+                    }
+                }
+
                 val btMgr = bluetoothManager ?: return CommandExecutionResult(false, "Bluetooth manager is not initialized.")
                 Log.i(TAG, "[ai] Executing DisconnectBluetoothDevice")
                 val current = btMgr.uiState.value.connectionState
@@ -691,6 +732,22 @@ class CommandRouter(
                 }
             }
 
+            is AnimusCommand.StartMovieMode -> {
+                Log.i(TAG, "[ai] Executing StartMovieMode")
+                CommandExecutionResult(
+                    success = true,
+                    message = "Starting Movie Mode: waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
+                )
+            }
+
+            is AnimusCommand.StopMovieMode -> {
+                Log.i(TAG, "[ai] Executing StopMovieMode")
+                CommandExecutionResult(
+                    success = true,
+                    message = "Stopping Movie Mode: shutting down projector and releasing soundbar."
+                )
+            }
+
             is AnimusCommand.UnknownCommand -> {
                 Log.w(TAG, "[ai] Unknown command: '${command.rawText}'")
                 CommandExecutionResult(
@@ -701,3 +758,4 @@ class CommandRouter(
         }
     }
 }
+

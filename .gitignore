@@ -20,5 +20,24 @@ build/
 *.log
 /scratch/
 /bin/
+server/bin/
 diagnostic.py
+
+# Secrets and authentication files
+secrets/
+**/secrets/
+*.cookie
+*.cookies
+cookies.txt
+oauth.json
+headers_auth.json
+oauth_client.json
+*.env
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+
 

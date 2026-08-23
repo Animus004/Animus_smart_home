@@ -160,6 +160,10 @@ class OllamaLocalLlmClient(
         }
     }
 
+    suspend fun warmUp(prompt: String = "Respond with exactly: READY"): Result<String> {
+        return generateCompletion(prompt, isWarmup = true)
+    }
+
     suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
         val config = configProvider()
         if (!config.enabled || !config.isValid()) return@withContext false

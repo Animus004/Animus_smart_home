@@ -18,6 +18,7 @@ import com.animus.smartroom.diagnostics.DiagnosticStage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.Locale
 
 class TuyaAirConditionerAdapter(
@@ -729,6 +730,10 @@ class TuyaAirConditionerAdapter(
         val statusResult = apiClient.fetchStatus(deviceId)
         return statusResult.mapCatching { items ->
             applyTuyaStatus(items)
+        }.onFailure {
+            _acState.update { current ->
+                current.copy(isOnline = false, recoveryState = "OFFLINE")
+            }
         }
     }
 
@@ -790,7 +795,9 @@ class TuyaAirConditionerAdapter(
             ambientTemperature = ambientTemp,
             mode = mode,
             fanSpeed = fanSpeed,
-            isOnline = true
+            isOnline = true,
+            lastSeenTimestamp = System.currentTimeMillis(),
+            recoveryState = "HEALTHY"
         )
         _acState.value = updated
         return updated
@@ -824,7 +831,9 @@ class TuyaAirConditionerAdapter(
             "ambientTemperature" to state.ambientTemperature,
             "mode" to state.mode.name,
             "fanSpeed" to state.fanSpeed.name,
-            "isOnline" to state.isOnline
+            "isOnline" to state.isOnline,
+            "lastSeenTimestamp" to state.lastSeenTimestamp,
+            "recoveryState" to state.recoveryState
         )
     }
 }

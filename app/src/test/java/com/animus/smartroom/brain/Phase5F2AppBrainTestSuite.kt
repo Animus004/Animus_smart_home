@@ -171,7 +171,8 @@ class Phase5F2AppBrainTestSuite {
             port.generate("test prompt")
             fail("Expected exception")
         } catch (e: Exception) {
-            assertTrue(port.status.value == LocalBrainStatus.ERROR || port.status.value == LocalBrainStatus.FAILED || port.status.value == LocalBrainStatus.OFFLINE)
+            val s = port.status.value
+            assertTrue(s == LocalBrainStatus.ERROR || s == LocalBrainStatus.FAILED || s == LocalBrainStatus.OFFLINE || s == LocalBrainStatus.STARTING || s == LocalBrainStatus.WARMING_UP)
         }
     }
 

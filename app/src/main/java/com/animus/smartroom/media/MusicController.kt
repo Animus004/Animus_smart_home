@@ -19,10 +19,13 @@ import com.animus.smartroom.media.provider.GenericMusicProvider
 import com.animus.smartroom.media.provider.MusicProvider
 import com.animus.smartroom.media.provider.ProviderResult
 import com.animus.smartroom.media.provider.YouTubeMusicProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class MusicController(
     private val context: Context
@@ -46,13 +49,21 @@ class MusicController(
         context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
 
     // Provider layer
+    private val pcLocalProvider = com.animus.smartroom.media.provider.PcLocalMusicProvider()
+    private val youtubeMusicProvider = YouTubeMusicProvider(context)
+    private val genericMusicProvider = GenericMusicProvider(context)
+
     private val providers: Map<String, MusicProvider> = mapOf(
-        YouTubeMusicProvider.PROVIDER_ID to YouTubeMusicProvider(context),
-        GenericMusicProvider.PROVIDER_ID to GenericMusicProvider(context)
+        com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID to pcLocalProvider,
+        YouTubeMusicProvider.PROVIDER_ID to youtubeMusicProvider,
+        GenericMusicProvider.PROVIDER_ID to genericMusicProvider
     )
 
     private var activeProvider: MusicProvider =
-        providers[YouTubeMusicProvider.PROVIDER_ID] ?: GenericMusicProvider(context)
+        providers[YouTubeMusicProvider.PROVIDER_ID] ?: genericMusicProvider
+
+    fun getActiveProvider(): MusicProvider = activeProvider
+    fun getPcLocalProvider(): com.animus.smartroom.media.provider.PcLocalMusicProvider = pcLocalProvider
 
     private val _uiState = MutableStateFlow(
         MusicUiState(
@@ -61,6 +72,22 @@ class MusicController(
         )
     )
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
+
+    fun refreshProviderAvailability() {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            Log.d(TAG, "[PROVIDER_CHECK] Checking PC Local Music Daemon availability...")
+            val isPcOnline = pcLocalProvider.checkHealth()
+            if (isPcOnline) {
+                setProvider(com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID)
+                Log.i(TAG, "[PROVIDER_SWITCH] Active provider = PC_LOCAL (${pcLocalProvider.displayName})")
+            } else {
+                if (activeProvider.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID) {
+                    setProvider(YouTubeMusicProvider.PROVIDER_ID)
+                    Log.i(TAG, "[PROVIDER_SWITCH] Active provider = MOBILE_YOUTUBE_MUSIC (${youtubeMusicProvider.displayName})")
+                }
+            }
+        }
+    }
 
     private var isReceiverRegistered = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -152,12 +179,27 @@ class MusicController(
     }
 
     fun setVolume(percent: Float) {
-        val am = audioManager ?: return
+        val isPcProvider = activeProvider.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
         val clampedPercent = percent.coerceIn(0f, 1f)
+        val intPercent = (clampedPercent * 100).toInt()
+
+        if (isPcProvider) {
+            Log.d(TAG, "[media] Setting PC daemon volume: $intPercent%")
+            (activeProvider as? com.animus.smartroom.media.provider.PcLocalMusicProvider)?.setVolume(intPercent)
+            _uiState.update {
+                it.copy(
+                    volumePercent = clampedPercent,
+                    isMuted = intPercent == 0
+                )
+            }
+            return
+        }
+
+        val am = audioManager ?: return
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val targetIndex = (clampedPercent * max).toInt().coerceIn(0, max)
 
-        Log.d(TAG, "[media] Setting volume: ${(clampedPercent * 100).toInt()}% (index=$targetIndex/$max)")
+        Log.d(TAG, "[media] Setting volume: $intPercent% (index=$targetIndex/$max)")
         try {
             am.setStreamVolume(AudioManager.STREAM_MUSIC, targetIndex, 0)
         } catch (e: Exception) {
@@ -173,28 +215,39 @@ class MusicController(
     }
 
     fun play() {
-        if (!_uiState.value.isOutputConnected) {
+        val isPcProvider = activeProvider.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
+        if (!_uiState.value.isOutputConnected && !isPcProvider) {
             Log.w(TAG, "[media] play() blocked: No Bluetooth audio output connected")
             setNotice("Connect ${_uiState.value.activeOutputDeviceName} to play audio")
             return
         }
-        Log.d(TAG, "[media] play() requested by user")
-        if (!tryMediaSessionPlay()) {
-            dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+        Log.d(TAG, "[media] play() requested by user (isPcProvider=$isPcProvider)")
+        if (isPcProvider) {
+            (activeProvider as? com.animus.smartroom.media.provider.PcLocalMusicProvider)?.resume()
+        } else {
+            if (!tryMediaSessionPlay()) {
+                dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+            }
         }
         _uiState.update { it.copy(playbackStatus = PlaybackStatus.PLAYING, userNotice = null) }
     }
 
     fun pause() {
-        Log.d(TAG, "[media] pause() requested by user")
-        if (!tryMediaSessionPause()) {
-            dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
+        val isPcProvider = activeProvider.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
+        Log.d(TAG, "[media] pause() requested by user (isPcProvider=$isPcProvider)")
+        if (isPcProvider) {
+            (activeProvider as? com.animus.smartroom.media.provider.PcLocalMusicProvider)?.pause()
+        } else {
+            if (!tryMediaSessionPause()) {
+                dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
+            }
         }
         _uiState.update { it.copy(playbackStatus = PlaybackStatus.PAUSED) }
     }
 
     fun togglePlayPause() {
-        if (!_uiState.value.isOutputConnected) {
+        val isPcProvider = activeProvider.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
+        if (!_uiState.value.isOutputConnected && !isPcProvider) {
             Log.w(TAG, "[media] togglePlayPause() blocked: No Bluetooth audio output connected")
             setNotice("Connect ${_uiState.value.activeOutputDeviceName} to play audio")
             return
@@ -241,7 +294,8 @@ class MusicController(
         Log.i(TAG, "[ai] Command received: PLAY_MUSIC (title='$title', artist='$artist', directVideoId='$directVideoId')")
         Log.i(TAG, "[music] Forwarding to provider: '${activeProvider.displayName}', Target Bluetooth Output: '$activeDeviceName'")
 
-        if (!isConnected) {
+        val isPcProvider = activeProvider.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
+        if (!isConnected && !isPcProvider) {
             Log.w(TAG, "[music] BLOCKED: Selected Bluetooth device '$activeDeviceName' is NOT connected")
             _uiState.update {
                 it.copy(userNotice = "Connect $activeDeviceName to play room audio")
@@ -249,7 +303,11 @@ class MusicController(
             return
         }
 
-        Log.i(TAG, "[music] ALLOWED: Bluetooth device '$activeDeviceName' is connected.")
+        if (isPcProvider) {
+            Log.i(TAG, "[music] ALLOWED: PC Local Music provider active. Audio outputs directly from PC.")
+        } else {
+            Log.i(TAG, "[music] ALLOWED: Bluetooth device '$activeDeviceName' is connected.")
+        }
         Log.d(TAG, "[play-debug] Before playback: videoId='$directVideoId', url='${if (!directVideoId.isNullOrBlank()) "https://music.youtube.com/watch?v=$directVideoId" else "null"}'")
         cancelPendingInspectionAttempts()
 

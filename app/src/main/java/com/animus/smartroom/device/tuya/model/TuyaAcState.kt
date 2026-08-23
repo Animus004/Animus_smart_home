@@ -9,5 +9,7 @@ data class TuyaAcState(
     val ambientTemperature: Int = 24,
     val mode: AcMode = AcMode.AUTO,
     val fanSpeed: AcFanSpeed = AcFanSpeed.AUTO,
-    val isOnline: Boolean = true
+    val isOnline: Boolean = true,
+    val lastSeenTimestamp: Long = 0L,
+    val recoveryState: String = "IDLE"
 )

@@ -4,6 +4,7 @@ import android.util.Log
 import com.animus.smartroom.core.brain.port.LocalInferencePort
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +20,6 @@ enum class LocalBrainStatus {
     AVAILABLE,
     BUSY,
     ERROR,
-    // Phase 5F.6 lifecycle additions
     OFFLINE,
     STARTING,
     WARMING_UP,
@@ -40,6 +40,11 @@ class AndroidLocalInferencePort(
 
     private val warmupMutex = Mutex()
     private val inferenceMutex = Mutex()
+
+    val lifecycleManager = OllamaLifecycleManager(
+        client = client.ollamaClient,
+        configProvider = client.configProvider
+    )
 
     /**
      * Executes real model warmup on GPU with extended timeout.
@@ -71,6 +76,7 @@ class AndroidLocalInferencePort(
                                 Log.i(TAG, "[LOCAL_LLM_WARMUP_RESPONSE_RECEIVED] HTTP status code = 200")
                                 Log.i(TAG, "[LOCAL_LLM_WARMUP_SUCCESS] Completed in ${durationMs}ms: '$responseText'")
                                 _status.value = LocalBrainStatus.READY
+                                lifecycleManager.setState(com.animus.smartroom.core.brain.model.BrainState.READY)
                                 Log.i(TAG, "[LOCAL_LLM_READY] Local LLM is warm, resident in GPU VRAM, and ready for user commands.")
                                 return true
                             }
@@ -86,12 +92,13 @@ class AndroidLocalInferencePort(
                     if (attempt < maxAttempts) {
                         Log.i(TAG, "[LOCAL_LLM_WARMUP_RETRY] Preparing retry attempt ${attempt + 1} with backoff...")
                         _status.value = LocalBrainStatus.STARTING
-                        kotlinx.coroutines.delay(1000L * attempt)
+                        delay(1000L * attempt)
                     }
                     attempt++
                 }
 
                 _status.value = LocalBrainStatus.FAILED
+                lifecycleManager.setState(com.animus.smartroom.core.brain.model.BrainState.FAILED)
                 Log.e(TAG, "[LOCAL_LLM_WARMUP_FAILED] All $maxAttempts warmup attempts exhausted. State set to FAILED.")
                 return false
             } finally {
@@ -107,12 +114,10 @@ class AndroidLocalInferencePort(
         if (_status.value != LocalBrainStatus.READY && _status.value != LocalBrainStatus.BUSY && _status.value != LocalBrainStatus.AVAILABLE) {
             Log.i(TAG, "[LOCAL_LLM_USER_REQUEST_HELD] User request gated while brain is in status=${_status.value}. Waiting for READY...")
             if (_status.value == LocalBrainStatus.OFFLINE || _status.value == LocalBrainStatus.DISCONNECTED || _status.value == LocalBrainStatus.FAILED || _status.value == LocalBrainStatus.ERROR) {
-                // If failed/offline, initiate warmUp in background if not already in progress
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                CoroutineScope(Dispatchers.IO).launch {
                     warmUp(maxAttempts = 1)
                 }
             }
-            // Wait for READY or terminal failure
             val readyStatus = _status.filter { it == LocalBrainStatus.READY || it == LocalBrainStatus.AVAILABLE || it == LocalBrainStatus.FAILED || it == LocalBrainStatus.OFFLINE || it == LocalBrainStatus.DISCONNECTED || it == LocalBrainStatus.ERROR }
                 .first()
             if (readyStatus != LocalBrainStatus.READY && readyStatus != LocalBrainStatus.AVAILABLE) {

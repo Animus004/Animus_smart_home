@@ -37,6 +37,8 @@ data class BrainCommandDto(
         const val CMD_SCHEDULE_DEVICE_ACTION = "SCHEDULE_DEVICE_ACTION"
         const val CMD_CANCEL_SCHEDULED_ACTION = "CANCEL_SCHEDULED_ACTION"
         const val CMD_QUERY_SCHEDULED_ACTION = "QUERY_SCHEDULED_ACTION"
+        const val CMD_START_MOVIE_MODE = "START_MOVIE_MODE"
+        const val CMD_STOP_MOVIE_MODE = "STOP_MOVIE_MODE"
         const val CMD_UNKNOWN = "UNKNOWN"
     }
 }

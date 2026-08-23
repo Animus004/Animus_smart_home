@@ -112,7 +112,9 @@ class AnimusApplication : Application() {
         }
 
         bluetoothController = BluetoothAudioDeviceManager(this)
-        musicController = MusicController(this)
+        musicController = MusicController(this).apply {
+            refreshProviderAvailability()
+        }
 
         tuyaApiClient = TuyaCloudApiClient(
             accessIdProvider = { BuildConfig.TUYA_ACCESS_ID },

@@ -59,6 +59,9 @@ sealed class AnimusCommand {
         val target: String
     ) : AnimusCommand()
 
+    object StartMovieMode : AnimusCommand()
+    object StopMovieMode : AnimusCommand()
+
     data class UnknownCommand(
         val rawText: String
     ) : AnimusCommand()

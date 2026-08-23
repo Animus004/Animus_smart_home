@@ -630,8 +630,8 @@ class Phase5F6OllamaIntegrationTestSuite {
                     if (line.isEmpty()) break
                 }
                 requestLogs.add("WARMUP_STARTED")
-                // Simulate cold loading delay (100ms in unit test environment)
-                kotlinx.coroutines.delay(100)
+                // Simulate cold loading delay (300ms in unit test environment)
+                kotlinx.coroutines.delay(300)
                 val warmupResp = "{\"id\":\"w-cold\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"READY\"}}]}"
                 val r1 = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${warmupResp.toByteArray().size}\r\n\r\n$warmupResp"
                 socket1.getOutputStream().write(r1.toByteArray())
@@ -661,22 +661,30 @@ class Phase5F6OllamaIntegrationTestSuite {
             com.animus.smartroom.brain.provider.LocalInferenceClient { config }
         )
 
-        // Queue user command while STARTING
+        // Start warmup on IO dispatcher
+        val warmupJob = async(kotlinx.coroutines.Dispatchers.IO) {
+            portImpl.warmUp()
+        }
+
+        // Wait briefly for warmup to transition status to WARMING_UP
+        var waitLoops = 0
+        while (portImpl.status.value != com.animus.smartroom.brain.provider.LocalBrainStatus.WARMING_UP && waitLoops < 50) {
+            kotlinx.coroutines.delay(10)
+            waitLoops++
+        }
+
+        // Queue user command while WARMING_UP
         var userResult: String? = null
         val userJob = launch(kotlinx.coroutines.Dispatchers.IO) {
             userResult = portImpl.generate("turn on ac", emptyList())
         }
 
-        // Start warmup on IO dispatcher
-        val warmupJob = async(kotlinx.coroutines.Dispatchers.IO) {
-            portImpl.warmUp()
-        }
         val warmResult = warmupJob.await()
         assertTrue(warmResult)
-        assertEquals(com.animus.smartroom.brain.provider.LocalBrainStatus.READY, portImpl.status.value)
 
         userJob.join()
         assertNotNull(userResult)
+        assertEquals(com.animus.smartroom.brain.provider.LocalBrainStatus.READY, portImpl.status.value)
         assertEquals(listOf("WARMUP_STARTED", "USER_CMD_DISPATCHED"), requestLogs)
     }
 
@@ -824,5 +832,19 @@ class Phase5F6OllamaIntegrationTestSuite {
         // The background warmup should now succeed and transition to READY
         val readyStatus = portImpl.status.filter { it == com.animus.smartroom.brain.provider.LocalBrainStatus.READY }.first()
         assertEquals(com.animus.smartroom.brain.provider.LocalBrainStatus.READY, readyStatus)
+    }
+
+    // 21. NaturalLanguageSoundbarIntentMappingTest
+    @Test
+    fun `test Soundbar Natural Language intents map cleanly to AnimusCommands`() {
+        val connectAction = com.animus.smartroom.core.brain.model.BrainAction.ConnectBluetooth("soundbar")
+        val disconnectAction = com.animus.smartroom.core.brain.model.BrainAction.DisconnectBluetooth
+        val playAction = com.animus.smartroom.core.brain.model.BrainAction.PlayMusic("Zara Zara", "Bombay Jayashri")
+        val pauseAction = com.animus.smartroom.core.brain.model.BrainAction.MusicControl(com.animus.smartroom.core.brain.model.MusicActionType.PAUSE)
+
+        assertEquals("soundbar", (connectAction as com.animus.smartroom.core.brain.model.BrainAction.ConnectBluetooth).deviceName)
+        assertTrue(disconnectAction is com.animus.smartroom.core.brain.model.BrainAction.DisconnectBluetooth)
+        assertEquals("Zara Zara", (playAction as com.animus.smartroom.core.brain.model.BrainAction.PlayMusic).title)
+        assertEquals(com.animus.smartroom.core.brain.model.MusicActionType.PAUSE, (pauseAction as com.animus.smartroom.core.brain.model.BrainAction.MusicControl).action)
     }
 }

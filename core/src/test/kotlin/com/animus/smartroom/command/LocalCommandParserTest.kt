@@ -143,9 +143,28 @@ class LocalCommandParserTest {
     }
 
     @Test
+    fun testMovieModeCommands() {
+        assertEquals(AnimusCommand.StartMovieMode, parser.parse("start movie mode"))
+        assertEquals(AnimusCommand.StartMovieMode, parser.parse("turn on movie mode"))
+        assertEquals(AnimusCommand.StartMovieMode, parser.parse("start a movie"))
+        assertEquals(AnimusCommand.StartMovieMode, parser.parse("movie mode on"))
+
+        assertEquals(AnimusCommand.StopMovieMode, parser.parse("turn movie mode off"))
+        assertEquals(AnimusCommand.StopMovieMode, parser.parse("stop movie mode"))
+        assertEquals(AnimusCommand.StopMovieMode, parser.parse("turn off movie mode"))
+        assertEquals(AnimusCommand.StopMovieMode, parser.parse("movie mode off"))
+    }
+
+    @Test
     fun testUnknownCommands() {
         val result = parser.parse("random unsupported sentence")
         assertTrue(result is AnimusCommand.UnknownCommand)
         assertEquals("random unsupported sentence", (result as AnimusCommand.UnknownCommand).rawText)
+
+        // Ambiguous safety checks
+        assertTrue(parser.parse("turn it off") is AnimusCommand.UnknownCommand)
+        assertTrue(parser.parse("start it") is AnimusCommand.UnknownCommand)
+        assertTrue(parser.parse("put it on") is AnimusCommand.UnknownCommand)
     }
 }
+
