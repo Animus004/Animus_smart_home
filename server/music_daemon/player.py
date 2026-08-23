@@ -1,15 +1,16 @@
 """
 Headless mpv player controller using Windows Named Pipe JSON-RPC IPC.
 Supports deterministic WASAPI device routing, automatic Bluetooth endpoint reconnection,
-playback, pause, resume, volume, and rich telemetry.
+playback, pause, resume, volume, rich telemetry, and continuous IPC event listening for EOF auto-advance.
 """
 
 import json
 import logging
 import os
 import subprocess
+import threading
 import time
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, Callable, List
 
 from bluetooth_helper import BluetoothAudioHelper
 
@@ -20,9 +21,15 @@ class MpvPlayer:
     """
     Manages a single headless mpv background process and controls playback
     via JSON-RPC over a Windows Named Pipe.
-    Enforces deterministic routing to the LG soundbar and prevents silent fallback to monitor speakers.
+    Enforces deterministic routing to the LG soundbar, continuous event listening,
+    and EOF notifications for queue auto-progression.
     """
     PIPE_NAME = r"\\.\pipe\mpv-animus"
+    current_track: Optional[Dict[str, Any]] = None
+    _playback_status: str = "IDLE"
+    _active_audio_device_id: Optional[str] = None
+    _active_audio_device_name: Optional[str] = None
+    _audio_output_status: str = "DISCONNECTED"
 
     def __init__(
         self,
@@ -39,8 +46,95 @@ class MpvPlayer:
         self._active_audio_device_name: Optional[str] = None
         self._audio_output_status: str = "DISCONNECTED"
 
+        # Continuous IPC Event Listener & Callbacks
+        self._ipc_lock = threading.RLock()
+        self._stop_listener = threading.Event()
+        self._listener_thread: Optional[threading.Thread] = None
+        self._eof_callbacks: List[Callable[[Optional[Dict[str, Any]], Dict[str, Any]], None]] = []
+
+    def register_eof_callback(self, callback: Callable[[Optional[Dict[str, Any]], Dict[str, Any]], None]):
+        """Registers a callback invoked when mpv finishes playing a track (event: end-file, reason: eof)."""
+        with self._ipc_lock:
+            if callback not in self._eof_callbacks:
+                self._eof_callbacks.append(callback)
+                logger.info(f"[PC_MUSIC_PLAYER] Registered EOF callback: {callback}")
+
+    def unregister_eof_callback(self, callback: Callable[[Optional[Dict[str, Any]], Dict[str, Any]], None]):
+        with self._ipc_lock:
+            if callback in self._eof_callbacks:
+                self._eof_callbacks.remove(callback)
+
+    def _start_listener_thread(self):
+        if self._listener_thread and self._listener_thread.is_alive():
+            return
+        self._stop_listener.clear()
+        self._listener_thread = threading.Thread(
+            target=self._event_listener_worker,
+            name="MpvIpcEventListener",
+            daemon=True
+        )
+        self._listener_thread.start()
+        logger.info("[PC_MUSIC_PLAYER] Mpv IPC background listener thread spawned.")
+
+    def _event_listener_worker(self):
+        """Continuously reads unsolicited JSON-RPC events from mpv's named pipe."""
+        logger.info("[PC_MUSIC_LISTENER] Worker started listening on mpv IPC pipe.")
+        while not self._stop_listener.is_set():
+            if not self.process or self.process.poll() is not None:
+                time.sleep(0.3)
+                continue
+
+            try:
+                with open(self.PIPE_NAME, "r+b", buffering=0) as pipe:
+                    while not self._stop_listener.is_set():
+                        if self.process and self.process.poll() is not None:
+                            break
+                        line = pipe.readline()
+                        if not line:
+                            break
+                        try:
+                            text = line.decode("utf-8").strip()
+                            if text:
+                                msg = json.loads(text)
+                                self._handle_ipc_message(msg)
+                        except Exception as e:
+                            logger.debug(f"[PC_MUSIC_LISTENER_DECODE] {e}")
+            except Exception:
+                time.sleep(0.2)
+        logger.info("[PC_MUSIC_LISTENER] Worker stopped.")
+
+    def _handle_ipc_message(self, msg: Dict[str, Any]):
+        """Dispatches mpv events to internal state and external subscribers."""
+        event = msg.get("event")
+        if not event:
+            return
+
+        logger.debug(f"[PC_MUSIC_EVENT_RAW] {msg}")
+
+        if event == "end-file":
+            reason = msg.get("reason", "unknown")
+            last_track = self.current_track
+            logger.info(f"[PC_MUSIC_EVENT] mpv end-file: reason='{reason}', track='{last_track.get('title') if last_track else None}'")
+            if reason == "eof":
+                self._playback_status = "IDLE"
+                # Dispatch EOF to registered orchestrators / queue handlers
+                callbacks = list(self._eof_callbacks)
+                for cb in callbacks:
+                    try:
+                        cb(last_track, msg)
+                    except Exception as e:
+                        logger.error(f"[PC_MUSIC_EOF_CALLBACK_ERROR] Error in EOF callback: {e}", exc_info=True)
+            elif reason in ["stop", "error"]:
+                self._playback_status = "STOPPED"
+        elif event == "start-file":
+            self._playback_status = "PLAYING"
+        elif event == "idle":
+            if self._playback_status != "PLAYING":
+                self._playback_status = "IDLE"
+
     def _ensure_mpv_running(self, audio_device_id: str):
         if self.process and self.process.poll() is None:
+            self._start_listener_thread()
             return
 
         logger.info(f"[PC_MUSIC_PLAYER] Starting mpv process with IPC pipe={self.PIPE_NAME}, audio-device={audio_device_id} ({self._active_audio_device_name})")
@@ -74,6 +168,7 @@ class MpvPlayer:
 
             if connected:
                 logger.info(f"[PC_MUSIC_PLAYER] mpv started and IPC pipe ready with PID {self.process.pid}")
+                self._start_listener_thread()
             else:
                 logger.warning(f"[PC_MUSIC_PLAYER] mpv started with PID {self.process.pid} but IPC pipe wait timed out")
         except Exception as e:
@@ -85,18 +180,19 @@ class MpvPlayer:
             return None
         req = json.dumps({"command": command}) + "\n"
 
-        for attempt in range(3):
-            try:
-                with open(self.PIPE_NAME, "r+b", buffering=0) as pipe:
-                    pipe.write(req.encode("utf-8"))
-                    pipe.flush()
-                    line = pipe.readline().decode("utf-8").strip()
-                    if line:
-                        return json.loads(line)
-            except Exception as e:
-                if attempt == 2:
-                    logger.warning(f"[PC_MUSIC_IPC_WARNING] IPC command {command} error: {e}")
-                time.sleep(0.15)
+        with self._ipc_lock:
+            for attempt in range(3):
+                try:
+                    with open(self.PIPE_NAME, "r+b", buffering=0) as pipe:
+                        pipe.write(req.encode("utf-8"))
+                        pipe.flush()
+                        line = pipe.readline().decode("utf-8").strip()
+                        if line:
+                            return json.loads(line)
+                except Exception as e:
+                    if attempt == 2:
+                        logger.warning(f"[PC_MUSIC_IPC_WARNING] IPC command {command} error: {e}")
+                    time.sleep(0.15)
         return None
 
     def play(self, stream_url: str, title: str, artist: str, duration: Optional[int] = None, thumbnail_url: Optional[str] = None) -> Tuple[bool, Optional[str]]:
@@ -250,8 +346,9 @@ class MpvPlayer:
 
     def shutdown(self):
         """
-        Gracefully terminates mpv process.
+        Gracefully terminates mpv process and stops the listener thread.
         """
+        self._stop_listener.set()
         if self.process and self.process.poll() is None:
             logger.info("[PC_MUSIC_SHUTDOWN] Terminating mpv process...")
             try:
@@ -260,3 +357,6 @@ class MpvPlayer:
             except Exception:
                 self.process.kill()
             self.process = None
+
+        if self._listener_thread and self._listener_thread.is_alive():
+            self._listener_thread.join(timeout=1.0)

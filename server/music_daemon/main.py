@@ -81,6 +81,21 @@ class PlayRequest(BaseModel):
     direct_video_id: Optional[str] = Field(default=None, max_length=50, description="Optional explicit YouTube/YTM video ID")
 
 
+class QueueRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200, description="Title of the track to queue")
+    artist: Optional[str] = Field(default=None, max_length=200, description="Optional artist name")
+    direct_video_id: Optional[str] = Field(default=None, max_length=50, description="Optional explicit YouTube/YTM video ID")
+    play_next: bool = Field(default=False, description="Whether to insert track at the top of the queue")
+
+
+class QueueResponse(BaseModel):
+    success: bool
+    title: str
+    artist: Optional[str] = None
+    queue_length: int
+    play_next: bool = False
+
+
 class VolumeRequest(BaseModel):
     volume: int = Field(..., ge=0, le=100, description="Target volume level from 0 to 100")
 
@@ -290,6 +305,59 @@ def get_music_status():
 def stop_music():
     orchestrator.safe_stop()
     return ControlResponse(success=True, status="STOPPED", room_audio_state=orchestrator.current_state.value)
+
+
+# Queue & Advanced Playback Navigation Endpoints
+@app.post("/api/music/queue", response_model=QueueResponse)
+def queue_track(req: QueueRequest):
+    logger.info(f"[API_QUEUE_TRACK] Enqueue requested: title='{req.title}', artist='{req.artist}', play_next={req.play_next}")
+    if not req.title.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Title cannot be blank."
+        )
+    res = orchestrator.queue_track(
+        title=req.title,
+        artist=req.artist,
+        direct_video_id=req.direct_video_id,
+        play_next=req.play_next
+    )
+    return QueueResponse(
+        success=res["success"],
+        title=res["title"],
+        artist=res.get("artist"),
+        queue_length=res["queue_length"],
+        play_next=res.get("play_next", False)
+    )
+
+
+@app.get("/api/music/queue")
+def get_queue():
+    return orchestrator.get_queue_status()
+
+
+@app.post("/api/music/next")
+def skip_next():
+    logger.info("[API_SKIP_NEXT] Skip next track requested via API")
+    ok, data, err = orchestrator.skip_next()
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err or "Could not skip next")
+    return {"success": True, "data": data}
+
+
+@app.post("/api/music/previous")
+def skip_previous():
+    logger.info("[API_SKIP_PREVIOUS] Skip previous track requested via API")
+    ok, data, err = orchestrator.skip_previous()
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err or "No previous track")
+    return {"success": True, "data": data}
+
+
+@app.post("/api/music/queue/clear")
+def clear_queue():
+    logger.info("[API_QUEUE_CLEAR] Clear queue requested via API")
+    return orchestrator.clear_queue()
 
 
 # ==========================================

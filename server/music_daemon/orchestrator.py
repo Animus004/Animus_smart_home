@@ -1,18 +1,22 @@
 """
 Smart Room Orchestrator for Animus PC Daemon.
 Provides high-level room audio state management, soundbar connection lifecycle,
-and safe media playback orchestration without exposing low-level Windows/AEP/WASAPI details.
+deterministic playback queue management with continuous auto-advance, and Movie Mode orchestration.
 """
 
 from enum import Enum
 import logging
+import threading
 import time
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 
 from bluetooth_helper import BluetoothAudioHelper
 from device_portal import WindowsDevicePortalBluetooth
 from player import MpvPlayer
+from queue_manager import PlaybackQueue, QueueTrack
 from resolver import YouTubeMusicResolver
+from fire_tv_controller import FireTvController, FireTvBluetoothState
+from projector_controller import ProjectorController, ProjectorPowerState, ProjectorSource
 
 logger = logging.getLogger("music_daemon.orchestrator")
 
@@ -28,13 +32,11 @@ class RoomAudioState(str, Enum):
     AUDIO_OUTPUT_UNAVAILABLE = "AUDIO_OUTPUT_UNAVAILABLE"
 
 
-from fire_tv_controller import FireTvController, FireTvBluetoothState
-from projector_controller import ProjectorController, ProjectorPowerState, ProjectorSource
-
 class SmartRoomOrchestrator:
     """
     High-level orchestration service managing room audio, soundbar connectivity,
-    projector state, Fire TV Bluetooth invariants, and Movie Mode health.
+    deterministic playback queue with EOF auto-advance, projector state,
+    Fire TV Bluetooth invariants, and Movie Mode health.
     """
     def __init__(
         self,
@@ -42,20 +44,212 @@ class SmartRoomOrchestrator:
         player: MpvPlayer,
         bt_helper: Optional[BluetoothAudioHelper] = None,
         projector: Optional[ProjectorController] = None,
-        fire_tv: Optional[FireTvController] = None
+        fire_tv: Optional[FireTvController] = None,
+        queue: Optional[PlaybackQueue] = None
     ):
         self.resolver = resolver
         self.player = player
         self.bt_helper = bt_helper or player.bt_helper
         self.projector = projector
         self.fire_tv = fire_tv or FireTvController()
+        self.queue = queue or PlaybackQueue(auto_radio=True)
+
         self._current_state: RoomAudioState = RoomAudioState.DISCONNECTED
         self._last_error: Optional[str] = None
         self._last_action_duration_ms: int = 0
+        self._in_movie_mode: bool = False
+        self._auto_advance_lock = threading.Lock()
+
+        # Register continuous IPC EOF event callback
+        self.player.register_eof_callback(self._handle_player_eof)
 
     @property
     def current_state(self) -> RoomAudioState:
         return self._current_state
+
+    def _handle_player_eof(self, last_track: Optional[Dict[str, Any]], event_data: Dict[str, Any]):
+        """
+        Invoked when mpv reaches End Of File on current stream.
+        Deterministically advances to the next track in the queue or triggers auto-radio resolution.
+        """
+        logger.info(f"[ORCHESTRATOR_EOF_TRIGGER] Track completed (reason='{event_data.get('reason')}'). Evaluating auto-advance...")
+
+        # 1. Guard against Movie Mode audio hijacking
+        if self._in_movie_mode:
+            logger.info("[ORCHESTRATOR_EOF_SUPPRESSED] Auto-advance suppressed: Movie Mode is active.")
+            return
+
+        # 2. Prevent concurrent auto-advance runs
+        if not self._auto_advance_lock.acquire(blocking=False):
+            logger.info("[ORCHESTRATOR_EOF_CONCURRENT] Auto-advance already in progress.")
+            return
+
+        try:
+            # Check soundbar endpoint availability
+            lg_dev, _ = self.bt_helper.scan_active_endpoints()
+            if not lg_dev:
+                logger.warning("[ORCHESTRATOR_EOF_ABORT] Cannot auto-advance: Soundbar is disconnected.")
+                self._current_state = RoomAudioState.DISCONNECTED
+                return
+
+            # Advance to next song in thread-safe queue
+            self._advance_next_track(last_track=last_track)
+        finally:
+            self._auto_advance_lock.release()
+
+    def _advance_next_track(self, last_track: Optional[Dict[str, Any]] = None, max_retries: int = 2):
+        """
+        Fetches next track from queue or resolves related radio songs, then plays seamlessly.
+        """
+        next_track = self.queue.pop_next()
+
+        # If queue is empty and auto-radio is enabled, fetch related tracks from seed
+        if not next_track and self.queue.auto_radio:
+            seed_vid = None
+            if last_track and last_track.get("video_id"):
+                seed_vid = last_track.get("video_id")
+            elif self.queue.current_track and self.queue.current_track.video_id:
+                seed_vid = self.queue.current_track.video_id
+
+            if seed_vid:
+                logger.info(f"[ORCHESTRATOR_AUTO_RADIO] Queue empty. Resolving related radio tracks for seed video_id={seed_vid}")
+                related = self.resolver.get_related_tracks(seed_vid, limit=5)
+                if related:
+                    queue_tracks = [
+                        QueueTrack(
+                            video_id=t["video_id"],
+                            title=t["title"],
+                            artist=t["artist"],
+                            duration=t.get("duration"),
+                            thumbnail_url=t.get("thumbnail_url"),
+                            source="radio"
+                        )
+                        for t in related
+                    ]
+                    self.queue.enqueue_multiple(queue_tracks)
+                    next_track = self.queue.pop_next()
+
+        if not next_track:
+            logger.info("[ORCHESTRATOR_PLAYBACK_FINISHED] No more tracks in queue and auto-radio exhausted.")
+            self._current_state = RoomAudioState.AUDIO_READY
+            return
+
+        logger.info(f"[ORCHESTRATOR_AUTO_PLAY] Auto-advancing to next track: '{next_track.title}' by '{next_track.artist}' (source={next_track.source})")
+
+        # Resolve streaming URL
+        resolved = self.resolver.resolve(
+            title=next_track.title,
+            artist=next_track.artist,
+            direct_id=next_track.video_id
+        )
+
+        if not resolved:
+            logger.warning(f"[ORCHESTRATOR_AUTO_PLAY_FAIL] Could not resolve '{next_track.title}'. Retrying next track...")
+            if max_retries > 0:
+                self._advance_next_track(last_track=last_track, max_retries=max_retries - 1)
+            return
+
+        # Play track via mpv
+        played, error_reason = self.player.play(
+            stream_url=resolved.stream_url,
+            title=resolved.title,
+            artist=resolved.artist,
+            duration=resolved.duration,
+            thumbnail_url=resolved.thumbnail_url
+        )
+
+        if played:
+            self.queue.set_current_track(QueueTrack(
+                video_id=resolved.video_id,
+                title=resolved.title,
+                artist=resolved.artist,
+                duration=resolved.duration,
+                stream_url=resolved.stream_url,
+                thumbnail_url=resolved.thumbnail_url,
+                is_authenticated=resolved.is_authenticated,
+                source=next_track.source
+            ))
+            # Cache video_id on player's current track dictionary for EOF reference
+            if hasattr(self.player, "current_track") and isinstance(self.player.current_track, dict):
+                self.player.current_track["video_id"] = resolved.video_id
+            self._current_state = RoomAudioState.PLAYING
+            logger.info(f"[ORCHESTRATOR_AUTO_PLAY_CONFIRMED] '{resolved.title}' playing on '{self.player._active_audio_device_name}'")
+        else:
+            logger.error(f"[ORCHESTRATOR_AUTO_PLAY_FAILED] mpv playback failed for '{resolved.title}': {error_reason}")
+            if max_retries > 0:
+                self._advance_next_track(last_track=last_track, max_retries=max_retries - 1)
+
+    def queue_track(
+        self,
+        title: str,
+        artist: Optional[str] = None,
+        direct_video_id: Optional[str] = None,
+        play_next: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Enqueues a track for future playback.
+        """
+        track = QueueTrack(
+            video_id=direct_video_id or "pending_resolution",
+            title=title,
+            artist=artist or "Unknown Artist",
+            source="manual"
+        )
+        if play_next:
+            new_len = self.queue.enqueue_next(track)
+        else:
+            new_len = self.queue.enqueue(track)
+
+        return {
+            "success": True,
+            "title": title,
+            "artist": artist,
+            "queue_length": new_len,
+            "play_next": play_next
+        }
+
+    def skip_next(self) -> Tuple[bool, Dict[str, Any], Optional[str]]:
+        """
+        Skips currently playing song and immediately plays the next song from the queue.
+        """
+        logger.info("[ORCHESTRATOR_SKIP_NEXT] Manual skip next requested.")
+        current_track = self.queue.current_track
+        last_info = {
+            "video_id": current_track.video_id if current_track else None,
+            "title": current_track.title if current_track else None
+        }
+        self.player.stop()
+        self._advance_next_track(last_track=last_info)
+        st = self.player.get_status()
+        return True, {
+            "room_audio_state": self._current_state.value,
+            "title": st.get("title"),
+            "artist": st.get("artist"),
+            "queue_length": self.queue.size()
+        }, None
+
+    def skip_previous(self) -> Tuple[bool, Dict[str, Any], Optional[str]]:
+        """
+        Plays previous song from history if available.
+        """
+        logger.info("[ORCHESTRATOR_SKIP_PREV] Manual skip previous requested.")
+        prev_track = self.queue.pop_previous()
+        if not prev_track:
+            return False, {}, "No previous track in history"
+
+        self.player.stop()
+        return self.safe_play(
+            title=prev_track.title,
+            artist=prev_track.artist,
+            direct_video_id=prev_track.video_id if prev_track.video_id != "pending_resolution" else None
+        )
+
+    def clear_queue(self) -> Dict[str, Any]:
+        self.queue.clear()
+        return {"success": True, "message": "Queue cleared"}
+
+    def get_queue_status(self) -> Dict[str, Any]:
+        return self.queue.get_status()
 
     def get_movie_mode_health(self) -> Dict[str, Any]:
         """
@@ -69,15 +263,14 @@ class SmartRoomOrchestrator:
 
         proj_on = proj_info.get("power_state") == ProjectorPowerState.ON.value
         source_hdmi1 = proj_info.get("current_source") in [ProjectorSource.HDMI_1.value, "HDMI_1"]
-        
+
         # Check Fire TV Bluetooth health directly from structured status
         if "bluetooth" in fire_tv_info and isinstance(fire_tv_info["bluetooth"], dict):
             fire_tv_bt_ok = bool(fire_tv_info["bluetooth"].get("required_device_connected", False))
         else:
             fire_tv_bt_ok = bool(fire_tv_info.get("bluetooth_connected", False))
-            
-        soundbar_ok = lg_dev is not None
 
+        soundbar_ok = lg_dev is not None
         is_healthy = proj_on and source_hdmi1 and fire_tv_bt_ok and soundbar_ok
 
         return {
@@ -104,6 +297,7 @@ class SmartRoomOrchestrator:
         auth_info = self.resolver.get_auth_status()
         lg_dev, _ = self.bt_helper.scan_active_endpoints()
         movie_health = self.get_movie_mode_health()
+        queue_status = self.get_queue_status()
 
         if player_status.get("status") == "PLAYING":
             self._current_state = RoomAudioState.PLAYING
@@ -121,6 +315,7 @@ class SmartRoomOrchestrator:
             "soundbar_endpoint_id": lg_dev["id"] if lg_dev else None,
             "is_audio_ready": lg_dev is not None,
             "playback": player_status,
+            "queue": queue_status,
             "authentication": auth_info,
             "device_portal_available": self.bt_helper.device_portal.is_available(),
             "movie_mode_health": movie_health,
@@ -211,7 +406,8 @@ class SmartRoomOrchestrator:
         1. Resolves YouTube Music stream.
         2. Ensures soundbar is in AUDIO_READY state (auto-connecting if necessary).
         3. Binds mpv exclusively to LG WASAPI endpoint.
-        4. Returns structured playback result.
+        4. Enrolls track in deterministic PlaybackQueue.
+        5. Returns structured playback result.
         """
         t0 = time.time()
         logger.info(f"[ORCHESTRATOR_PLAY] Safe play requested: title='{title}', artist='{artist}'")
@@ -254,6 +450,20 @@ class SmartRoomOrchestrator:
                 "audio_output_status": st.get("audio_output_status", "DISCONNECTED")
             }, self._last_error
 
+        # 4. Set active track in PlaybackQueue
+        self.queue.set_current_track(QueueTrack(
+            video_id=resolved.video_id,
+            title=resolved.title,
+            artist=resolved.artist,
+            duration=resolved.duration,
+            stream_url=resolved.stream_url,
+            thumbnail_url=resolved.thumbnail_url,
+            is_authenticated=resolved.is_authenticated,
+            source="manual"
+        ))
+        if hasattr(self.player, "current_track") and isinstance(self.player.current_track, dict):
+            self.player.current_track["video_id"] = resolved.video_id
+
         self._current_state = RoomAudioState.PLAYING
         logger.info(f"[ORCHESTRATOR_PLAY_CONFIRMED] '{resolved.title}' playing on '{st.get('audio_device_name')}'")
         return True, {
@@ -293,14 +503,16 @@ class SmartRoomOrchestrator:
     def start_movie_mode(self) -> Dict[str, Any]:
         """
         Orchestrates starting Movie Mode:
-        1. Stops active PC music playback if running (Resource Arbitration).
-        2. Wakes Fire TV.
-        3. Ensures Projector is ON and on HDMI_1.
-        4. Connects LG SNC4R soundbar.
-        5. Validates full room health invariant.
+        1. Sets _in_movie_mode = True to suppress background music auto-advance.
+        2. Stops active PC music playback if running (Resource Arbitration).
+        3. Wakes Fire TV.
+        4. Ensures Projector is ON and on HDMI_1.
+        5. Connects LG SNC4R soundbar.
+        6. Validates full room health invariant.
         """
         t0 = time.time()
         logger.info("[ORCHESTRATOR_MOVIE_MODE_START] Starting Movie Mode workflow...")
+        self._in_movie_mode = True
 
         # 0. Stop active PC playback to yield audio ownership to Fire TV
         if self.player:
@@ -334,12 +546,14 @@ class SmartRoomOrchestrator:
     def stop_movie_mode(self) -> Dict[str, Any]:
         """
         Orchestrates stopping Movie Mode:
-        1. Stops PC audio playback.
-        2. Safely powers off Projector using verified OEM PowerActivity.
-        3. Disconnects Soundbar.
+        1. Re-enables PC music capability (_in_movie_mode = False).
+        2. Stops PC audio playback.
+        3. Safely powers off Projector using verified OEM PowerActivity.
+        4. Disconnects Soundbar.
         """
         t0 = time.time()
         logger.info("[ORCHESTRATOR_MOVIE_MODE_STOP] Stopping Movie Mode workflow...")
+        self._in_movie_mode = False
 
         self.safe_stop()
 
@@ -356,4 +570,3 @@ class SmartRoomOrchestrator:
             "status": "OFF",
             "duration_ms": self._last_action_duration_ms
         }
-

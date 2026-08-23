@@ -12,7 +12,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from ytmusicapi import YTMusic
 from ytmusicapi.auth.oauth.credentials import OAuthCredentials
 import yt_dlp
@@ -221,3 +221,50 @@ class YouTubeMusicResolver(MusicResolver):
         except Exception as e:
             logger.error(f"[PC_MUSIC_RESOLVER_ERROR] Failed resolving stream: {e}", exc_info=True)
             return None
+
+    def get_related_tracks(self, video_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Queries YouTube Music for related/watch playlist tracks starting from video_id.
+        Returns a list of track metadata dictionaries suitable for queuing.
+        """
+        if not video_id:
+            return []
+
+        logger.info(f"[PC_MUSIC_RELATED] Fetching up to {limit} related tracks for video_id={video_id}")
+        related: List[Dict[str, Any]] = []
+
+        # 1. Try ytmusicapi get_watch_playlist
+        if self.ytm:
+            try:
+                playlist_data = self.ytm.get_watch_playlist(videoId=video_id, limit=limit + 1)
+                tracks = playlist_data.get("tracks", [])
+                for t in tracks:
+                    vid = t.get("videoId")
+                    # Exclude the seed video itself if it's the first track
+                    if vid and vid != video_id:
+                        title = t.get("title", "Unknown Title")
+                        artist = "Unknown Artist"
+                        artists = t.get("artists")
+                        if artists and isinstance(artists, list) and len(artists) > 0:
+                            artist = artists[0].get("name", artist)
+                        dur = t.get("duration_seconds")
+                        thumb = None
+                        thumbnails = t.get("thumbnails")
+                        if thumbnails and isinstance(thumbnails, list) and len(thumbnails) > 0:
+                            thumb = thumbnails[-1].get("url")
+                        related.append({
+                            "video_id": vid,
+                            "title": title,
+                            "artist": artist,
+                            "duration": dur,
+                            "thumbnail_url": thumb
+                        })
+                        if len(related) >= limit:
+                            break
+                if related:
+                    logger.info(f"[PC_MUSIC_RELATED_FOUND] Found {len(related)} related tracks via YTMusic watch playlist.")
+                    return related
+            except Exception as e:
+                logger.warning(f"[PC_MUSIC_RELATED_WARN] get_watch_playlist failed: {e}. Falling back.")
+
+        return related
