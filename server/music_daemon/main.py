@@ -29,7 +29,13 @@ from pc_controller import PcController
 from pc_command_router import PcCommandRouter
 from room_state.aggregator import RoomStateAggregator
 from capability_registry import UnifiedCapabilityRegistry
-from planner import PlanValidator, GeminiPlannerClient, GeminiApiUnavailableError, GeminiResponseError
+from planner import (
+    PlanValidator,
+    GeminiPlannerClient,
+    GeminiApiUnavailableError,
+    GeminiResponseError,
+    PlanExecutor
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,6 +82,17 @@ firetv_service = FireTvService(
     provider_registry=orchestrator.provider_registry,
     content_resolver=orchestrator.content_resolver,
     automation_registry=automation_registry
+)
+planner_executor = PlanExecutor(
+    registry=unified_capability_registry,
+    validator=planner_validator,
+    room_state_aggregator=room_state_aggregator,
+    projector_controller=projector,
+    ac_controller=ac_controller,
+    pc_controller=pc_controller,
+    fire_tv_controller=fire_tv,
+    firetv_service=firetv_service,
+    orchestrator=orchestrator
 )
 
 
@@ -1151,6 +1168,69 @@ def plan_room_orchestration(req: PlannerPlanRequest) -> Dict[str, Any]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "status": "PLANNER_ERROR",
+                "message": str(e)
+            }
+        )
+
+
+@app.post("/api/planner/execute")
+def execute_validated_plan_endpoint(req: PlannerPlanRequest) -> Dict[str, Any]:
+    """
+    Translates user natural language intent into a plan, executes PlanValidator,
+    and dispatches only the validated plan through physical controllers with read-back verification.
+    """
+    if not req.request.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Execution request cannot be empty."
+        )
+
+    current_state = room_state_aggregator.get_room_state()
+
+    try:
+        # Step 1: Generate plan from Gemini
+        validation_res = planner_client.generate_and_validate_plan(
+            user_request=req.request,
+            room_state=current_state,
+            context=req.context,
+            preferences=req.preferences
+        )
+
+        # Step 2: Ensure validation succeeded
+        if not validation_res.valid:
+            return {
+                "execution_success": False,
+                "overall_status": "VALIDATION_FAILED",
+                "validation_errors": [e.model_dump() for e in validation_res.errors],
+                "message": "Plan failed deterministic validation and was rejected before hardware execution."
+            }
+
+        # Step 3: Execute validated plan through PlanExecutor
+        exec_res = planner_executor.execute_plan(validation_res)
+        return exec_res.to_dict()
+
+    except GeminiApiUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "GEMINI_UNAVAILABLE",
+                "message": str(e)
+            }
+        )
+    except GeminiResponseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "status": "GEMINI_RESPONSE_ERROR",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        logger.error(f"[PLANNER_EXECUTE_ENDPOINT_ERROR] Execution error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "PLANNER_EXECUTION_ERROR",
                 "message": str(e)
             }
         )

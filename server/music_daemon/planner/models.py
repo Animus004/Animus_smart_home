@@ -12,7 +12,11 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
 from capability_registry.models import SafetyLevel, OperationType
-from planner.errors import PlanValidationErrorDetail, PlanValidationWarningDetail
+from planner.errors import (
+    PlanValidationErrorDetail,
+    PlanValidationWarningDetail,
+    ErrorCode
+)
 
 
 class ExecutionMode(str, Enum):
@@ -128,3 +132,93 @@ class ValidationResult(BaseModel):
             "idempotent_step_ids": self.idempotent_step_ids,
             "validated_at": self.validated_at
         }
+
+
+class ExecutionStatus(str, Enum):
+    """Execution status for an individual step."""
+    PENDING = "PENDING"
+    SKIPPED = "SKIPPED"
+    PRECONDITION_FAILED = "PRECONDITION_FAILED"
+    UNKNOWN_STATE = "UNKNOWN_STATE"
+    STALE_STATE = "STALE_STATE"
+    DISPATCHED = "DISPATCHED"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+
+
+class OverallExecutionStatus(str, Enum):
+    """Overall plan execution status."""
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    PARTIAL_SUCCESS = "PARTIAL_SUCCESS"
+    FAILED = "FAILED"
+    ABORTED = "ABORTED"
+    SKIPPED = "SKIPPED"
+
+
+class StepExecutionResult(BaseModel):
+    """Detailed execution result for an individual plan step."""
+    step_id: int
+    device: str
+    capability_id: str
+    requested_parameters: Dict[str, Any] = Field(default_factory=dict)
+    status: ExecutionStatus = ExecutionStatus.PENDING
+    started_at: float = Field(default_factory=time.time)
+    completed_at: float = Field(default_factory=time.time)
+    precondition_result: Optional[Dict[str, Any]] = None
+    dispatch_result: Optional[Dict[str, Any]] = None
+    readback_result: Optional[Dict[str, Any]] = None
+    verified: bool = False
+    error_code: Optional[ErrorCode] = None
+    error_message: Optional[str] = None
+
+
+class ExecutionResult(BaseModel):
+    """
+    Authoritative, deterministic result of physical plan execution.
+    Contains complete step-level audit trail, physical read-back evidence, and timing.
+    """
+    execution_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    plan_id: Optional[str] = None
+    user_request: Optional[str] = None
+    intent: Optional[str] = None
+    started_at: float = Field(default_factory=time.time)
+    completed_at: float = Field(default_factory=time.time)
+    success: bool = False
+    overall_status: OverallExecutionStatus = OverallExecutionStatus.PENDING
+    steps: List[StepExecutionResult] = Field(default_factory=list)
+    total_steps: int = 0
+    verified_steps_count: int = 0
+    skipped_steps_count: int = 0
+    failed_steps_count: int = 0
+    failure_code: Optional[ErrorCode] = None
+    warnings: List[str] = Field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Deterministic JSON dictionary representation."""
+        return {
+            "execution_id": self.execution_id,
+            "plan_id": self.plan_id,
+            "user_request": self.user_request,
+            "intent": self.intent,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+            "duration_ms": round((self.completed_at - self.started_at) * 1000, 2),
+            "success": self.success,
+            "overall_status": self.overall_status.value,
+            "total_steps": self.total_steps,
+            "verified_steps_count": self.verified_steps_count,
+            "skipped_steps_count": self.skipped_steps_count,
+            "failed_steps_count": self.failed_steps_count,
+            "failure_code": self.failure_code.value if self.failure_code else None,
+            "warnings": self.warnings,
+            "steps": [s.model_dump() for s in self.steps]
+        }
+
+
+# Rebuild models to resolve forward annotations
+StepExecutionResult.model_rebuild()
+ExecutionResult.model_rebuild()
+ValidationResult.model_rebuild()
+GeminiStructuredPlan.model_rebuild()

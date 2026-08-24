@@ -1,7 +1,7 @@
 """
-Gemini Structured Planner and Deterministic Plan Validator Module for Animus Smart Room.
+Gemini Structured Planner, Deterministic Plan Validator & Plan Executor Module for Animus Smart Room.
 Authoritative models, restricted precondition evaluator, deterministic validator,
-and structured generation client.
+structured generation client, and verified physical execution engine.
 """
 
 from planner.errors import (
@@ -21,7 +21,11 @@ from planner.models import (
     PlanStep,
     GeminiStructuredPlan,
     ValidatedStep,
-    ValidationResult
+    ValidationResult,
+    ExecutionStatus,
+    OverallExecutionStatus,
+    StepExecutionResult,
+    ExecutionResult
 )
 from planner.preconditions import (
     PreconditionStatus,
@@ -33,6 +37,7 @@ from planner.gemini_client import (
     GeminiPlannerClient,
     PLANNER_SYSTEM_INSTRUCTION
 )
+from planner.executor import PlanExecutor
 
 __all__ = [
     "ErrorCode",
@@ -50,10 +55,15 @@ __all__ = [
     "GeminiStructuredPlan",
     "ValidatedStep",
     "ValidationResult",
+    "ExecutionStatus",
+    "OverallExecutionStatus",
+    "StepExecutionResult",
+    "ExecutionResult",
     "PreconditionStatus",
     "PreconditionEvaluationResult",
     "RestrictedPreconditionEvaluator",
     "PlanValidator",
     "GeminiPlannerClient",
-    "PLANNER_SYSTEM_INSTRUCTION"
+    "PLANNER_SYSTEM_INSTRUCTION",
+    "PlanExecutor"
 ]
