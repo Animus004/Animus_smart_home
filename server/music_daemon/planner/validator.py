@@ -7,6 +7,7 @@ STRICTLY ZERO eval(), exec(), or hardware execution.
 
 from __future__ import annotations
 import logging
+import time
 from typing import Any, Dict, List, Optional, Union
 
 from capability_registry import (
@@ -15,7 +16,7 @@ from capability_registry import (
     CapabilityStatus,
     ParameterType
 )
-from room_state.models import RoomState
+from room_state.models import RoomState, StateField
 from room_state.provenance import Provenance
 from planner.models import (
     GeminiStructuredPlan,
@@ -110,6 +111,7 @@ class PlanValidator:
 
         # 3. Validate Each Step in Graph
         evaluator = RestrictedPreconditionEvaluator(current_time=current_time)
+        simulated_state = room_state.model_copy(deep=True) if room_state is not None else None
 
         for step in plan.steps:
             step_dict = step.model_dump()
@@ -216,11 +218,11 @@ class PlanValidator:
                         )
 
             # C. Preconditions Evaluation (if RoomState provided)
-            if room_state is not None:
+            if simulated_state is not None:
                 # Merge explicit step preconditions and capability definition preconditions
                 all_preconditions = list(set(step.preconditions + (cap_def.preconditions if cap_def else [])))
                 for pre in all_preconditions:
-                    res: PreconditionEvaluationResult = evaluator.evaluate(pre, room_state)
+                    res: PreconditionEvaluationResult = evaluator.evaluate(pre, simulated_state)
                     if res.status == PreconditionStatus.INVALID_PRECONDITION:
                         step_errors.append(
                             PlanValidationErrorDetail(
@@ -259,8 +261,8 @@ class PlanValidator:
                         )
 
             # D. Idempotency Check (if RoomState provided and capability is idempotent)
-            if room_state is not None and cap_def is not None and cap_def.idempotent and len(step_errors) == 0:
-                is_idempotent_no_op = self._check_step_idempotency(step, cap_def, room_state, current_time)
+            if simulated_state is not None and cap_def is not None and cap_def.idempotent and len(step_errors) == 0:
+                is_idempotent_no_op = self._check_step_idempotency(step, cap_def, simulated_state, current_time)
                 if is_idempotent_no_op:
                     idempotent_step_ids.append(step.step_id)
                     step_warnings.append(
@@ -272,7 +274,7 @@ class PlanValidator:
                         )
                     )
 
-            # E. Step Decision
+            # E. Step Decision & Simulated State Transition
             if len(step_errors) > 0:
                 errors.extend(step_errors)
                 rejected_steps.append({
@@ -300,6 +302,8 @@ class PlanValidator:
                         is_idempotent_no_op=is_idempotent_no_op
                     )
                 )
+                if simulated_state is not None:
+                    self._apply_simulated_transition(simulated_state, cap_def, step)
 
         is_plan_valid = len(errors) == 0
 
@@ -385,3 +389,37 @@ class PlanValidator:
                     return True
 
         return False
+
+    def _apply_simulated_transition(
+        self,
+        simulated_state: RoomState,
+        cap_def: Optional[CapabilityDefinition],
+        step: PlanStep
+    ) -> None:
+        """
+        Applies expected state transitions to the simulated RoomState graph during sequential validation.
+        Allows subsequent steps in a valid multi-step plan to satisfy their preconditions.
+        """
+        if not cap_def or not cap_def.expected_state_transition:
+            return
+
+        now = time.time()
+        for field_path, target_val in cap_def.expected_state_transition.items():
+            parts = field_path.strip().lower().split(".")
+            if len(parts) != 2:
+                continue
+            subsys_name, field_name = parts[0], parts[1]
+            subsys = getattr(simulated_state, subsys_name, None)
+            if subsys is None:
+                continue
+            f = getattr(subsys, field_name, None)
+            if not isinstance(f, StateField):
+                continue
+
+            actual_val = target_val
+            if isinstance(target_val, str) and target_val in step.parameters:
+                actual_val = step.parameters[target_val]
+
+            f.value = actual_val
+            f.provenance = Provenance.DERIVED
+            f.observed_at = now
