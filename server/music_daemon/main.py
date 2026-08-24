@@ -29,6 +29,7 @@ from pc_controller import PcController
 from pc_command_router import PcCommandRouter
 from room_state.aggregator import RoomStateAggregator
 from capability_registry import UnifiedCapabilityRegistry
+from planner import PlanValidator, GeminiPlannerClient, GeminiApiUnavailableError, GeminiResponseError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,6 +63,8 @@ room_state_aggregator = RoomStateAggregator(
     orchestrator=orchestrator
 )
 unified_capability_registry = UnifiedCapabilityRegistry()
+planner_validator = PlanValidator(registry=unified_capability_registry)
+planner_client = GeminiPlannerClient(registry=unified_capability_registry, validator=planner_validator)
 
 automation_registry = AutomationRegistry()
 firetv_service = FireTvService(
@@ -1079,6 +1082,78 @@ def pc_natural_command_endpoint(req: PcNaturalCommandRequest) -> Dict[str, Any]:
         status_code = 403 if res.get("status") == "SECURITY_REJECTED" else 400
         raise HTTPException(status_code=status_code, detail=res)
     return res
+
+
+# =========================================================================
+# CAPABILITY REGISTRY, ROOM STATE & GEMINI STRUCTURED PLANNER ENDPOINTS
+# =========================================================================
+
+class PlannerPlanRequest(BaseModel):
+    request: str = Field(..., min_length=1, description="Natural language user planning intent/request")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Optional environmental context")
+    preferences: Optional[Dict[str, Any]] = Field(default=None, description="Optional user preferences hierarchy")
+
+
+@app.get("/api/capabilities")
+def get_capabilities_catalog() -> Dict[str, Any]:
+    """Returns authoritative machine-readable catalog of all smart room capabilities."""
+    return unified_capability_registry.export_catalog_dict()
+
+
+@app.get("/api/room/state")
+def get_canonical_room_state() -> Dict[str, Any]:
+    """Returns canonical, fresh RoomState snapshot with provenance tags."""
+    st = room_state_aggregator.get_room_state()
+    return st.to_sanitized_prompt_dict()
+
+
+@app.post("/api/planner/plan")
+def plan_room_orchestration(req: PlannerPlanRequest) -> Dict[str, Any]:
+    """
+    Translates user natural language intent into a structured, validated room plan.
+    STRICTLY ZERO HARDWARE EXECUTION — planning and deterministic validation ONLY.
+    """
+    if not req.request.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Planning request cannot be empty."
+        )
+
+    current_state = room_state_aggregator.get_room_state()
+
+    try:
+        validation_res = planner_client.generate_and_validate_plan(
+            user_request=req.request,
+            room_state=current_state,
+            context=req.context,
+            preferences=req.preferences
+        )
+        return validation_res.to_dict()
+    except GeminiApiUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "GEMINI_UNAVAILABLE",
+                "message": str(e)
+            }
+        )
+    except GeminiResponseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "status": "GEMINI_RESPONSE_ERROR",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        logger.error(f"[PLANNER_ENDPOINT_ERROR] Unexpected planning error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "PLANNER_ERROR",
+                "message": str(e)
+            }
+        )
 
 
 if __name__ == "__main__":
