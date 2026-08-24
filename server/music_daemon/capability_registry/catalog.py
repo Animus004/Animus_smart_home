@@ -1,12 +1,13 @@
 """
 Authoritative Static Capability Catalog for Animus Smart Room.
 Defines the complete verified baseline of all smart room physical capabilities
-with rigorous parameter limits, safety levels, and hardware constraints.
+with rigorous parameter limits, operation types, safety levels, and hardware constraints.
 """
 
 from typing import List
 from capability_registry.models import (
     Subsystem,
+    OperationType,
     SafetyLevel,
     CapabilityStatus,
     ParameterType,
@@ -16,28 +17,30 @@ from capability_registry.models import (
 
 AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     # =========================================================================
-    # 1. PROJECTOR SUBSYSTEM (Zebronics PixaPlay 25)
+    # 1. PROJECTOR SUBSYSTEM (Zebronics PixaPlay 25 / ProjectorController)
     # =========================================================================
     CapabilityDefinition(
         canonical_id="PROJECTOR_POWER_WAKE",
         subsystem=Subsystem.PROJECTOR,
-        description="Wakes projector from standby mode over ADB Wi-Fi.",
+        description="Wakes projector display from standby mode over ADB Wi-Fi via KEYCODE_WAKEUP.",
         underlying_controller="ProjectorController",
         underlying_capability_name="projector_wake",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
         safety_level=SafetyLevel.LOW_RISK,
         status=CapabilityStatus.VERIFIED_EXECUTABLE,
-        preconditions=["projector.health == 'OK'"],
+        preconditions=["projector.reachable == True"],
         expected_state_transition={"projector.power": True}
     ),
     CapabilityDefinition(
         canonical_id="PROJECTOR_POWER_SLEEP",
         subsystem=Subsystem.PROJECTOR,
-        description="Puts projector into standby mode over ADB Wi-Fi.",
+        description="Puts projector display into standby mode over ADB Wi-Fi via KEYCODE_SLEEP.",
         underlying_controller="ProjectorController",
         underlying_capability_name="projector_sleep",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -47,11 +50,52 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         expected_state_transition={"projector.power": False}
     ),
     CapabilityDefinition(
+        canonical_id="PROJECTOR_POWER_OFF_OEM",
+        subsystem=Subsystem.PROJECTOR,
+        description="Initiates graceful optical-engine shutdown via OEM PowerActivity with 3-second cooling sequence.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_power_off_oem",
+        operation_type=OperationType.ACTION,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.MEDIUM_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE,
+        expected_state_transition={"projector.power": False}
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_POWER_ON_COLD",
+        subsystem=Subsystem.PROJECTOR,
+        description="Cold power-on when projector is completely unpowered (unavailable via ADB; pending IR blaster hardware).",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_power_on_cold",
+        operation_type=OperationType.ACTION,
+        idempotent=True,
+        requires_device_online=False,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.RESTRICTED,
+        status=CapabilityStatus.UNSUPPORTED_HARDWARE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_GET_POWER_STATE",
+        subsystem=Subsystem.PROJECTOR,
+        description="Reads physical wakefulness, display power, and interactivity state via dumpsys.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_get_power_state",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
         canonical_id="PROJECTOR_SWITCH_HDMI1",
         subsystem=Subsystem.PROJECTOR,
-        description="Switches physical projector display input source to HDMI 1.",
+        description="Switches physical projector display input source to HDMI 1 (Fire TV input).",
         underlying_controller="ProjectorController",
         underlying_capability_name="projector_switch_hdmi1",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -66,6 +110,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Switches physical projector input source to internal Android TV home launcher.",
         underlying_controller="ProjectorController",
         underlying_capability_name="projector_switch_android_home",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -75,11 +120,65 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         expected_state_transition={"projector.input_source": "ANDROID_HOME"}
     ),
     CapabilityDefinition(
+        canonical_id="PROJECTOR_SWITCH_USB_FILEMGR",
+        subsystem=Subsystem.PROJECTOR,
+        description="Launches USB File Manager / Media Player on projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_switch_usb_filemgr",
+        operation_type=OperationType.ACTION,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=True,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE,
+        expected_state_transition={"projector.input_source": "USB"}
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_GET_SOURCE",
+        subsystem=Subsystem.PROJECTOR,
+        description="Reads current active input source on physical projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_get_source",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_GET_SIGNAL_STATE",
+        subsystem=Subsystem.PROJECTOR,
+        description="Queries dumpsys tv_input under HDMI0000C2 to verify active streaming video handshake.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_get_signal_state",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_GET_BRIGHTNESS",
+        subsystem=Subsystem.PROJECTOR,
+        description="Reads normalized projector screen brightness (0 to 100%).",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_get_brightness",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
         canonical_id="PROJECTOR_SET_BRIGHTNESS",
         subsystem=Subsystem.PROJECTOR,
-        description="Adjusts physical projector display brightness scalar between 1 and 100.",
+        description="Adjusts physical projector display brightness scalar between 1 and 100% with read-back verification.",
         underlying_controller="ProjectorController",
         underlying_capability_name="projector_set_brightness",
+        operation_type=OperationType.ACTION,
         parameters={
             "brightness": ParameterConstraint(
                 name="brightness",
@@ -98,55 +197,282 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         preconditions=["projector.power == True"]
     ),
     CapabilityDefinition(
-        canonical_id="PROJECTOR_SET_PICTURE_MODE",
+        canonical_id="PROJECTOR_SET_CONTRAST",
         subsystem=Subsystem.PROJECTOR,
-        description="Sets physical projector picture mode preset.",
+        description="Sets physical projector display contrast scalar (deferred pending controller contrast API).",
         underlying_controller="ProjectorController",
-        underlying_capability_name="projector_set_picture_mode",
+        underlying_capability_name="projector_set_contrast",
+        operation_type=OperationType.ACTION,
         parameters={
-            "mode": ParameterConstraint(
-                name="mode",
-                param_type=ParameterType.ENUM,
+            "contrast": ParameterConstraint(
+                name="contrast",
+                param_type=ParameterType.INTEGER,
                 required=True,
-                allowed_values=["STANDARD", "VIVID", "MOVIE", "USER"],
-                description="Target picture mode preset"
+                min_value=1,
+                max_value=100,
+                description="Target contrast level (1 to 100)"
             )
         },
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
         safety_level=SafetyLevel.LOW_RISK,
-        status=CapabilityStatus.VERIFIED_EXECUTABLE,
-        preconditions=["projector.power == True"]
+        status=CapabilityStatus.DEFERRED_PENDING_IMPLEMENTATION
     ),
     CapabilityDefinition(
-        canonical_id="PROJECTOR_SET_ASPECT_RATIO",
+        canonical_id="PROJECTOR_GET_HARDWARE_HEALTH",
         subsystem=Subsystem.PROJECTOR,
-        description="Sets physical projector display aspect ratio.",
+        description="Reads live optical LED light temperature and dual cooling fan RPMs via getprop telemetry.",
         underlying_controller="ProjectorController",
-        underlying_capability_name="projector_set_aspect_ratio",
-        parameters={
-            "ratio": ParameterConstraint(
-                name="ratio",
-                param_type=ParameterType.ENUM,
-                required=True,
-                allowed_values=["16:9", "4:3", "AUTO"],
-                description="Target aspect ratio"
-            )
-        },
+        underlying_capability_name="projector_get_hardware_health",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,
-        readback_verification_expected=True,
-        safety_level=SafetyLevel.LOW_RISK,
-        status=CapabilityStatus.VERIFIED_EXECUTABLE,
-        preconditions=["projector.power == True"]
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
     ),
     CapabilityDefinition(
-        canonical_id="PROJECTOR_POWER_ON_COLD",
+        canonical_id="PROJECTOR_AUTO_FOCUS",
         subsystem=Subsystem.PROJECTOR,
-        description="Cold power-on when projector is completely unpowered (unavailable via ADB; pending IR blaster hardware).",
+        description="Triggers electric motor camera-assisted auto-focus sequence via OEM intent.",
         underlying_controller="ProjectorController",
-        underlying_capability_name="projector_power_on_cold",
+        underlying_capability_name="projector_auto_focus",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_AUTO_KEYSTONE",
+        subsystem=Subsystem.PROJECTOR,
+        description="Triggers gyro-assisted auto-keystone correction via OEM intent.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_auto_keystone",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_HOME",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_HOME (3) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_home",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_BACK",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_BACK (4) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_back",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_MENU",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_MENU (82) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_menu",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_DPAD_UP",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_DPAD_UP (19) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_dpad_up",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_DPAD_DOWN",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_DPAD_DOWN (20) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_dpad_down",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_DPAD_LEFT",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_DPAD_LEFT (21) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_dpad_left",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_DPAD_RIGHT",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_DPAD_RIGHT (22) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_dpad_right",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_NAV_SELECT",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_DPAD_CENTER (23) to projector.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_nav_select",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_VOLUME_UP",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_VOLUME_UP (24) to projector internal speaker.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_volume_up",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_VOLUME_DOWN",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_VOLUME_DOWN (25) to projector internal speaker.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_volume_down",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_VOLUME_MUTE",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_VOLUME_MUTE (164) to projector internal speaker.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_volume_mute",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_MEDIA_PLAY_PAUSE",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_MEDIA_PLAY_PAUSE (85) to projector internal media player.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_media_play_pause",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_MEDIA_NEXT",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_MEDIA_NEXT (87) to projector internal media player.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_media_next",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_MEDIA_PREVIOUS",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_MEDIA_PREVIOUS (88) to projector internal media player.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_media_previous",
+        operation_type=OperationType.ACTION,
+        idempotent=False,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_MEDIA_STOP",
+        subsystem=Subsystem.PROJECTOR,
+        description="Sends KEYCODE_MEDIA_STOP (86) to projector internal media player.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_media_stop",
+        operation_type=OperationType.ACTION,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_SWITCH_HDMI2",
+        subsystem=Subsystem.PROJECTOR,
+        description="HDMI 2 port input switch (rejected: projector hardware only has 1 physical HDMI port).",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_switch_hdmi2",
+        operation_type=OperationType.ACTION,
+        idempotent=True,
+        requires_device_online=False,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.RESTRICTED,
+        status=CapabilityStatus.UNSUPPORTED_HARDWARE
+    ),
+    CapabilityDefinition(
+        canonical_id="PROJECTOR_SWITCH_HDMI3",
+        subsystem=Subsystem.PROJECTOR,
+        description="HDMI 3 port input switch (rejected: projector hardware only has 1 physical HDMI port).",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_switch_hdmi3",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=False,
         readback_verification_expected=False,
@@ -155,14 +481,28 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     ),
 
     # =========================================================================
-    # 2. AIR CONDITIONER SUBSYSTEM (Tuya Split Inverter AC)
+    # 2. AIR CONDITIONER SUBSYSTEM (Tuya Split Inverter AC / AcController)
     # =========================================================================
+    CapabilityDefinition(
+        canonical_id="AC_GET_STATUS",
+        subsystem=Subsystem.AC,
+        description="Reads live Tuya DPs (power, temperature, mode, fan speed, ambient temperature).",
+        underlying_controller="AcController",
+        underlying_capability_name="ac_get_status",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
     CapabilityDefinition(
         canonical_id="AC_POWER_ON",
         subsystem=Subsystem.AC,
-        description="Powers ON the air conditioner compressor and fan.",
+        description="Powers ON the air conditioner compressor and fan via Tuya DP 1.",
         underlying_controller="AcController",
         underlying_capability_name="ac_power_on",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -173,9 +513,10 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     CapabilityDefinition(
         canonical_id="AC_POWER_OFF",
         subsystem=Subsystem.AC,
-        description="Powers OFF the air conditioner unit.",
+        description="Powers OFF the air conditioner unit via Tuya DP 1.",
         underlying_controller="AcController",
         underlying_capability_name="ac_power_off",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -186,9 +527,10 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     CapabilityDefinition(
         canonical_id="AC_SET_TEMPERATURE",
         subsystem=Subsystem.AC,
-        description="Sets target thermostat cooling temperature between 16 and 30 degrees Celsius.",
+        description="Sets target thermostat cooling temperature between 16 and 30 degrees Celsius via Tuya DP 2.",
         underlying_controller="AcController",
         underlying_capability_name="ac_set_temperature",
+        operation_type=OperationType.ACTION,
         parameters={
             "temperature": ParameterConstraint(
                 name="temperature",
@@ -209,9 +551,10 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     CapabilityDefinition(
         canonical_id="AC_SET_MODE",
         subsystem=Subsystem.AC,
-        description="Sets AC operating mode (COOL, AUTO, DRY, FAN). HEAT is unsupported on cooling-only hardware.",
+        description="Sets AC operating mode (COOL, AUTO, DRY, FAN) via Tuya DP 4. HEAT is unsupported on cooling-only hardware.",
         underlying_controller="AcController",
         underlying_capability_name="ac_set_mode",
+        operation_type=OperationType.ACTION,
         parameters={
             "mode": ParameterConstraint(
                 name="mode",
@@ -231,9 +574,10 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     CapabilityDefinition(
         canonical_id="AC_SET_FAN",
         subsystem=Subsystem.AC,
-        description="Sets AC blower fan speed (LOW, MEDIUM, HIGH, AUTO).",
+        description="Sets AC blower fan speed (LOW, MEDIUM, HIGH, AUTO) via Tuya DP 5.",
         underlying_controller="AcController",
         underlying_capability_name="ac_set_fan",
+        operation_type=OperationType.ACTION,
         parameters={
             "speed": ParameterConstraint(
                 name="speed",
@@ -256,6 +600,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Heat mode (unsupported on cooling-only physical hardware).",
         underlying_controller="AcController",
         underlying_capability_name="ac_set_heat",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -268,6 +613,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Louvre swing oscillation (unsupported over Wi-Fi on physical hardware).",
         underlying_controller="AcController",
         underlying_capability_name="ac_set_swing",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -276,7 +622,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     ),
 
     # =========================================================================
-    # 3. FIRE TV SUBSYSTEM (Amazon Fire TV Stick Lite / 3rd Gen)
+    # 3. FIRE TV SUBSYSTEM (Amazon Fire TV Stick Lite / FireTVCapabilityRegistry)
     # =========================================================================
     CapabilityDefinition(
         canonical_id="FIRE_TV_CONNECTIVITY_CHECK",
@@ -284,6 +630,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Checks TCP socket connectivity to Fire TV over ADB port 5555.",
         underlying_controller="FireTvController",
         underlying_capability_name="connectivity_check",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=False,
         readback_verification_expected=False,
@@ -296,6 +643,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Wakes Fire TV from sleep/screensaver over ADB.",
         underlying_controller="FireTvController",
         underlying_capability_name="power_wake",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -309,6 +657,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Puts Fire TV to sleep over ADB.",
         underlying_controller="FireTvController",
         underlying_capability_name="power_sleep",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -322,6 +671,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Reads physical wakefulness state of Fire TV via dumpsys power.",
         underlying_controller="FireTvController",
         underlying_capability_name="power_get_state",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -334,6 +684,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_HOME to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="navigation_home",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -346,6 +697,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_BACK to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="navigation_back",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -358,6 +710,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_DPAD_CENTER to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="navigation_select",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -370,6 +723,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends directional DPAD navigation keys to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="navigation_dpad",
+        operation_type=OperationType.ACTION,
         parameters={
             "direction": ParameterConstraint(
                 name="direction",
@@ -391,6 +745,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Launches YouTube TV application directly on Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="app_launch_youtube",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -404,6 +759,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Reads focused foreground package name from dumpsys window.",
         underlying_controller="FireTvController",
         underlying_capability_name="app_get_foreground",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -416,6 +772,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Launches YouTube video directly via Android Intent.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_direct_youtube",
+        operation_type=OperationType.ACTION,
         parameters={
             "video_id": ParameterConstraint(
                 name="video_id",
@@ -436,6 +793,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Launches media directly on target streaming provider (Netflix, Prime, Hotstar, JioCinema, SonyLIV, Zee5).",
         underlying_controller="FireTvController",
         underlying_capability_name="media_direct_provider",
+        operation_type=OperationType.ACTION,
         parameters={
             "provider": ParameterConstraint(
                 name="provider",
@@ -463,6 +821,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Searches YouTube on Fire TV via deep link intent.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_search_youtube",
+        operation_type=OperationType.ACTION,
         parameters={
             "query": ParameterConstraint(
                 name="query",
@@ -483,6 +842,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Verifies that YouTube is running in the foreground.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_verify_youtube",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -495,6 +855,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_MEDIA_PLAY to Fire TV active media session.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_play",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -507,6 +868,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_MEDIA_PAUSE to Fire TV active media session.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_pause",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -519,6 +881,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_MEDIA_PLAY_PAUSE to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_toggle",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -531,6 +894,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_MEDIA_STOP to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_stop",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -543,6 +907,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_MEDIA_NEXT to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_next",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -555,6 +920,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_MEDIA_PREVIOUS to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="media_previous",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -567,6 +933,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_VOLUME_UP to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="volume_up",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -579,6 +946,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_VOLUME_DOWN to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="volume_down",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -591,6 +959,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends KEYCODE_VOLUME_MUTE to Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="mute",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -603,6 +972,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Reads Bluetooth adapter and bonded device connection status on Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="bt_get_status",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -615,6 +985,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Connects LG SNC4R Soundbar to Fire TV with direct-to-fallback escalation.",
         underlying_controller="FireTvController",
         underlying_capability_name="bt_connect_soundbar",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -628,6 +999,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Connects LG SNC4R Soundbar directly via input tap on paired settings UI coordinate.",
         underlying_controller="FireTvController",
         underlying_capability_name="bt_connect_soundbar_direct",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -641,6 +1013,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Connects LG SNC4R Soundbar using fallback intent navigation when direct tap fails.",
         underlying_controller="FireTvController",
         underlying_capability_name="bt_connect_soundbar_fallback",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -654,6 +1027,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Disconnects LG SNC4R Soundbar from Fire TV.",
         underlying_controller="FireTvController",
         underlying_capability_name="bt_disconnect_soundbar_direct",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -667,6 +1041,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Checks if LG SNC4R Soundbar is actively connected to Fire TV over Bluetooth.",
         underlying_controller="FireTvController",
         underlying_capability_name="bt_is_soundbar_connected",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -679,6 +1054,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Transfers Soundbar audio sink ownership from PC to Fire TV.",
         underlying_controller="FireTvService",
         underlying_capability_name="audio_switch_to_fire_tv",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -692,6 +1068,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Restores Soundbar audio sink ownership from Fire TV back to PC.",
         underlying_controller="FireTvService",
         underlying_capability_name="audio_switch_to_pc",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -705,6 +1082,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Switches physical Projector to HDMI 1 (Fire TV input) via integrated service.",
         underlying_controller="FireTvService",
         underlying_capability_name="projector_switch_hdmi1",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -718,6 +1096,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Verifies that Projector is currently displaying HDMI 1.",
         underlying_controller="FireTvService",
         underlying_capability_name="projector_verify_hdmi1",
+        operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -730,6 +1109,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Orchestrates complete cinema workflow: wakes Fire TV, connects Soundbar, switches Projector to HDMI 1, launches content.",
         underlying_controller="FireTvService",
         underlying_capability_name="automation_movie_mode_start",
+        operation_type=OperationType.AUTOMATION,
         parameters={
             "content": ParameterConstraint(name="content", param_type=ParameterType.STRING, required=False, description="Movie/show title or video ID"),
             "provider": ParameterConstraint(name="provider", param_type=ParameterType.STRING, required=False, description="Target streaming provider")
@@ -746,6 +1126,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Stops cinema workflow: pauses media, transfers Soundbar to PC, optional projector shutdown.",
         underlying_controller="FireTvService",
         underlying_capability_name="automation_movie_mode_stop",
+        operation_type=OperationType.AUTOMATION,
         parameters={
             "turn_off_projector": ParameterConstraint(name="turn_off_projector", param_type=ParameterType.BOOLEAN, required=False, default=False, description="Whether to put projector into standby")
         },
@@ -757,14 +1138,54 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     ),
 
     # =========================================================================
-    # 4. PC HOST SUBSYSTEM (Windows Host / CoreAudio / BluetoothApis)
+    # 4. PC HOST SUBSYSTEM (Windows Host / PcController / PcCommandRouter)
     # =========================================================================
+    CapabilityDefinition(
+        canonical_id="PC_GET_STATUS",
+        subsystem=Subsystem.PC,
+        description="Reads comprehensive authoritative status across Audio, Bluetooth, Media, and System.",
+        underlying_controller="PcController",
+        underlying_capability_name="pc_get_status",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PC_GET_AUDIO_STATUS",
+        subsystem=Subsystem.PC,
+        description="Reads current Windows CoreAudio master volume, mute state, default render endpoint, and active devices.",
+        underlying_controller="PcController",
+        underlying_capability_name="pc_get_audio_status",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PC_GET_VOLUME",
+        subsystem=Subsystem.PC,
+        description="Reads current master system volume percentage (0 to 100).",
+        underlying_controller="PcController",
+        underlying_capability_name="pc_get_volume",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
     CapabilityDefinition(
         canonical_id="PC_SET_VOLUME",
         subsystem=Subsystem.PC,
         description="Sets master audio volume on Windows host between 0 and 100 via in-process CoreAudio COM.",
         underlying_controller="PcController",
         underlying_capability_name="pc_set_volume",
+        operation_type=OperationType.ACTION,
         parameters={
             "volume": ParameterConstraint(
                 name="volume",
@@ -787,6 +1208,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Mutes Windows master audio endpoint via CoreAudio COM.",
         underlying_controller="PcController",
         underlying_capability_name="pc_mute",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -800,6 +1222,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Unmutes Windows master audio endpoint via CoreAudio COM.",
         underlying_controller="PcController",
         underlying_capability_name="pc_unmute",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -808,11 +1231,38 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         expected_state_transition={"pc.is_muted": False}
     ),
     CapabilityDefinition(
+        canonical_id="PC_GET_AUDIO_OUTPUT",
+        subsystem=Subsystem.PC,
+        description="Enumerates active Windows CoreAudio playback render endpoints with device IDs and friendly names.",
+        underlying_controller="PcController",
+        underlying_capability_name="pc_get_audio_output",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PC_GET_BLUETOOTH_DEVICES",
+        subsystem=Subsystem.PC,
+        description="Enumerates local Bluetooth radio details and all paired/connected devices via 64-bit BluetoothApis.",
+        underlying_controller="PcController",
+        underlying_capability_name="pc_get_bluetooth_devices",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
         canonical_id="PC_MEDIA_PLAY_PAUSE",
         subsystem=Subsystem.PC,
         description="Sends VK_MEDIA_PLAY_PAUSE virtual keybd_event to active Windows media application.",
         underlying_controller="PcController",
         underlying_capability_name="pc_media_play_pause",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -825,6 +1275,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends VK_MEDIA_NEXT_TRACK virtual keybd_event to active Windows media application.",
         underlying_controller="PcController",
         underlying_capability_name="pc_media_next",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -837,6 +1288,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends VK_MEDIA_PREV_TRACK virtual keybd_event to active Windows media application.",
         underlying_controller="PcController",
         underlying_capability_name="pc_media_previous",
+        operation_type=OperationType.ACTION,
         idempotent=False,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -849,6 +1301,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Sends VK_MEDIA_STOP virtual keybd_event to active Windows media application.",
         underlying_controller="PcController",
         underlying_capability_name="pc_media_stop",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -856,11 +1309,25 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         status=CapabilityStatus.VERIFIED_EXECUTABLE
     ),
     CapabilityDefinition(
-        canonical_id="PC_LOCK_WORKSTATION",
+        canonical_id="PC_GET_POWER_STATE",
+        subsystem=Subsystem.PC,
+        description="Reads Windows power state, AC mains status, battery percentage, uptime, and OS build info.",
+        underlying_controller="PcController",
+        underlying_capability_name="pc_get_power_state",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="PC_LOCK",
         subsystem=Subsystem.PC,
         description="Locks the Windows workstation via user32.LockWorkStation.",
         underlying_controller="PcController",
-        underlying_capability_name="pc_lock_workstation",
+        underlying_capability_name="pc_lock",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -873,6 +1340,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Puts the Windows host PC into standby sleep via SetSuspendState.",
         underlying_controller="PcController",
         underlying_capability_name="pc_sleep",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=False,
@@ -880,11 +1348,12 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         status=CapabilityStatus.VERIFIED_EXECUTABLE
     ),
     CapabilityDefinition(
-        canonical_id="PC_LAUNCH_APP",
+        canonical_id="PC_LAUNCH_ALLOWLISTED_APP",
         subsystem=Subsystem.PC,
-        description="Launches an allowlisted local Windows application.",
+        description="Launches an allowlisted safe desktop application (spotify, chrome, notepad, calculator, vlc, taskmgr, explorer).",
         underlying_controller="PcController",
-        underlying_capability_name="pc_launch_app",
+        underlying_capability_name="pc_launch_allowlisted_app",
+        operation_type=OperationType.ACTION,
         parameters={
             "app_key": ParameterConstraint(
                 name="app_key",
@@ -902,7 +1371,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
     ),
 
     # =========================================================================
-    # 5. SOUNDBAR / AUDIO ROUTING SUBSYSTEM (LG SNC4R Dual Ownership)
+    # 5. SOUNDBAR / AUDIO ROUTING SUBSYSTEM (LG SNC4R / SmartRoomOrchestrator)
     # =========================================================================
     CapabilityDefinition(
         canonical_id="SOUNDBAR_ROUTE_TO_FIRE_TV",
@@ -910,6 +1379,7 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Transfers LG SNC4R Soundbar Bluetooth audio connection from PC to Fire TV.",
         underlying_controller="SmartRoomOrchestrator",
         underlying_capability_name="soundbar_route_to_fire_tv",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
@@ -923,11 +1393,25 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Restores LG SNC4R Soundbar Bluetooth audio connection from Fire TV back to PC.",
         underlying_controller="SmartRoomOrchestrator",
         underlying_capability_name="soundbar_route_to_pc",
+        operation_type=OperationType.ACTION,
         idempotent=True,
         requires_device_online=True,
         readback_verification_expected=True,
         safety_level=SafetyLevel.LOW_RISK,
         status=CapabilityStatus.VERIFIED_EXECUTABLE,
         expected_state_transition={"soundbar.current_owner": "PC", "soundbar.is_connected": True}
+    ),
+    CapabilityDefinition(
+        canonical_id="SOUNDBAR_GET_OWNERSHIP",
+        subsystem=Subsystem.SOUNDBAR,
+        description="Reads current active audio owner and connection state for LG SNC4R Soundbar.",
+        underlying_controller="SmartRoomOrchestrator",
+        underlying_capability_name="soundbar_get_ownership",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
     )
 ]

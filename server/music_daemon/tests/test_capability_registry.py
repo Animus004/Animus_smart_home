@@ -1,12 +1,14 @@
 """
 Unit and Contract Test Suite for Phase E.7.2 Unified Capability Registry.
 Verifies machine-readable catalog, canonical IDs, bidirectional translation,
-parameter constraints, safety bounds, validation errors, and deterministic serialization.
+parameter constraints, operation types, safety bounds, validation errors,
+and deterministic serialization against the authoritative E.6 contract.
 """
 
 import pytest
 from capability_registry import (
     Subsystem,
+    OperationType,
     SafetyLevel,
     CapabilityStatus,
     ParameterType,
@@ -17,10 +19,13 @@ from capability_registry import (
     AUTHORITATIVE_CAPABILITIES
 )
 from fire_tv_capabilities import FireTVCapabilityType
+from projector_controller import ProjectorController
+from ac_controller import AcController
+from pc_controller import PcController
 
 
 # =============================================================================
-# 1. Registry Initialization & Baseline Integrity
+# 1. Registry Initialization & Authoritative Baseline Integrity
 # =============================================================================
 
 def test_registry_loads_successfully():
@@ -40,44 +45,107 @@ def test_canonical_ids_are_unique_and_uppercase():
         seen.add(cap.canonical_id)
 
 
-def test_complete_verified_baseline_represented():
+def test_projector_e6_baseline_reconciliation():
+    """Verifies all Projector capabilities from E.6 contract are represented."""
     registry = UnifiedCapabilityRegistry()
-    
-    # Projector
+
+    # Core Power
     assert registry.get_capability("PROJECTOR_POWER_WAKE") is not None
     assert registry.get_capability("PROJECTOR_POWER_SLEEP") is not None
+    assert registry.get_capability("PROJECTOR_POWER_OFF_OEM") is not None
+    assert registry.get_capability("PROJECTOR_POWER_ON_COLD") is not None
+
+    # Source & Display
     assert registry.get_capability("PROJECTOR_SWITCH_HDMI1") is not None
     assert registry.get_capability("PROJECTOR_SWITCH_ANDROID_HOME") is not None
+    assert registry.get_capability("PROJECTOR_SWITCH_USB_FILEMGR") is not None
     assert registry.get_capability("PROJECTOR_SET_BRIGHTNESS") is not None
+    assert registry.get_capability("PROJECTOR_SET_CONTRAST") is not None
 
-    # AC
+    # Queries / Telemetry
+    assert registry.get_capability("PROJECTOR_GET_POWER_STATE") is not None
+    assert registry.get_capability("PROJECTOR_GET_SOURCE") is not None
+    assert registry.get_capability("PROJECTOR_GET_SIGNAL_STATE") is not None
+    assert registry.get_capability("PROJECTOR_GET_BRIGHTNESS") is not None
+    assert registry.get_capability("PROJECTOR_GET_HARDWARE_HEALTH") is not None
+
+    # Navigation & Media
+    assert registry.get_capability("PROJECTOR_NAV_HOME") is not None
+    assert registry.get_capability("PROJECTOR_NAV_BACK") is not None
+    assert registry.get_capability("PROJECTOR_NAV_MENU") is not None
+    assert registry.get_capability("PROJECTOR_NAV_SELECT") is not None
+    assert registry.get_capability("PROJECTOR_NAV_DPAD_UP") is not None
+    assert registry.get_capability("PROJECTOR_NAV_DPAD_DOWN") is not None
+    assert registry.get_capability("PROJECTOR_NAV_DPAD_LEFT") is not None
+    assert registry.get_capability("PROJECTOR_NAV_DPAD_RIGHT") is not None
+    assert registry.get_capability("PROJECTOR_MEDIA_PLAY_PAUSE") is not None
+    assert registry.get_capability("PROJECTOR_MEDIA_NEXT") is not None
+    assert registry.get_capability("PROJECTOR_MEDIA_PREVIOUS") is not None
+    assert registry.get_capability("PROJECTOR_MEDIA_STOP") is not None
+
+    # Verify no fabricated picture mode or aspect ratio in executable set
+    assert registry.get_capability("PROJECTOR_SET_PICTURE_MODE") is None
+    assert registry.get_capability("PROJECTOR_SET_ASPECT_RATIO") is None
+
+
+def test_pc_e6_baseline_reconciliation():
+    """Verifies all PC capabilities from E.6 contract are represented."""
+    registry = UnifiedCapabilityRegistry()
+
+    # Queries
+    assert registry.get_capability("PC_GET_STATUS") is not None
+    assert registry.get_capability("PC_GET_AUDIO_STATUS") is not None
+    assert registry.get_capability("PC_GET_VOLUME") is not None
+    assert registry.get_capability("PC_GET_AUDIO_OUTPUT") is not None
+    assert registry.get_capability("PC_GET_BLUETOOTH_DEVICES") is not None
+    assert registry.get_capability("PC_GET_POWER_STATE") is not None
+
+    # Actions
+    assert registry.get_capability("PC_SET_VOLUME") is not None
+    assert registry.get_capability("PC_MUTE") is not None
+    assert registry.get_capability("PC_UNMUTE") is not None
+    assert registry.get_capability("PC_MEDIA_PLAY_PAUSE") is not None
+    assert registry.get_capability("PC_MEDIA_NEXT") is not None
+    assert registry.get_capability("PC_MEDIA_PREVIOUS") is not None
+    assert registry.get_capability("PC_MEDIA_STOP") is not None
+    assert registry.get_capability("PC_LOCK") is not None
+    assert registry.get_capability("PC_SLEEP") is not None
+    assert registry.get_capability("PC_LAUNCH_ALLOWLISTED_APP") is not None
+
+
+def test_ac_e6_baseline_reconciliation():
+    """Verifies all AC capabilities from E.6 contract are represented."""
+    registry = UnifiedCapabilityRegistry()
+
+    assert registry.get_capability("AC_GET_STATUS") is not None
     assert registry.get_capability("AC_POWER_ON") is not None
     assert registry.get_capability("AC_POWER_OFF") is not None
     assert registry.get_capability("AC_SET_TEMPERATURE") is not None
     assert registry.get_capability("AC_SET_MODE") is not None
     assert registry.get_capability("AC_SET_FAN") is not None
-
-    # PC
-    assert registry.get_capability("PC_SET_VOLUME") is not None
-    assert registry.get_capability("PC_MUTE") is not None
-    assert registry.get_capability("PC_UNMUTE") is not None
-    assert registry.get_capability("PC_MEDIA_PLAY_PAUSE") is not None
-    assert registry.get_capability("PC_LOCK_WORKSTATION") is not None
-
-    # Soundbar
-    assert registry.get_capability("SOUNDBAR_ROUTE_TO_FIRE_TV") is not None
-    assert registry.get_capability("SOUNDBAR_ROUTE_TO_PC") is not None
+    assert registry.get_capability("AC_SET_HEAT") is not None
+    assert registry.get_capability("AC_SET_SWING") is not None
 
 
-def test_fire_tv_capabilities_represented():
-    """Verifies that all 35 verified Fire TV capability enums map to canonical registry entries."""
+def test_fire_tv_all_35_enums_reconciliation():
+    """Verifies that all 35 FireTVCapabilityType enum values map to canonical registry entries."""
     registry = UnifiedCapabilityRegistry()
-    ftv_caps = registry.get_capabilities_by_subsystem(Subsystem.FIRE_TV)
-    assert len(ftv_caps) >= 30
 
     for ftv_enum in FireTVCapabilityType:
-        canonical_id = registry.get_canonical_id_for_underlying(Subsystem.FIRE_TV, ftv_enum.value)
-        assert canonical_id is not None, f"FireTVCapabilityType.{ftv_enum.name} ({ftv_enum.value}) not mapped in UnifiedCapabilityRegistry"
+        cid = registry.get_canonical_id_for_underlying(Subsystem.FIRE_TV, ftv_enum.value)
+        assert cid is not None, f"FireTVCapabilityType.{ftv_enum.name} ({ftv_enum.value}) not mapped in UnifiedCapabilityRegistry"
+        cap = registry.get_capability(cid)
+        assert cap is not None
+        assert cap.subsystem == Subsystem.FIRE_TV
+
+
+def test_soundbar_routing_reconciliation():
+    """Verifies soundbar ownership routing capabilities."""
+    registry = UnifiedCapabilityRegistry()
+
+    assert registry.get_capability("SOUNDBAR_ROUTE_TO_FIRE_TV") is not None
+    assert registry.get_capability("SOUNDBAR_ROUTE_TO_PC") is not None
+    assert registry.get_capability("SOUNDBAR_GET_OWNERSHIP") is not None
 
 
 # =============================================================================
@@ -175,20 +243,62 @@ def test_parameter_bounds_and_enums():
     assert vol_param.validate_value(-1) is False
     assert vol_param.validate_value(101) is False
 
+    # PC allowlisted apps
+    pc_app = registry.get_capability("PC_LAUNCH_ALLOWLISTED_APP")
+    assert pc_app is not None
+    app_param = pc_app.parameters["app_key"]
+    assert "spotify" in app_param.allowed_values
+    assert "calc" not in app_param.allowed_values  # Must be "calculator"
+    assert app_param.validate_value("spotify") is True
+    assert app_param.validate_value("malware.exe") is False
+
 
 # =============================================================================
-# 4. Unsupported Hardware Handling
+# 4. Operation Types & Query Safety
 # =============================================================================
 
-def test_unsupported_hardware_capabilities():
+def test_operation_types_and_read_only_queries():
     registry = UnifiedCapabilityRegistry()
 
-    # Projector cold power-on
+    queries = registry.get_queries()
+    actions = registry.get_actions()
+    automations = registry.get_automations()
+
+    assert len(queries) > 0
+    assert len(actions) > 0
+    assert len(automations) > 0
+
+    # All queries must be SAFE
+    for q in queries:
+        assert q.safety_level == SafetyLevel.SAFE
+        assert q.operation_type == OperationType.QUERY
+
+    # Specific Query checks
+    assert registry.get_capability("PC_GET_VOLUME").is_query is True
+    assert registry.get_capability("PC_GET_AUDIO_STATUS").is_query is True
+    assert registry.get_capability("PROJECTOR_GET_SIGNAL_STATE").is_query is True
+    assert registry.get_capability("AC_GET_STATUS").is_query is True
+
+
+# =============================================================================
+# 5. Unsupported & Deferred Hardware Handling
+# =============================================================================
+
+def test_unsupported_and_deferred_capabilities():
+    registry = UnifiedCapabilityRegistry()
+
+    # Cold power-on
     cold_pwr = registry.get_capability("PROJECTOR_POWER_ON_COLD")
     assert cold_pwr is not None
     assert cold_pwr.is_executable is False
     assert cold_pwr.status == CapabilityStatus.UNSUPPORTED_HARDWARE
     assert cold_pwr.safety_level == SafetyLevel.RESTRICTED
+
+    # Projector Contrast (Deferred pending implementation)
+    contrast = registry.get_capability("PROJECTOR_SET_CONTRAST")
+    assert contrast is not None
+    assert contrast.is_executable is False
+    assert contrast.status == CapabilityStatus.DEFERRED_PENDING_IMPLEMENTATION
 
     # AC Heat & Swing
     ac_heat = registry.get_capability("AC_SET_HEAT")
@@ -201,23 +311,19 @@ def test_unsupported_hardware_capabilities():
     assert ac_swing.is_executable is False
     assert ac_swing.status == CapabilityStatus.UNSUPPORTED_HARDWARE
 
-    # Verify filtering
-    unsupported = registry.get_unsupported_capabilities()
-    unsupported_ids = [c.canonical_id for c in unsupported]
-    assert "PROJECTOR_POWER_ON_COLD" in unsupported_ids
-    assert "AC_SET_HEAT" in unsupported_ids
-    assert "AC_SET_SWING" in unsupported_ids
-
-    # Executable list must NOT contain any unsupported capability
+    # Executable set must NOT contain unsupported/deferred capabilities
     executable = registry.get_executable_capabilities()
     exec_ids = [c.canonical_id for c in executable]
     assert "PROJECTOR_POWER_ON_COLD" not in exec_ids
+    assert "PROJECTOR_SET_CONTRAST" not in exec_ids
     assert "AC_SET_HEAT" not in exec_ids
     assert "AC_SET_SWING" not in exec_ids
+    assert "PROJECTOR_SWITCH_HDMI2" not in exec_ids
+    assert "PROJECTOR_SWITCH_HDMI3" not in exec_ids
 
 
 # =============================================================================
-# 5. Deterministic Serialization & Schema Export
+# 6. Deterministic Serialization & Schema Export
 # =============================================================================
 
 def test_deterministic_serialization():
@@ -244,10 +350,11 @@ def test_deterministic_serialization():
     proj_caps = [c["capability"] for c in prompt_schema["projector"]]
     assert "PROJECTOR_POWER_WAKE" in proj_caps
     assert "PROJECTOR_POWER_ON_COLD" not in proj_caps
+    assert "PROJECTOR_SET_CONTRAST" not in proj_caps
 
 
 # =============================================================================
-# 6. Registry Validation & Error Enforcement (Fail Closed)
+# 7. Registry Validation & Error Enforcement (Fail Closed)
 # =============================================================================
 
 def test_validation_rejects_duplicate_canonical_id():
@@ -328,7 +435,7 @@ def test_registry_zero_hardware_side_effects():
 
 
 # =============================================================================
-# 7. FastAPI /api/capabilities Endpoint Contract Test
+# 8. FastAPI /api/capabilities Endpoint Contract Test
 # =============================================================================
 
 def test_fastapi_capabilities_endpoint():
@@ -350,4 +457,3 @@ def test_fastapi_capabilities_endpoint():
     # Verify that PROJECTOR_POWER_WAKE is present
     p_caps = [c["canonical_id"] for c in data["subsystems"]["projector"]]
     assert "PROJECTOR_POWER_WAKE" in p_caps
-

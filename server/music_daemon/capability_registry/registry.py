@@ -1,7 +1,7 @@
 """
 Authoritative Unified Capability Registry for Animus Smart Room.
 Provides metadata, bidirectional canonical translation, safety boundary enforcement,
-and deterministic catalog serialization without executing hardware commands.
+operation type filtering, and deterministic catalog serialization without executing hardware commands.
 """
 
 import json
@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 
 from capability_registry.models import (
     Subsystem,
+    OperationType,
     SafetyLevel,
     CapabilityStatus,
     CapabilityDefinition
@@ -61,7 +62,7 @@ class UnifiedCapabilityRegistry:
                 )
 
             # 3. Unsupported capability safety invariant
-            if cap.status in (CapabilityStatus.UNSUPPORTED_HARDWARE, CapabilityStatus.DEFERRED_PENDING_HARDWARE):
+            if cap.status in (CapabilityStatus.UNSUPPORTED_HARDWARE, CapabilityStatus.DEFERRED_PENDING_IMPLEMENTATION):
                 if cap.is_executable:
                     raise RegistryValidationError(
                         f"Unsupported/deferred capability '{cid}' cannot be marked executable."
@@ -122,6 +123,18 @@ class UnifiedCapabilityRegistry:
         """Returns all unsupported or deferred capabilities."""
         return [cap for cap in self.get_all_capabilities() if not cap.is_executable]
 
+    def get_queries(self) -> List[CapabilityDefinition]:
+        """Returns all read-only query/telemetry capabilities."""
+        return [cap for cap in self.get_all_capabilities() if cap.operation_type == OperationType.QUERY]
+
+    def get_actions(self) -> List[CapabilityDefinition]:
+        """Returns all atomic action/mutation capabilities."""
+        return [cap for cap in self.get_all_capabilities() if cap.operation_type == OperationType.ACTION]
+
+    def get_automations(self) -> List[CapabilityDefinition]:
+        """Returns all multi-step composed automation workflows."""
+        return [cap for cap in self.get_all_capabilities() if cap.operation_type == OperationType.AUTOMATION]
+
     # =========================================================================
     # Deterministic Serialization & Prompt Catalog Export
     # =========================================================================
@@ -141,6 +154,9 @@ class UnifiedCapabilityRegistry:
             "total_capabilities": len(caps),
             "executable_capabilities": len(self.get_executable_capabilities()),
             "unsupported_capabilities": len(self.get_unsupported_capabilities()),
+            "queries": len(self.get_queries()),
+            "actions": len(self.get_actions()),
+            "automations": len(self.get_automations()),
             "subsystems": {k: by_sub[k] for k in sorted(by_sub.keys())}
         }
 
@@ -177,6 +193,7 @@ class UnifiedCapabilityRegistry:
 
             prompt_catalog[sub].append({
                 "capability": cap.canonical_id,
+                "operation_type": cap.operation_type.value,
                 "description": cap.description,
                 "parameters": param_meta,
                 "idempotent": cap.idempotent,

@@ -1,7 +1,7 @@
 """
 Strongly-Typed Capability Registry Models for Animus Smart Room.
-Defines machine-readable capability contracts, safety levels, and parameter schemas
-for authoritative capability translation without hardware execution.
+Defines machine-readable capability contracts, safety levels, operation types,
+and parameter schemas for authoritative capability translation without hardware execution.
 """
 
 from __future__ import annotations
@@ -20,11 +20,18 @@ class Subsystem(str, Enum):
     ENVIRONMENT = "ENVIRONMENT"
 
 
+class OperationType(str, Enum):
+    """Operation category classification."""
+    ACTION = "ACTION"             # Physical hardware actuation or state mutation
+    QUERY = "QUERY"               # Read-only observation or telemetry probe (zero side-effects)
+    AUTOMATION = "AUTOMATION"     # Multi-step composed orchestrator workflow
+
+
 class SafetyLevel(str, Enum):
     """Safety classification for capability execution."""
-    SAFE = "SAFE"                 # Read-only or cosmetic
+    SAFE = "SAFE"                 # Read-only or telemetry observation
     LOW_RISK = "LOW_RISK"         # Standard reversible action (e.g. volume change, pause)
-    MEDIUM_RISK = "MEDIUM_RISK"   # Mode changes, power standby toggles
+    MEDIUM_RISK = "MEDIUM_RISK"   # Mode changes, power standby toggles, automation sequences
     HIGH_RISK = "HIGH_RISK"       # System shutdown, hardware reset
     RESTRICTED = "RESTRICTED"     # Must not be executed autonomously without human consent
 
@@ -32,7 +39,7 @@ class SafetyLevel(str, Enum):
 class CapabilityStatus(str, Enum):
     """Lifecycle and support status of a capability."""
     VERIFIED_EXECUTABLE = "VERIFIED_EXECUTABLE"
-    DEFERRED_PENDING_HARDWARE = "DEFERRED_PENDING_HARDWARE"
+    DEFERRED_PENDING_IMPLEMENTATION = "DEFERRED_PENDING_IMPLEMENTATION"
     UNSUPPORTED_HARDWARE = "UNSUPPORTED_HARDWARE"
 
 
@@ -104,6 +111,7 @@ class CapabilityDefinition(BaseModel):
     description: str
     underlying_controller: str
     underlying_capability_name: str
+    operation_type: OperationType = OperationType.ACTION
     parameters: Dict[str, ParameterConstraint] = Field(default_factory=dict)
     idempotent: bool = False
     requires_device_online: bool = True
@@ -118,11 +126,17 @@ class CapabilityDefinition(BaseModel):
         """Returns True if the capability is fully verified and available for hardware dispatch."""
         return self.status == CapabilityStatus.VERIFIED_EXECUTABLE
 
+    @property
+    def is_query(self) -> bool:
+        """Returns True if the capability is a read-only observation/query."""
+        return self.operation_type == OperationType.QUERY
+
     def to_dict(self) -> Dict[str, Any]:
         """Deterministic dictionary serialization."""
         return {
             "canonical_id": self.canonical_id,
             "subsystem": self.subsystem.value,
+            "operation_type": self.operation_type.value,
             "description": self.description,
             "underlying_controller": self.underlying_controller,
             "underlying_capability_name": self.underlying_capability_name,

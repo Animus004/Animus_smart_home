@@ -6,6 +6,7 @@ and bidirectional translation tables.
 
 from capability_registry.models import (
     Subsystem,
+    OperationType,
     SafetyLevel,
     CapabilityStatus,
     ParameterType,
@@ -20,6 +21,7 @@ from capability_registry.registry import (
 
 __all__ = [
     "Subsystem",
+    "OperationType",
     "SafetyLevel",
     "CapabilityStatus",
     "ParameterType",
