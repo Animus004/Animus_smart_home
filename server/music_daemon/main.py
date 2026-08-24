@@ -27,6 +27,7 @@ from ac_controller import AcController
 from ac_command_router import AcCommandRouter
 from pc_controller import PcController
 from pc_command_router import PcCommandRouter
+from room_state.aggregator import RoomStateAggregator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,7 +35,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("music_daemon.main")
 
-# Initialize Resolver, Player, Projector, Fire TV, Orchestrator, OllamaManager, AC, and PC Controllers
+# Initialize Resolver, Player, Projector, Fire TV, Orchestrator, OllamaManager, AC, PC, and RoomState Aggregator
 SECRETS_DIR = Path(__file__).parent / "secrets"
 resolver = YouTubeMusicResolver(secrets_dir=SECRETS_DIR)
 player = MpvPlayer(preferred_device_keyword="LG SNC4R")
@@ -52,6 +53,13 @@ orchestrator = SmartRoomOrchestrator(
     player=player,
     projector=projector,
     fire_tv=fire_tv
+)
+room_state_aggregator = RoomStateAggregator(
+    projector_controller=projector,
+    ac_controller=ac_controller,
+    fire_tv_controller=fire_tv,
+    pc_controller=pc_controller,
+    orchestrator=orchestrator
 )
 automation_registry = AutomationRegistry()
 firetv_service = FireTvService(
@@ -645,8 +653,9 @@ def get_room_status_endpoint() -> Dict[str, Any]:
 
 @app.get("/api/room/state")
 def get_room_state_endpoint() -> Dict[str, Any]:
-    """Returns authoritative smart room state machine state."""
-    return orchestrator.get_room_state()
+    """Returns authoritative canonical RoomState snapshot compiled from verified physical controllers."""
+    return room_state_aggregator.get_room_state().to_dict()
+
 
 
 @app.post("/api/room/automation/trigger")
@@ -1065,6 +1074,8 @@ def pc_natural_command_endpoint(req: PcNaturalCommandRequest) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8095, log_level="info")
+
+
 
 
 
