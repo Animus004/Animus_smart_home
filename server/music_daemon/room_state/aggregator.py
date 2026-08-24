@@ -130,7 +130,15 @@ class RoomStateAggregator:
             raw_pwr = getattr(self.projector, "get_power_state", None)
             if callable(raw_pwr):
                 pwr_enum = raw_pwr()
-                pwr_val = (str(getattr(pwr_enum, "value", pwr_enum)).upper() == "ON")
+                if isinstance(pwr_enum, dict):
+                    pwr_val = (
+                        pwr_enum.get("power_state") == "ON"
+                        or pwr_enum.get("display_state") == "ON"
+                        or pwr_enum.get("power") is True
+                        or pwr_enum.get("interactive") is True
+                    )
+                else:
+                    pwr_val = (str(getattr(pwr_enum, "value", pwr_enum)).upper() == "ON")
                 f_pwr = StateField.observed(pwr_val, source_tag, now)
             else:
                 f_pwr = StateField.unknown(source=source_tag, observed_at=now)
@@ -218,8 +226,19 @@ class RoomStateAggregator:
             return FireTvState()
 
         try:
+            online_val = False
             is_online_fn = getattr(self.fire_tv, "is_online", None)
-            online_val = bool(is_online_fn()) if callable(is_online_fn) else False
+            if callable(is_online_fn):
+                online_val = bool(is_online_fn())
+            elif hasattr(self.fire_tv, "is_reachable") and callable(getattr(self.fire_tv, "is_reachable")):
+                online_val = bool(self.fire_tv.is_reachable())
+            elif hasattr(self.fire_tv, "is_connected") and callable(getattr(self.fire_tv, "is_connected")):
+                conn_res = self.fire_tv.is_connected(auto_connect=False)
+                online_val = conn_res[0] if isinstance(conn_res, tuple) else bool(conn_res)
+            elif hasattr(self.fire_tv, "check_connectivity") and callable(getattr(self.fire_tv, "check_connectivity")):
+                c_res = self.fire_tv.check_connectivity()
+                online_val = c_res.success if hasattr(c_res, "success") else bool(c_res.get("success", False))
+
             f_online = StateField.observed(online_val, source_tag, now)
 
             if not online_val:
@@ -232,17 +251,43 @@ class RoomStateAggregator:
 
             # Power state
             pwr_fn = getattr(self.fire_tv, "get_power_state", None)
-            pwr_val = str(pwr_fn()) if callable(pwr_fn) else "UNKNOWN"
+            if callable(pwr_fn):
+                pwr_res = pwr_fn()
+                if isinstance(pwr_res, dict):
+                    pwr_val = pwr_res.get("power_state", "UNKNOWN")
+                elif hasattr(pwr_res, "power_state"):
+                    pwr_val = getattr(pwr_res, "power_state")
+                else:
+                    pwr_val = str(getattr(pwr_res, "value", pwr_res))
+            elif hasattr(self.fire_tv, "get_state") and callable(getattr(self.fire_tv, "get_state")):
+                st = self.fire_tv.get_state()
+                pwr_val = getattr(st, "power_state", "UNKNOWN")
+            else:
+                pwr_val = "AWAKE" if online_val else "OFFLINE"
             f_pwr = StateField.observed(pwr_val, source_tag, now)
 
             # Foreground app
             app_fn = getattr(self.fire_tv, "get_foreground_app", None)
-            app_val = app_fn() if callable(app_fn) else None
+            if callable(app_fn):
+                app_val = app_fn()
+            elif hasattr(self.fire_tv, "get_state") and callable(getattr(self.fire_tv, "get_state")):
+                st = self.fire_tv.get_state()
+                app_val = getattr(st, "foreground_app", None)
+            else:
+                app_val = None
             f_app = StateField.observed(app_val, source_tag, now)
 
             # Soundbar connected
             bt_fn = getattr(self.fire_tv, "is_soundbar_connected", None)
-            bt_val = bool(bt_fn()) if callable(bt_fn) else False
+            if callable(bt_fn):
+                bt_val = bool(bt_fn())
+            elif hasattr(self.fire_tv, "is_required_bluetooth_connected") and callable(getattr(self.fire_tv, "is_required_bluetooth_connected")):
+                bt_val = bool(self.fire_tv.is_required_bluetooth_connected())
+            elif hasattr(self.fire_tv, "get_state") and callable(getattr(self.fire_tv, "get_state")):
+                st = self.fire_tv.get_state()
+                bt_val = getattr(st, "soundbar_connected", False)
+            else:
+                bt_val = False
             f_bt = StateField.observed(bt_val, source_tag, now)
 
             return FireTvState(

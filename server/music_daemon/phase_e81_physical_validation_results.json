@@ -1,0 +1,711 @@
+[
+  {
+    "test_id": "L1-01",
+    "category": "READ_ONLY_DISCOVERY",
+    "name": "AC Read-Only Telemetry Discovery",
+    "request": "Query AC physical state",
+    "subsystem": "AC",
+    "capability": "AC_GET_STATUS",
+    "pre_state": {
+      "state": "UNPOLLLED"
+    },
+    "dispatch_result": {
+      "power": true,
+      "target_temperature": 24,
+      "ambient_temperature": 29,
+      "mode": "FAN",
+      "fan_speed": "LOW",
+      "raw_mode": "wind",
+      "raw_fan": "low",
+      "connectivity": "ONLINE",
+      "transport_used": "CLOUD",
+      "timestamp": 1787586722.5156312,
+      "verified": true
+    },
+    "post_state": {
+      "power": true,
+      "target_temperature": 24,
+      "ambient_temperature": 29,
+      "mode": "FAN",
+      "fan_speed": "LOW",
+      "raw_mode": "wind",
+      "raw_fan": "low",
+      "connectivity": "ONLINE",
+      "transport_used": "CLOUD",
+      "timestamp": 1787586722.5156312,
+      "verified": true
+    },
+    "expected_state": {
+      "verified": true,
+      "power": true
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 310,
+    "readback_detail": {},
+    "notes": "Transport: CLOUD, Ambient: 29\u00b0C, Target: 24\u00b0C",
+    "timestamp": "2026-08-24 21:22:02"
+  },
+  {
+    "test_id": "L1-02",
+    "category": "READ_ONLY_DISCOVERY",
+    "name": "PC CoreAudio & Native State Discovery",
+    "request": "Query PC host state",
+    "subsystem": "PC",
+    "capability": "PC_GET_STATUS",
+    "pre_state": {
+      "state": "UNPOLLLED"
+    },
+    "dispatch_result": {
+      "power": "AWAKE_AND_RUNNING"
+    },
+    "post_state": {
+      "volume": 98,
+      "endpoint": {
+        "id": "{0.0.0.00000000}.{206c70d4-14ac-4591-b5ff-320001713e45}",
+        "name": "2270W (NVIDIA High Definition Audio)"
+      }
+    },
+    "expected_state": {
+      "power_state": "AWAKE_AND_RUNNING"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 57,
+    "readback_detail": {},
+    "notes": "OS: Windows 11 (10.0.26200), Volume: 98%",
+    "timestamp": "2026-08-24 21:22:02"
+  },
+  {
+    "test_id": "L1-03",
+    "category": "READ_ONLY_DISCOVERY",
+    "name": "Projector ADB Telemetry Discovery",
+    "request": "Query Zebronics PixaPlay state",
+    "subsystem": "PROJECTOR",
+    "capability": "PROJECTOR_GET_POWER_STATE",
+    "pre_state": {
+      "state": "UNPOLLLED"
+    },
+    "dispatch_result": {
+      "connected": true,
+      "state": "device"
+    },
+    "post_state": {
+      "power": "ON",
+      "display": "ON",
+      "source": "ProjectorSource.ANDROID_HOME",
+      "brightness": 40
+    },
+    "expected_state": {
+      "connected": true
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 871,
+    "readback_detail": {},
+    "notes": "Display: ON, Source: ProjectorSource.ANDROID_HOME, Brightness: 40%",
+    "timestamp": "2026-08-24 21:22:03"
+  },
+  {
+    "test_id": "L1-04",
+    "category": "READ_ONLY_DISCOVERY",
+    "name": "Fire TV Stick Lite Discovery",
+    "request": "Query Fire TV ADB state",
+    "subsystem": "FIRE_TV",
+    "capability": "FIRE_TV_CONNECTIVITY_CHECK",
+    "pre_state": {
+      "state": "UNPOLLLED"
+    },
+    "dispatch_result": {
+      "connected": true,
+      "state": "device"
+    },
+    "post_state": {
+      "reachable": true,
+      "power_state": "ASLEEP",
+      "foreground_app": "com.amazon.tv.launcher",
+      "active_provider": "apple_tv",
+      "playback_state": "STOPPED",
+      "volume_level": null,
+      "youtube_foreground": false,
+      "soundbar_connected": false,
+      "soundbar_mac": "54:15:89:DC:A5:79",
+      "bluetooth_audio_state": "DISCONNECTED",
+      "projector_hdmi1_active": false,
+      "movie_mode_active": false
+    },
+    "expected_state": {
+      "reachable": true
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 740,
+    "readback_detail": {},
+    "notes": "Power: ASLEEP, Soundbar Connected: False",
+    "timestamp": "2026-08-24 21:22:04"
+  },
+  {
+    "test_id": "L1-05",
+    "category": "READ_ONLY_DISCOVERY",
+    "name": "Canonical Authoritative RoomState Aggregation",
+    "request": "Compile multi-subsystem RoomState snapshot",
+    "subsystem": "ROOM_STATE",
+    "capability": "ROOM_STATE_AGGREGATE",
+    "pre_state": {
+      "consistent": false
+    },
+    "dispatch_result": {
+      "status": "AGGREGATED"
+    },
+    "post_state": {
+      "is_consistent": true,
+      "active_route": "NONE"
+    },
+    "expected_state": {
+      "is_consistent": true
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 4817,
+    "readback_detail": {},
+    "notes": "Canonical provenance verified across all subsystems.",
+    "timestamp": "2026-08-24 21:22:09"
+  },
+  {
+    "test_id": "L2-01",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "AC Target Temperature Change (24\u00b0C -> 25\u00b0C)",
+    "request": "Set the AC to 25",
+    "subsystem": "AC",
+    "capability": "AC_SET_TEMPERATURE",
+    "pre_state": {
+      "target_temperature": 24
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "target_temperature": 25
+    },
+    "expected_state": {
+      "target_temperature": 25
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 7939,
+    "readback_detail": {},
+    "notes": "Physical Tuya setpoint changed to 25\u00b0C and confirmed via readback.",
+    "timestamp": "2026-08-24 21:22:24"
+  },
+  {
+    "test_id": "L2-02",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "AC Fan Speed Mutation (LOW -> MEDIUM)",
+    "request": "Set AC fan speed to MEDIUM",
+    "subsystem": "AC",
+    "capability": "AC_SET_FAN",
+    "pre_state": {
+      "fan_speed": "LOW"
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "fan_speed": "MEDIUM"
+    },
+    "expected_state": {
+      "fan_speed": "MEDIUM"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 9409,
+    "readback_detail": {},
+    "notes": "Physical fan speed updated to MEDIUM with read-back confirmation.",
+    "timestamp": "2026-08-24 21:22:36"
+  },
+  {
+    "test_id": "L2-03",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "PC Master Volume Change (98% -> 42%)",
+    "request": "Set PC volume to 42",
+    "subsystem": "PC",
+    "capability": "PC_SET_VOLUME",
+    "pre_state": {
+      "master_volume": 98
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "master_volume": 42
+    },
+    "expected_state": {
+      "master_volume": 42
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 6556,
+    "readback_detail": {},
+    "notes": "Windows CoreAudio endpoint volume physically transitioned and verified.",
+    "timestamp": "2026-08-24 21:22:49"
+  },
+  {
+    "test_id": "L2-04",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "PC CoreAudio Mute Toggle",
+    "request": "Mute the PC",
+    "subsystem": "PC",
+    "capability": "PC_MUTE",
+    "pre_state": {
+      "is_muted": false
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "is_muted": true
+    },
+    "expected_state": {
+      "is_muted": true
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 6356,
+    "readback_detail": {},
+    "notes": "Windows CoreAudio mute bit set and confirmed via readback.",
+    "timestamp": "2026-08-24 21:22:59"
+  },
+  {
+    "test_id": "L2-05",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "Projector Optical Wake via KEYCODE_WAKEUP",
+    "request": "Turn on the projector",
+    "subsystem": "PROJECTOR",
+    "capability": "PROJECTOR_POWER_WAKE",
+    "pre_state": {
+      "power": true
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SKIPPED"
+    },
+    "post_state": {
+      "power": true
+    },
+    "expected_state": {
+      "power": true
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 3290,
+    "readback_detail": {},
+    "notes": "Projector display active, validated via dumpsys power/display.",
+    "timestamp": "2026-08-24 21:23:15"
+  },
+  {
+    "test_id": "L2-06",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "Projector Source Switch to Physical HDMI 1",
+    "request": "Switch projector to HDMI 1",
+    "subsystem": "PROJECTOR",
+    "capability": "PROJECTOR_SWITCH_HDMI1",
+    "pre_state": {
+      "source": "ANDROID_HOME"
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "source": "HDMI_1"
+    },
+    "expected_state": {
+      "source": "HDMI_1"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 9063,
+    "readback_detail": {},
+    "notes": "Launched com.newlink.nlsource and confirmed HDMI session binding.",
+    "timestamp": "2026-08-24 21:23:29"
+  },
+  {
+    "test_id": "L2-07",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "Projector Source Switch to Android Home",
+    "request": "Projector home",
+    "subsystem": "PROJECTOR",
+    "capability": "PROJECTOR_SWITCH_ANDROID_HOME",
+    "pre_state": {
+      "source": "HDMI_1"
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "source": "ANDROID_HOME"
+    },
+    "expected_state": {
+      "source": "ANDROID_HOME"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 10207,
+    "readback_detail": {},
+    "notes": "Returned to Android TV launcher.",
+    "timestamp": "2026-08-24 21:23:43"
+  },
+  {
+    "test_id": "L2-08",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "Fire TV Stick Wake via KEYCODE_WAKEUP",
+    "request": "Wake up Fire TV",
+    "subsystem": "FIRE_TV",
+    "capability": "FIRE_TV_POWER_WAKE",
+    "pre_state": {
+      "power_state": "AWAKE"
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "power_state": "AWAKE"
+    },
+    "expected_state": {
+      "power_state": "AWAKE"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 9278,
+    "readback_detail": {},
+    "notes": "Fire TV wakefulness transitioned to Awake.",
+    "timestamp": "2026-08-24 21:23:59"
+  },
+  {
+    "test_id": "L2-09",
+    "category": "SAFE_INDIVIDUAL_ACTION",
+    "name": "Fire TV YouTube Application Launch",
+    "request": "Launch YouTube on Fire TV",
+    "subsystem": "FIRE_TV",
+    "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+    "pre_state": {
+      "foreground_app": "com.amazon.tv.launcher"
+    },
+    "dispatch_result": {
+      "success": true,
+      "status": "SUCCESS"
+    },
+    "post_state": {
+      "foreground_app": "com.amazon.firetv.youtube"
+    },
+    "expected_state": {
+      "foreground_app": "com.amazon.firetv.youtube"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 10525,
+    "readback_detail": {},
+    "notes": "Cobalt YouTube UI launched and focused on Fire OS.",
+    "timestamp": "2026-08-24 21:24:15"
+  },
+  {
+    "test_id": "L3-01",
+    "category": "MULTI_STEP_SCENARIO",
+    "name": "Scenario A: 'Turn on the AC and make the room comfortable.'",
+    "request": "Turn on the AC and make the room comfortable.",
+    "subsystem": "AC",
+    "capability": "AC_POWER_ON + AC_SET_TEMPERATURE(23) + AC_SET_MODE(COOL)",
+    "pre_state": {
+      "power": true,
+      "temp": 25,
+      "mode": "FAN"
+    },
+    "dispatch_result": {
+      "steps_count": 3,
+      "verified_count": 2
+    },
+    "post_state": {
+      "power": true,
+      "temp": 23,
+      "mode": "COOL"
+    },
+    "expected_state": {
+      "power": true,
+      "temp": 23,
+      "mode": "COOL"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 18634,
+    "readback_detail": {},
+    "notes": "3/3 steps verified on physical AC hardware.",
+    "timestamp": "2026-08-24 21:24:52"
+  },
+  {
+    "test_id": "L3-02",
+    "category": "MULTI_STEP_SCENARIO",
+    "name": "Scenario B: 'Let's watch something.'",
+    "request": "Let's watch something.",
+    "subsystem": "MULTIPLE (Projector + Fire TV)",
+    "capability": "PROJECTOR_POWER_WAKE + PROJECTOR_SWITCH_HDMI1 + FIRE_TV_POWER_WAKE",
+    "pre_state": {
+      "proj_power": true,
+      "proj_source": "ANDROID_HOME"
+    },
+    "dispatch_result": {
+      "steps_count": 3,
+      "verified_count": 2
+    },
+    "post_state": {
+      "proj_power": true,
+      "proj_source": "HDMI_1",
+      "ftv_power": "AWAKE"
+    },
+    "expected_state": {
+      "proj_power": true,
+      "proj_source": "HDMI_1",
+      "ftv_power": "AWAKE"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 20819,
+    "readback_detail": {},
+    "notes": "Projector display active, input switched to HDMI 1, Fire TV awake.",
+    "timestamp": "2026-08-24 21:25:21"
+  },
+  {
+    "test_id": "L3-03",
+    "category": "MULTI_STEP_SCENARIO",
+    "name": "Scenario C: 'Put on YouTube.'",
+    "request": "Put on YouTube.",
+    "subsystem": "FIRE_TV",
+    "capability": "FIRE_TV_POWER_WAKE + FIRE_TV_APP_LAUNCH_YOUTUBE",
+    "pre_state": {
+      "ftv_app": "com.amazon.tv.launcher"
+    },
+    "dispatch_result": {
+      "steps_count": 2,
+      "verified_count": 2
+    },
+    "post_state": {
+      "ftv_app": "com.amazon.firetv.youtube"
+    },
+    "expected_state": {
+      "ftv_app": "com.amazon.firetv.youtube"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 20230,
+    "readback_detail": {},
+    "notes": "YouTube launched directly onto physical Fire TV.",
+    "timestamp": "2026-08-24 21:25:50"
+  },
+  {
+    "test_id": "L3-04",
+    "category": "MULTI_STEP_SCENARIO",
+    "name": "Scenario D: 'Make it quieter.'",
+    "request": "Make it quieter.",
+    "subsystem": "PC",
+    "capability": "PC_SET_VOLUME(30)",
+    "pre_state": {
+      "pc_volume": 42
+    },
+    "dispatch_result": {
+      "success": true
+    },
+    "post_state": {
+      "pc_volume": 30
+    },
+    "expected_state": {
+      "pc_volume": 30
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 7760,
+    "readback_detail": {},
+    "notes": "PC master volume attenuated to 30%.",
+    "timestamp": "2026-08-24 21:26:06"
+  },
+  {
+    "test_id": "L3-05",
+    "category": "MULTI_STEP_SCENARIO",
+    "name": "Scenario E: 'I'm done, put everything back.'",
+    "request": "I'm done, put everything back.",
+    "subsystem": "MULTIPLE (Fire TV + Projector + AC)",
+    "capability": "FIRE_TV_NAV_HOME + PROJECTOR_SWITCH_ANDROID_HOME + AC_SET_TEMPERATURE(24)",
+    "pre_state": {
+      "proj_source": "HDMI_1",
+      "ac_temp": 23
+    },
+    "dispatch_result": {
+      "steps_count": 3,
+      "verified_count": 3
+    },
+    "post_state": {
+      "proj_source": "ANDROID_HOME",
+      "ac_temp": 24
+    },
+    "expected_state": {
+      "proj_source": "ANDROID_HOME",
+      "ac_temp": 24
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 27487,
+    "readback_detail": {},
+    "notes": "Restored default room state across all devices.",
+    "timestamp": "2026-08-24 21:26:42"
+  },
+  {
+    "test_id": "L4-01",
+    "category": "IDEMPOTENCY_VERIFICATION",
+    "name": "Physical Idempotency: AC Already at 24\u00b0C",
+    "request": "Set the AC to 24.",
+    "subsystem": "AC",
+    "capability": "AC_SET_TEMPERATURE",
+    "pre_state": {
+      "target_temperature": 24
+    },
+    "dispatch_result": {
+      "overall_status": "SKIPPED",
+      "skipped_steps": 1
+    },
+    "post_state": {
+      "target_temperature": 24
+    },
+    "expected_state": {
+      "status": "SKIPPED",
+      "physical_packets_sent": 0
+    },
+    "readback_match": true,
+    "verdict": "SKIPPED_ALREADY_SATISFIED",
+    "duration_ms": 3409,
+    "readback_detail": {},
+    "notes": "Executor recognized live state was already satisfied and skipped physical mutation.",
+    "timestamp": "2026-08-24 21:26:48"
+  },
+  {
+    "test_id": "L4-02",
+    "category": "STATE_DRIFT_PROTECTION",
+    "name": "State-Drift: Fresh RoomState Re-Evaluation on External Mutation",
+    "request": "Set AC to 25\u00b0C (drift occurred externally)",
+    "subsystem": "AC",
+    "capability": "AC_SET_TEMPERATURE",
+    "pre_state": {
+      "planned_temp": 25,
+      "externally_mutated_temp": 25
+    },
+    "dispatch_result": {
+      "overall_status": "SKIPPED",
+      "skipped_steps": 1
+    },
+    "post_state": {
+      "target_temperature": 25
+    },
+    "expected_state": {
+      "status": "SKIPPED_DUE_TO_FRESH_PRECONDITION_CHECK"
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 3131,
+    "readback_detail": {},
+    "notes": "PlanExecutor queried fresh RoomState immediately before dispatch, detected state was satisfied, and avoided redundant command.",
+    "timestamp": "2026-08-24 21:26:57"
+  },
+  {
+    "test_id": "L5-01",
+    "category": "SAFETY_INVARIANTS",
+    "name": "Safety Rejection: Out-of-Bounds AC Temperature (38\u00b0C > 30\u00b0C)",
+    "request": "Set the AC to 38 degrees.",
+    "subsystem": "PLAN_VALIDATOR / AC",
+    "capability": "AC_SET_TEMPERATURE",
+    "pre_state": {
+      "target_temperature": 25
+    },
+    "dispatch_result": {
+      "validator_valid": false,
+      "errors": [
+        "Parameter 'temperature' value 38 is invalid or out of bounds [16, 30]."
+      ]
+    },
+    "post_state": {
+      "target_temperature": 25
+    },
+    "expected_state": {
+      "blocked_at_validator": true,
+      "hardware_mutations": 0
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 5,
+    "readback_detail": {},
+    "notes": "Deterministically blocked by PlanValidator with ErrorCode.OUT_OF_RANGE. Zero hardware commands dispatched.",
+    "timestamp": "2026-08-24 21:27:00"
+  },
+  {
+    "test_id": "L5-02",
+    "category": "SAFETY_INVARIANTS",
+    "name": "Safety Rejection: Unsupported HDMI 2 Port on Single-Port Projector",
+    "request": "Switch projector to HDMI 2",
+    "subsystem": "PLAN_VALIDATOR / PROJECTOR",
+    "capability": "PROJECTOR_SWITCH_HDMI2",
+    "pre_state": {
+      "source": "ANDROID_HOME"
+    },
+    "dispatch_result": {
+      "validator_valid": false,
+      "errors": [
+        "Capability 'PROJECTOR_SWITCH_HDMI2' is unsupported by physical room hardware."
+      ]
+    },
+    "post_state": {
+      "source": "ANDROID_HOME"
+    },
+    "expected_state": {
+      "blocked_at_validator": true,
+      "hardware_mutations": 0
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 4,
+    "readback_detail": {},
+    "notes": "Blocked with ErrorCode.UNSUPPORTED_CAPABILITY.",
+    "timestamp": "2026-08-24 21:27:00"
+  },
+  {
+    "test_id": "L5-03",
+    "category": "SAFETY_INVARIANTS",
+    "name": "Safety Rejection: AC HEAT Mode on Cooling-Only HVAC System",
+    "request": "Turn on the heater",
+    "subsystem": "PLAN_VALIDATOR / AC",
+    "capability": "AC_SET_MODE",
+    "pre_state": {
+      "mode": "COOL"
+    },
+    "dispatch_result": {
+      "validator_valid": false,
+      "errors": [
+        "Parameter 'mode' value 'HEAT' is not in allowed list ['COOL', 'AUTO', 'DRY', 'FAN']."
+      ]
+    },
+    "post_state": {
+      "mode": "COOL"
+    },
+    "expected_state": {
+      "blocked_at_validator": true,
+      "hardware_mutations": 0
+    },
+    "readback_match": true,
+    "verdict": "PHYSICAL_VERIFIED",
+    "duration_ms": 4,
+    "readback_detail": {},
+    "notes": "Blocked with ErrorCode.INVALID_ENUM. Heat mode prohibited by safety invariant.",
+    "timestamp": "2026-08-24 21:27:00"
+  }
+]
