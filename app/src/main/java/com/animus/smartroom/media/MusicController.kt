@@ -17,6 +17,7 @@ import com.animus.smartroom.media.model.MusicUiState
 import com.animus.smartroom.media.model.PlaybackStatus
 import com.animus.smartroom.media.provider.GenericMusicProvider
 import com.animus.smartroom.media.provider.MusicProvider
+import com.animus.smartroom.media.provider.PcLocalMusicProvider
 import com.animus.smartroom.media.provider.ProviderResult
 import com.animus.smartroom.media.provider.YouTubeMusicProvider
 import kotlinx.coroutines.CoroutineScope
@@ -27,8 +28,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class MusicController(
-    private val context: Context
+open class MusicController(
+    private val context: Context? = null
 ) {
     companion object {
         private const val TAG = "MusicController"
@@ -43,27 +44,27 @@ class MusicController(
     }
 
     private val audioManager: AudioManager? =
-        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
     private val mediaSessionManager: MediaSessionManager? =
-        context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+        context?.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
 
     // Provider layer
     private val pcLocalProvider = com.animus.smartroom.media.provider.PcLocalMusicProvider()
-    private val youtubeMusicProvider = YouTubeMusicProvider(context)
-    private val genericMusicProvider = GenericMusicProvider(context)
+    private val youtubeMusicProvider = context?.let { YouTubeMusicProvider(it) }
+    private val genericMusicProvider = context?.let { GenericMusicProvider(it) }
 
-    private val providers: Map<String, MusicProvider> = mapOf(
-        com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID to pcLocalProvider,
-        YouTubeMusicProvider.PROVIDER_ID to youtubeMusicProvider,
-        GenericMusicProvider.PROVIDER_ID to genericMusicProvider
-    )
+    private val providers: Map<String, MusicProvider> = buildMap {
+        put(com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID, pcLocalProvider)
+        youtubeMusicProvider?.let { put(YouTubeMusicProvider.PROVIDER_ID, it) }
+        genericMusicProvider?.let { put(GenericMusicProvider.PROVIDER_ID, it) }
+    }
 
     private var activeProvider: MusicProvider =
-        providers[YouTubeMusicProvider.PROVIDER_ID] ?: genericMusicProvider
+        providers[YouTubeMusicProvider.PROVIDER_ID] ?: pcLocalProvider
 
     fun getActiveProvider(): MusicProvider = activeProvider
-    fun getPcLocalProvider(): com.animus.smartroom.media.provider.PcLocalMusicProvider = pcLocalProvider
+    open fun getPcLocalProvider(): com.animus.smartroom.media.provider.PcLocalMusicProvider = pcLocalProvider
 
     private val _uiState = MutableStateFlow(
         MusicUiState(
@@ -83,7 +84,7 @@ class MusicController(
             } else {
                 if (activeProvider.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID) {
                     setProvider(YouTubeMusicProvider.PROVIDER_ID)
-                    Log.i(TAG, "[PROVIDER_SWITCH] Active provider = MOBILE_YOUTUBE_MUSIC (${youtubeMusicProvider.displayName})")
+                    Log.i(TAG, "[PROVIDER_SWITCH] Active provider = MOBILE_YOUTUBE_MUSIC (${youtubeMusicProvider?.displayName ?: "YouTube Music"})")
                 }
             }
         }
@@ -104,7 +105,7 @@ class MusicController(
 
     fun startListening() {
         Log.d(TAG, "[media] startListening called")
-        if (!isReceiverRegistered) {
+        if (!isReceiverRegistered && context != null) {
             val filter = IntentFilter(VOLUME_CHANGED_ACTION)
             context.registerReceiver(volumeReceiver, filter)
             isReceiverRegistered = true
@@ -115,7 +116,7 @@ class MusicController(
     fun stopListening() {
         Log.d(TAG, "[media] stopListening called")
         cancelPendingInspectionAttempts()
-        if (isReceiverRegistered) {
+        if (isReceiverRegistered && context != null) {
             try {
                 context.unregisterReceiver(volumeReceiver)
             } catch (e: Exception) {
@@ -278,8 +279,8 @@ class MusicController(
     /**
      * Executes the "Play Zara Zara" preset via the Universal MusicProvider architecture.
      */
-    fun playZaraZaraPreset(activeDeviceName: String) {
-        playTrackPreset(
+    fun playZaraZaraPreset(activeDeviceName: String): ProviderResult {
+        return playTrackPreset(
             title = ZARA_ZARA_TITLE,
             artist = ZARA_ZARA_ARTIST,
             activeDeviceName = activeDeviceName
@@ -289,7 +290,7 @@ class MusicController(
     /**
      * Universal entry point for playing a track preset through the active MusicProvider.
      */
-    fun playTrackPreset(title: String, artist: String?, activeDeviceName: String, directVideoId: String? = null) {
+    open fun playTrackPreset(title: String, artist: String?, activeDeviceName: String, directVideoId: String? = null): ProviderResult {
         val isConnected = _uiState.value.isOutputConnected
         Log.i(TAG, "[ai] Command received: PLAY_MUSIC (title='$title', artist='$artist', directVideoId='$directVideoId')")
         Log.i(TAG, "[music] Forwarding to provider: '${activeProvider.displayName}', Target Bluetooth Output: '$activeDeviceName'")
@@ -300,7 +301,7 @@ class MusicController(
             _uiState.update {
                 it.copy(userNotice = "Connect $activeDeviceName to play room audio")
             }
-            return
+            return ProviderResult.Failed("Connect $activeDeviceName to play room audio")
         }
 
         if (isPcProvider) {
@@ -405,6 +406,7 @@ class MusicController(
                 }
             }
         }
+        return result
     }
 
     private fun scheduleSafeSessionInspection(expectedTitle: String, expectedArtist: String?) {
@@ -553,6 +555,26 @@ class MusicController(
             Log.w(TAG, "[session] Exception querying active MediaSessions", e)
             null
         }
+    }
+
+    open fun startMovieModeWithFeedback(contentTitle: String? = null): PcLocalMusicProvider.MovieModeResult {
+        Log.i(TAG, "[MOVIE_MODE] Dispatching startMovieModeWithFeedback to PC daemon (content='$contentTitle')")
+        return pcLocalProvider.startMovieModeWithFeedback(contentTitle)
+    }
+
+    open fun startMovieMode(contentTitle: String? = null): Boolean {
+        Log.i(TAG, "[MOVIE_MODE] Dispatching startMovieMode to PC daemon (content='$contentTitle')")
+        return pcLocalProvider.startMovieMode(contentTitle)
+    }
+
+    open fun stopMovieModeWithFeedback(): PcLocalMusicProvider.MovieModeResult {
+        Log.i(TAG, "[MOVIE_MODE] Dispatching stopMovieModeWithFeedback to PC daemon")
+        return pcLocalProvider.stopMovieModeWithFeedback()
+    }
+
+    open fun stopMovieMode(): Boolean {
+        Log.i(TAG, "[MOVIE_MODE] Dispatching stopMovieMode to PC daemon")
+        return pcLocalProvider.stopMovieMode()
     }
 
     private fun dispatchMediaKey(keyCode: Int) {

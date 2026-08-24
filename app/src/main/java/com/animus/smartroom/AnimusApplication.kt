@@ -99,6 +99,12 @@ class AnimusApplication : Application() {
     lateinit var voiceInputPort: com.animus.smartroom.core.port.VoiceInputPort
         private set
 
+    lateinit var voiceOutputAdapter: com.animus.smartroom.voice.AndroidVoiceOutputAdapter
+        private set
+
+    lateinit var localInferencePort: com.animus.smartroom.brain.provider.AndroidLocalInferencePort
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -130,6 +136,7 @@ class AnimusApplication : Application() {
         deviceRegistry = DeviceRegistry().apply {
             registerAdapterForType(DeviceType.BLUETOOTH_AUDIO, BluetoothAudioDeviceAdapter(bluetoothController))
             registerAdapterForType(DeviceType.AIR_CONDITIONER, tuyaAcAdapter)
+            registerAdapterForType(DeviceType.PROJECTOR, com.animus.smartroom.device.adapter.ProjectorDeviceAdapter(musicController.getPcLocalProvider()))
 
             val realAcId = BuildConfig.TUYA_DEVICE_ID.ifBlank { "76776532a4e57c0a2ca4" }
             registerDevice(
@@ -145,6 +152,20 @@ class AnimusApplication : Application() {
                         DeviceCapability.FanSpeed
                     ),
                     aliases = listOf("ac", "air conditioner", "cooler", "room ac")
+                )
+            )
+
+            registerDevice(
+                RoomDevice(
+                    id = "room_projector",
+                    displayName = "Smart Projector",
+                    type = DeviceType.PROJECTOR,
+                    connectionState = DeviceConnectionState.Connected,
+                    supportedCapabilities = setOf(
+                        DeviceCapability.Power,
+                        DeviceCapability.SelectInput
+                    ),
+                    aliases = listOf("projector", "smart projector", "screen", "display", "zebronics", "home projector")
                 )
             )
 
@@ -190,16 +211,17 @@ class AnimusApplication : Application() {
         val apiKeyStorage = GeminiApiKeyStorage(this)
         val localBrainConfigStorage = com.animus.smartroom.brain.provider.LocalBrainConfigStorage(this)
         val localInferenceClient = com.animus.smartroom.brain.provider.LocalInferenceClient { localBrainConfigStorage.getConfig() }
-        val localInferencePort = com.animus.smartroom.brain.provider.AndroidLocalInferencePort(localInferenceClient)
+        localInferencePort = com.animus.smartroom.brain.provider.AndroidLocalInferencePort(localInferenceClient)
+        this.localInferencePort = localInferencePort
         // Automatically start real warmup in background on IO dispatcher
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             localInferencePort.warmUp()
         }
         val localBrainProvider = com.animus.smartroom.brain.provider.LocalBrainProvider(inferencePort = localInferencePort)
 
-        val voiceOutput = com.animus.smartroom.voice.AndroidVoiceOutputAdapter(this)
+        this.voiceOutputAdapter = com.animus.smartroom.voice.AndroidVoiceOutputAdapter(this)
         val geminiApiClient = GeminiApiClient()
-        val localBrain = LocalAnimusBrain(localBrainProvider = localBrainProvider, voiceOutputPort = voiceOutput)
+        val localBrain = LocalAnimusBrain(localBrainProvider = localBrainProvider, voiceOutputPort = this.voiceOutputAdapter)
         val cloudBrain = CloudAnimusBrain(
             apiKeyProvider = { apiKeyStorage.getApiKey() },
             apiClient = geminiApiClient

@@ -262,3 +262,40 @@ def test_play_endpoint_payload_validation():
     resp_long = client.post("/api/music/play", json={"title": "A" * 500})
     assert resp_long.status_code == 422
 
+
+def test_alarm_endpoints():
+    # Test alarm start
+    with patch.object(player, "play", return_value=(True, None)):
+        resp = client.post("/api/room/alarm/start")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["status"] == "PLAYING"
+        assert data["source"] == "PC_DAEMON"
+
+    # Test alarm status
+    resp_st = client.get("/api/room/alarm/status")
+    assert resp_st.status_code == 200
+
+    # Test alarm stop
+    with patch.object(player, "stop", return_value=True):
+        resp_stop = client.post("/api/room/alarm/stop")
+        assert resp_stop.status_code == 200
+        data_stop = resp_stop.json()
+        assert data_stop["success"] is True
+        assert data_stop["status"] == "STOPPED"
+
+
+def test_alarm_movie_mode_conflict_yielding():
+    from main import orchestrator
+    orchestrator._in_movie_mode = True
+    try:
+        resp = client.post("/api/room/alarm/start")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is False
+        assert data["status"] == "MOVIE_MODE_ACTIVE_BLOCKED"
+        assert "Movie Mode" in data["message"]
+    finally:
+        orchestrator._in_movie_mode = False
+

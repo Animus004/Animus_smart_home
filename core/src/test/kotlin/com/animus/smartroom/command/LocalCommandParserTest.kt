@@ -144,10 +144,27 @@ class LocalCommandParserTest {
 
     @Test
     fun testMovieModeCommands() {
-        assertEquals(AnimusCommand.StartMovieMode, parser.parse("start movie mode"))
-        assertEquals(AnimusCommand.StartMovieMode, parser.parse("turn on movie mode"))
-        assertEquals(AnimusCommand.StartMovieMode, parser.parse("start a movie"))
-        assertEquals(AnimusCommand.StartMovieMode, parser.parse("movie mode on"))
+        assertEquals(AnimusCommand.StartMovieMode(), parser.parse("start movie mode"))
+        assertEquals(AnimusCommand.StartMovieMode(), parser.parse("turn on movie mode"))
+        assertEquals(AnimusCommand.StartMovieMode(), parser.parse("start a movie"))
+        assertEquals(AnimusCommand.StartMovieMode(), parser.parse("movie mode on"))
+
+        // Watch content title tests
+        val article15 = parser.parse("I want to watch Article 15")
+        assertTrue(article15 is AnimusCommand.WatchContent)
+        assertEquals("Article 15", (article15 as AnimusCommand.WatchContent).title)
+
+        val watchArticle15 = parser.parse("watch Article 15")
+        assertTrue(watchArticle15 is AnimusCommand.WatchContent)
+        assertEquals("Article 15", (watchArticle15 as AnimusCommand.WatchContent).title)
+
+        val interstellar = parser.parse("watch movie Interstellar")
+        assertTrue(interstellar is AnimusCommand.WatchContent)
+        assertEquals("Interstellar", (interstellar as AnimusCommand.WatchContent).title)
+
+        val inception = parser.parse("play movie Inception")
+        assertTrue(inception is AnimusCommand.WatchContent)
+        assertEquals("Inception", (inception as AnimusCommand.WatchContent).title)
 
         assertEquals(AnimusCommand.StopMovieMode, parser.parse("turn movie mode off"))
         assertEquals(AnimusCommand.StopMovieMode, parser.parse("stop movie mode"))

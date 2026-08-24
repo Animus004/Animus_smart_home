@@ -8,7 +8,7 @@ object LocalSystemPromptBuilder {
         val tasksString = if (context.todayTasks.isEmpty()) "None"
         else context.todayTasks.joinToString(", ") { "${it.title} (${it.priority})" }
 
-        val devString = if (context.deviceSummaries.isEmpty()) "AC (AIR_CONDITIONER)"
+        val devString = if (context.deviceSummaries.isEmpty()) "AC (AIR_CONDITIONER), PROJECTOR (PROJECTOR), FIRE_TV (STREAMING_DEVICE)"
         else context.deviceSummaries.joinToString(", ") { "${it.name} (${it.type})" }
 
         val memString = if (context.relevantMemories.isEmpty()) "None"
@@ -19,7 +19,7 @@ object LocalSystemPromptBuilder {
         } ?: "Stopped"
 
         val sessionString = context.sessionSummary?.let {
-            "LastDevice: ${it.lastActiveDevice ?: "None"}, LastTrack: ${it.lastActiveTrack ?: "None"}, LastVolume: ${it.lastRequestedVolume ?: "None"}, LastTemp: ${it.lastRequestedTemperature ?: "None"}, LastSchedule: ${it.lastScheduledActionTarget ?: "None"}"
+            "LastDevice: ${it.lastActiveDevice ?: "None"}, LastTrack: ${it.lastActiveTrack ?: "None"}, LastVolume: ${it.lastRequestedVolume ?: "None"}, LastTemp: ${it.lastRequestedTemperature ?: "None"}, LastSchedule: ${it.lastScheduledActionTarget ?: "None"}, MovieMode: ${it.isMovieModeActive}, AudioOwner: ${it.lastAudioOwner ?: "None"}"
         } ?: "None"
 
         val personalString = context.personalContext?.let {
@@ -69,12 +69,14 @@ object LocalSystemPromptBuilder {
             }
 
             Supported action types:
-            - device_command (target: AC, command: POWER|SET_TEMPERATURE|SET_MODE|SET_FAN_SPEED, value)
+            - device_command (target: AC|PROJECTOR, command: POWER|SET_TEMPERATURE|SET_MODE|SET_FAN_SPEED|SOURCE|SELECT_INPUT, value: ON|OFF|HDMI_1|HDMI_2|...)
             - play_music (title, artist)
             - music_control (action: PAUSE|RESUME|NEXT|PREVIOUS)
             - set_volume (percentage: 0-100)
-            - connect_bluetooth (deviceName)
+            - connect_bluetooth (deviceName: PC|FIRE_TV|Soundbar)
             - disconnect_bluetooth
+            - movie_mode (title)
+            - stop_movie_mode
             - schedule_action (target, action, delayMinutes)
             - cancel_schedule (target)
             - task_action (action: CREATE|COMPLETE|CANCEL, title)

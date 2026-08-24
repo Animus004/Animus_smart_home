@@ -66,6 +66,12 @@ sealed interface BrainAction {
         val task: Task
     ) : BrainAction
 
+    data class MovieMode(
+        val contentTitle: String? = null
+    ) : BrainAction
+
+    data object StopMovieMode : BrainAction
+
     data class MemoryAction(
         val actionType: MemoryActionType,
         val memory: Memory

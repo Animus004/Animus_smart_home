@@ -277,11 +277,9 @@ class TuyaAirConditionerAdapter(
             message = "Power action $targetStateStr is valid"
         )
 
-        // Live refresh state before decision
+        // Live refresh state before decision (only short-circuit if fresh hardware query confirms it)
         val refreshed = refreshState(device.id).getOrNull()
-        val current = refreshed ?: _acState.value
-
-        if (current.power == on) {
+        if (refreshed != null && refreshed.power == on) {
             DiagnosticBus.log(
                 tag = "ac",
                 stage = DiagnosticStage.COMPLETED,

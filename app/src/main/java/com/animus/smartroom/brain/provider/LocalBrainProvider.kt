@@ -32,6 +32,14 @@ class LocalBrainProvider(
             return BrainResponse.Failure("Empty command input")
         }
 
+        // 0. Conversational context & reference resolution (e.g. "turn it off", "switch it back", relative volume)
+        context.sessionSummary?.let { session ->
+            val refResolved = com.animus.smartroom.core.brain.session.ConversationReferenceResolver.resolveReference(trimmed, session)
+            if (refResolved != null) {
+                return refResolved
+            }
+        }
+
         // 1. If local inference port is configured, try structured inference (gating will wait for READY if warming up)
         if (inferencePort != null) {
             try {
@@ -143,6 +151,7 @@ class LocalBrainProvider(
                                         "POWER" -> "POWER"
                                         "SET_MODE", "MODE" -> "HVAC_MODE"
                                         "SET_FAN_SPEED", "FAN_SPEED" -> "FAN_SPEED"
+                                        "SOURCE", "SET_SOURCE", "SELECT_INPUT", "INPUT" -> "SELECT_INPUT"
                                         else -> command
                                     }
                                     actions.add(
@@ -214,18 +223,50 @@ class LocalBrainProvider(
                                     val title = actObj.optString("title", originalInput)
                                     actions.add(BrainAction.TaskAction(actEnum, Task(title = title)))
                                 }
+                                "movie_mode", "watch_movie", "movie", "start_movie_mode" -> {
+                                    val title = actObj.optString("title").takeIf { it.isNotBlank() }
+                                        ?: actObj.optString("contentTitle").takeIf { it.isNotBlank() }
+                                    actions.add(BrainAction.MovieMode(contentTitle = title))
+                                }
+                                "stop_movie_mode" -> {
+                                    actions.add(BrainAction.StopMovieMode)
+                                }
                             }
                         }
                     }
-                    if (actions.isNotEmpty()) BrainResponse.Command(speech, actions) else BrainResponse.Conversation(speech ?: raw)
+                    if (actions.isNotEmpty()) {
+                        BrainResponse.Command(speech, actions)
+                    } else {
+                        val parsedCmd = localParser.parse(originalInput)
+                        val mappedAction = mapAnimusCommandToBrainAction(parsedCmd)
+                        if (mappedAction != null) {
+                            BrainResponse.Command(speech, listOf(mappedAction))
+                        } else {
+                            BrainResponse.Conversation(speech ?: raw)
+                        }
+                    }
                 }
-                "conversation" -> BrainResponse.Conversation(speech ?: raw)
+                "conversation" -> {
+                    val parsedCmd = localParser.parse(originalInput)
+                    val mappedAction = mapAnimusCommandToBrainAction(parsedCmd)
+                    if (mappedAction != null) {
+                        BrainResponse.Command(speech, listOf(mappedAction))
+                    } else {
+                        BrainResponse.Conversation(speech ?: raw)
+                    }
+                }
                 "clarification" -> BrainResponse.Clarification(speech ?: raw)
                 "failure" -> BrainResponse.Failure(speech ?: "Local brain failed to process command")
                 else -> BrainResponse.Conversation(speech ?: raw)
             }
         } catch (e: Exception) {
-            BrainResponse.Conversation(raw)
+            val parsedCmd = localParser.parse(originalInput)
+            val mappedAction = mapAnimusCommandToBrainAction(parsedCmd)
+            if (mappedAction != null) {
+                BrainResponse.Command(null, listOf(mappedAction))
+            } else {
+                BrainResponse.Conversation(raw)
+            }
         }
     }
 
@@ -238,7 +279,11 @@ class LocalBrainProvider(
             is AnimusCommand.PreviousTrack -> BrainAction.MusicControl(MusicActionType.PREVIOUS)
             is AnimusCommand.SetVolume -> BrainAction.SetVolume(command.percentage)
             is AnimusCommand.ConnectBluetoothDevice -> BrainAction.ConnectBluetooth(command.deviceName)
+            is AnimusCommand.SwitchBluetoothDevice -> BrainAction.ConnectBluetooth(command.deviceName)
             is AnimusCommand.DisconnectBluetoothDevice -> BrainAction.DisconnectBluetooth
+            is AnimusCommand.StartMovieMode -> BrainAction.MovieMode(command.contentTitle)
+            is AnimusCommand.WatchContent -> BrainAction.MovieMode(command.title)
+            is AnimusCommand.StopMovieMode -> BrainAction.StopMovieMode
             is AnimusCommand.SetDeviceCapability -> BrainAction.DeviceCommand(
                 target = command.target,
                 capability = command.capability.name,
@@ -263,6 +308,8 @@ class LocalBrainProvider(
     private fun generateSpokenResponse(action: BrainAction): String? {
         return when (action) {
             is BrainAction.PlayMusic -> "Playing ${action.title}."
+            is BrainAction.MovieMode -> "Starting Movie Mode for ${action.contentTitle ?: "movie"}."
+            is BrainAction.StopMovieMode -> "Stopping Movie Mode."
             is BrainAction.SetVolume -> "Setting volume to ${action.percentage}%."
             is BrainAction.DeviceCommand -> "Adjusting ${action.target}."
             is BrainAction.ScheduleAction -> "Scheduling ${action.target} action."

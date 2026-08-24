@@ -225,6 +225,8 @@ class AnimusBrainEngine(
                 target = action.target,
                 actionType = action.actionType
             )
+            is BrainAction.MovieMode -> AnimusCommand.StartMovieMode(action.contentTitle)
+            is BrainAction.StopMovieMode -> AnimusCommand.StopMovieMode
             is BrainAction.TaskAction,
             is BrainAction.MemoryAction -> null // Handled directly by repository
         }

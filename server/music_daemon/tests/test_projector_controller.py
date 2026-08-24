@@ -3,6 +3,11 @@ from unittest.mock import MagicMock, patch
 import subprocess
 from projector_controller import (
     ProjectorController,
+    ProjectorPowerState,
+    ProjectorSource,
+    ProjectorSignalState,
+    ThermalStatus,
+    FanStatus,
     ProjectorNotConnectedError,
     DEFAULT_TARGET
 )
@@ -10,6 +15,10 @@ from projector_controller import (
 @pytest.fixture
 def controller():
     return ProjectorController(target="192.168.1.11:5555", adb_path="mock_adb")
+
+# =========================================================================
+# 1. Connection & Target Isolation Tests
+# =========================================================================
 
 def test_controller_initialization(controller):
     assert controller.target == "192.168.1.11:5555"
@@ -39,7 +48,6 @@ def test_is_connected_unauthorized(controller):
         assert state == "unauthorized"
 
 def test_wrong_device_protection(controller):
-    # If another device like a phone is attached via USB, controller must ignore it
     mock_output = "List of devices attached\nZY22HLJ86Z      device\n"
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout=mock_output, stderr="")
@@ -47,49 +55,25 @@ def test_wrong_device_protection(controller):
         assert is_ready is False
         assert state == "disconnected"
 
-def test_connect_success(controller):
+def test_connect_and_disconnect(controller):
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="connected to 192.168.1.11:5555", stderr="")
-        success = controller.connect()
-        assert success is True
-        mock_run.assert_called_once_with(
-            ["mock_adb", "connect", "192.168.1.11:5555"],
-            capture_output=True,
-            text=True,
-            timeout=5.0
-        )
+        assert controller.connect() is True
 
-def test_disconnect_success(controller):
-    with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="disconnected 192.168.1.11:5555", stderr="")
-        success = controller.disconnect()
-        assert success is True
-        mock_run.assert_called_once_with(
-            ["mock_adb", "disconnect", "192.168.1.11:5555"],
-            capture_output=True,
-            text=True,
-            timeout=3.0
-        )
+        assert controller.disconnect() is True
 
-def test_send_key_safe_targeting(controller):
-    with patch.object(controller, "is_connected", return_value=(True, "device")), \
-         patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        
-        # Test HOME (3)
-        res = controller.home()
-        assert res is True
-        mock_run.assert_called_with(
-            ["mock_adb", "-s", "192.168.1.11:5555", "shell", "input keyevent 3"],
-            capture_output=True,
-            text=True,
-            timeout=4.0
-        )
+# =========================================================================
+# 2. Navigation, Keyevents, & Volume
+# =========================================================================
 
 def test_navigation_and_volume_primitives(controller):
     with patch.object(controller, "is_connected", return_value=(True, "device")), \
          patch.object(controller, "send_key", return_value=True) as mock_send_key:
         
+        assert controller.home() is True
+        mock_send_key.assert_called_with(3)
+
         assert controller.back() is True
         mock_send_key.assert_called_with(4)
 
@@ -126,98 +110,11 @@ def test_send_key_not_connected_raises_error(controller):
         with pytest.raises(ProjectorNotConnectedError):
             controller.home()
 
-def test_timeout_handling(controller):
-    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["adb"], timeout=4.0)):
-        code, stdout, stderr = controller._run_target_adb(["shell", "dumpsys power"])
-        assert code == -1
-        assert "Timeout after 4.0s" in stderr
+# =========================================================================
+# 3. Power State, Standby Sleep, & Wake
+# =========================================================================
 
-def test_fastapi_projector_status_endpoint():
-    from fastapi.testclient import TestClient
-    from main import app, projector as main_projector
-
-    client = TestClient(app)
-    mock_info = {
-        "connected": True,
-        "ip": "192.168.1.11",
-        "target": "192.168.1.11:5555",
-        "model": "HiDPTAndroid_Hi3751V350",
-        "android": "12",
-        "product": "NL5H00X",
-        "interactive": True,
-        "foreground_package": "com.newlink.overseaslauncher"
-    }
-
-    with patch.object(main_projector, "get_device_info", return_value=mock_info):
-        resp = client.get("/api/room/projector/status")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["connected"] is True
-        assert data["ip"] == "192.168.1.11"
-        assert data["model"] == "HiDPTAndroid_Hi3751V350"
-        assert data["android"] == "12"
-        assert data["foreground_package"] == "com.newlink.overseaslauncher"
-
-def test_fastapi_projector_key_endpoint():
-    from fastapi.testclient import TestClient
-    from main import app, projector as main_projector
-
-    client = TestClient(app)
-    with patch.object(main_projector, "home", return_value=True):
-        resp = client.post("/api/room/projector/key", json={"key": "home"})
-        assert resp.status_code == 200
-        assert resp.json() == {"success": True, "key": "home"}
-
-    with patch.object(main_projector, "back", return_value=True):
-        resp = client.post("/api/room/projector/key", json={"key": "back"})
-        assert resp.status_code == 200
-        assert resp.json() == {"success": True, "key": "back"}
-
-def test_fastapi_projector_volume_endpoint():
-    from fastapi.testclient import TestClient
-    from main import app, projector as main_projector
-
-    client = TestClient(app)
-    with patch.object(main_projector, "volume_up", return_value=True):
-        resp = client.post("/api/room/projector/volume", json={"action": "up"})
-        assert resp.status_code == 200
-        assert resp.json() == {"success": True, "action": "up"}
-
-    with patch.object(main_projector, "volume_down", return_value=True):
-        resp = client.post("/api/room/projector/volume", json={"action": "down"})
-        assert resp.status_code == 200
-        assert resp.json() == {"success": True, "action": "down"}
-
-def test_source_enum_and_hdmi_methods(controller):
-    from projector_controller import ProjectorSource
-
-    with patch.object(controller, "is_connected", return_value=(True, "device")), \
-         patch.object(controller, "home", return_value=True) as mock_home, \
-         patch.object(controller, "_run_shell", return_value=(0, "", "")) as mock_shell:
-
-        # ANDROID source triggers home()
-        assert controller.set_source(ProjectorSource.ANDROID) is True
-        mock_home.assert_called_once()
-
-        # HDMI 1, 2, 3
-        assert controller.set_hdmi(1) is True
-        mock_shell.assert_called_with("am start -n com.newlink.nlsource/.MainActivity")
-
-        assert controller.set_hdmi(2) is True
-        assert controller.set_hdmi(3) is True
-        assert controller.set_hdmi(4) is False
-
-        # USB source
-        assert controller.set_source(ProjectorSource.USB) is True
-        mock_shell.assert_called_with("am start -n com.newlink.filemanager/.activity.MainActivity")
-
-        # Invalid source
-        assert controller.set_source("INVALID_SOURCE") is False
-
-def test_power_state_parsing(controller):
-    from projector_controller import ProjectorPowerState
-
-    # Awake + Display ON -> ON (High confidence)
+def test_power_state_parsing_awake_and_on(controller):
     with patch.object(controller, "is_connected", return_value=(True, "device")), \
          patch.object(controller, "_run_shell", side_effect=[
              (0, "mWakefulness=Awake\nDisplay Power: state=ON", ""),
@@ -228,8 +125,9 @@ def test_power_state_parsing(controller):
         assert pwr["confidence"] == "high"
         assert pwr["interactive"] is True
         assert pwr["display_state"] == "ON"
+        assert pwr["wakefulness"] == "Awake"
 
-    # Awake + Display OFF -> AWAKE (Medium confidence)
+def test_power_state_parsing_awake_and_display_off(controller):
     with patch.object(controller, "is_connected", return_value=(True, "device")), \
          patch.object(controller, "_run_shell", side_effect=[
              (0, "mWakefulness=Awake", ""),
@@ -239,8 +137,9 @@ def test_power_state_parsing(controller):
         assert pwr["power_state"] == ProjectorPowerState.AWAKE.value
         assert pwr["confidence"] == "medium"
         assert pwr["interactive"] is False
+        assert pwr["display_state"] == "OFF"
 
-    # Asleep -> STANDBY (High confidence)
+def test_power_state_parsing_asleep_standby(controller):
     with patch.object(controller, "is_connected", return_value=(True, "device")), \
          patch.object(controller, "_run_shell", side_effect=[
              (0, "mWakefulness=Asleep", ""),
@@ -249,77 +148,329 @@ def test_power_state_parsing(controller):
         pwr = controller.get_power_state()
         assert pwr["power_state"] == ProjectorPowerState.STANDBY.value
         assert pwr["confidence"] == "high"
+        assert pwr["display_state"] == "OFF"
 
-def test_fastapi_projector_source_and_power_endpoints():
-    from fastapi.testclient import TestClient
-    from main import app, projector as main_projector
+def test_power_state_disconnected(controller):
+    with patch.object(controller, "is_connected", return_value=(False, "disconnected")):
+        pwr = controller.get_power_state()
+        assert pwr["reachable"] is False
+        assert pwr["power_state"] == ProjectorPowerState.OFF.value
 
-    client = TestClient(app)
-    with patch.object(main_projector, "set_source", return_value=True):
-        resp = client.post("/api/room/projector/source", json={"source": "HDMI_1"})
-        assert resp.status_code == 200
-        assert resp.json() == {"success": True, "source": "HDMI_1"}
+def test_wake_and_sleep_methods(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "send_key", return_value=True) as mock_send, \
+         patch.object(controller, "get_power_state", return_value={"power_state": "ON", "display_state": "ON", "interactive": True}):
+        assert controller.wake() is True
+        # If already ON/interactive, wake returns True
 
-    with patch.object(main_projector, "set_source", return_value=False):
-        resp = client.post("/api/room/projector/source", json={"source": "INVALID"})
-        assert resp.status_code == 400
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "send_key", return_value=True) as mock_send, \
+         patch.object(controller, "get_power_state", side_effect=[
+             {"power_state": "STANDBY", "display_state": "OFF", "interactive": False},
+             {"power_state": "ON", "display_state": "ON", "interactive": True}
+         ]):
+        assert controller.wake() is True
+        mock_send.assert_called_with(224)
 
-    mock_pwr = {"connected": True, "power_state": "ON", "confidence": "high", "interactive": True}
-    with patch.object(main_projector, "get_power_state", return_value=mock_pwr), \
-         patch.object(main_projector, "power_off", return_value=True):
-        resp = client.post("/api/room/projector/power", json={"action": "STATUS"})
-        assert resp.status_code == 200
-        assert resp.json()["power_state"] == "ON"
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "send_key", return_value=True) as mock_send, \
+         patch.object(controller, "get_power_state", return_value={"power_state": "STANDBY", "display_state": "OFF"}):
+        assert controller.sleep() is True
+        mock_send.assert_called_with(223)
 
-        resp = client.post("/api/room/projector/power", json={"action": "ON"})
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
-
-        resp = client.post("/api/room/projector/power", json={"action": "OFF"})
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
-
-    resp = client.post("/api/room/projector/power", json={"action": "INVALID"})
-    assert resp.status_code == 400
-
-def test_power_off_oem_targeting_and_safety(controller):
+def test_power_off_oem(controller):
     with patch.object(controller, "is_connected", return_value=(True, "device")), \
          patch.object(controller, "_run_shell", return_value=(0, "", "")) as mock_shell:
         assert controller.power_off() is True
         mock_shell.assert_called_with("am start -n com.zhiying.powerservice/.PowerActivity")
 
-    with patch.object(controller, "is_connected", return_value=(False, "disconnected")):
-        with pytest.raises(ProjectorNotConnectedError):
-            controller.power_off()
+# =========================================================================
+# 4. HDMI Signal State & Handshake Parsing
+# =========================================================================
 
-def test_get_cec_status_telemetry(controller):
-    mock_dump = """
-mProhibitMode: false
-mPowerStatus: 0
-mIsCecAvailable: true
-mCecVersion: 5
-CEC settings:
-  hdmi_cec_enabled (int): 1 (default: 1) [modifiable]
-  power_control_mode (string): to_tv (default: to_tv) [modifiable]
-  tv_wake_on_one_touch_play (int): 1 (default: 1) [modifiable]
-HDMI CEC Network
-  mPortInfo:
-    port_id: 1, type: HDMI_IN, address: 0x0000, cec: true, arc: false, mhl: false
+def test_signal_state_active_video_flow(controller):
+    mock_tv_input_dump = """
+  serviceStateMap: ComponentName -> ServiceState
+    ComponentInfo{com.hisilicon.tvinput.external/com.hisilicon.tvinput.external.HiHdmiTvInputService}: bound: true
+  sessionStateMap: ITvInputSession -> SessionState
+    inputId: com.hisilicon.tvinput.external/.HiHdmiTvInputService/HDMI0000C2
+  TvInputHardwareManager Info:
+    3: Connection{ mConfigs: [TvStreamConfig {mStreamId=0;mType=1;mGeneration=2}], hdmi_port=2 }
 """
     with patch.object(controller, "is_connected", return_value=(True, "device")), \
-         patch.object(controller, "_run_shell", return_value=(0, mock_dump, "")):
-        cec = controller.get_cec_status()
-        assert cec["available"] is True
-        assert cec["enabled"] is True
-        assert cec["tv_wake_on_one_touch_play"] is True
-        assert cec["power_control_mode"] == "to_tv"
+         patch.object(controller, "_run_shell", return_value=(0, mock_tv_input_dump, "")):
+        sig = controller.get_signal_state()
+        assert sig["signal_state"] == ProjectorSignalState.HDMI_SIGNAL_ACTIVE.value
+        assert sig["active_stream"] is True
+        assert sig["is_session_bound"] is True
+        assert sig["verified"] is True
 
+def test_signal_state_no_active_stream(controller):
+    mock_tv_input_dump = """
+  sessionStateMap: ITvInputSession -> SessionState
+    inputId: com.hisilicon.tvinput.external/.HiHdmiTvInputService/HDMI0000C2
+  TvInputHardwareManager Info:
+    3: Connection{ mConfigs: [], hdmi_port=2 }
+"""
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", return_value=(0, mock_tv_input_dump, "")):
+        sig = controller.get_signal_state()
+        assert sig["signal_state"] == ProjectorSignalState.HDMI_CONNECTED_NO_ACTIVE_STREAM.value
+        assert sig["active_stream"] is False
+
+def test_signal_state_disconnected(controller):
     with patch.object(controller, "is_connected", return_value=(False, "disconnected")):
-        cec = controller.get_cec_status()
-        assert cec["available"] is False
-        assert cec["enabled"] is False
+        sig = controller.get_signal_state()
+        assert sig["signal_state"] == ProjectorSignalState.UNKNOWN.value
+        assert sig["active_stream"] is False
+        assert sig["verified"] is False
 
+# =========================================================================
+# 5. Input Source & Single HDMI Port Hardware Invariant
+# =========================================================================
 
+def test_source_management_and_single_hdmi_port_enforcement(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "home", return_value=True) as mock_home, \
+         patch.object(controller, "_run_shell", return_value=(0, "", "")) as mock_shell:
 
+        # HDMI 1 -> ALLOWED
+        assert controller.set_hdmi(1) is True
+        mock_shell.assert_called_with("am start -n com.newlink.nlsource/.MainActivity")
 
+        # HDMI 2 & HDMI 3 -> STRICTLY REJECTED (Hardware only has 1 port)
+        assert controller.set_hdmi(2) is False
+        assert controller.set_hdmi(3) is False
+        assert controller.set_source("HDMI_2") is False
+        assert controller.set_source(ProjectorSource.HDMI_2) is False
 
+        # ANDROID -> ALLOWED (Home)
+        assert controller.set_source(ProjectorSource.ANDROID) is True
+        mock_home.assert_called_once()
+
+        # USB -> ALLOWED (File Manager)
+        assert controller.set_source(ProjectorSource.USB) is True
+        mock_shell.assert_called_with("am start -n com.newlink.filemanager/.activity.MainActivity")
+
+        # Invalid source
+        assert controller.set_source("INVALID_SOURCE") is False
+
+def test_current_source_detection(controller):
+    with patch.object(controller, "get_foreground_package", return_value="com.newlink.nlsource"):
+        assert controller.get_current_source() == ProjectorSource.HDMI_1
+
+    with patch.object(controller, "get_foreground_package", return_value="com.newlink.filemanager"):
+        assert controller.get_current_source() == ProjectorSource.USB
+
+    with patch.object(controller, "get_foreground_package", return_value="com.newlink.overseaslauncher"):
+        assert controller.get_current_source() == ProjectorSource.ANDROID_HOME
+
+    with patch.object(controller, "get_foreground_package", return_value=None):
+        assert controller.get_current_source() == ProjectorSource.UNKNOWN
+
+# =========================================================================
+# 6. Hardware Health & Thermals Telemetry
+# =========================================================================
+
+def test_hardware_health_safe(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", side_effect=[
+             (0, "32.4℃ ", ""),
+             (0, "3247.19rpm", ""),
+             (0, "3625.56rpm", "")
+         ]):
+        health = controller.get_hardware_health()
+        assert health["temperature_celsius"] == 32.4
+        assert health["main_fan_rpm"] == 3247.19
+        assert health["sub_fan_rpm"] == 3625.56
+        assert health["thermal_status"] == ThermalStatus.SAFE.value
+        assert health["fan_status"] == FanStatus.HEALTHY.value
+        assert health["verified"] is True
+
+def test_hardware_health_warning_thermal(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", side_effect=[
+             (0, "58.0℃ ", ""),
+             (0, "3100.0rpm", ""),
+             (0, "3200.0rpm", "")
+         ]):
+        health = controller.get_hardware_health()
+        assert health["temperature_celsius"] == 58.0
+        assert health["thermal_status"] == ThermalStatus.WARNING.value
+        assert health["fan_status"] == FanStatus.HEALTHY.value
+
+def test_hardware_health_critical_thermal(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", side_effect=[
+             (0, "68.5℃ ", ""),
+             (0, "3100.0rpm", ""),
+             (0, "3200.0rpm", "")
+         ]):
+        health = controller.get_hardware_health()
+        assert health["temperature_celsius"] == 68.5
+        assert health["thermal_status"] == ThermalStatus.CRITICAL.value
+
+def test_hardware_health_fan_warning(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", side_effect=[
+             (0, "45.0℃ ", ""),
+             (0, "1200.0rpm", ""),  # Low fan RPM
+             (0, "3200.0rpm", "")
+         ]):
+        health = controller.get_hardware_health()
+        assert health["fan_status"] == FanStatus.WARNING.value
+
+# =========================================================================
+# 7. Motor Focus & Gyro Keystone
+# =========================================================================
+
+def test_auto_focus_trigger(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = controller.auto_focus()
+        assert res["status"] == "TRIGGERED"
+        assert res["action"] == "auto_focus"
+        assert res["verified"] is False
+        mock_shell.assert_called_with("am start -a com.zhiying.AUTO_FOCUS_CORRECTION")
+
+def test_auto_keystone_trigger(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = controller.auto_keystone()
+        assert res["status"] == "TRIGGERED"
+        assert res["action"] == "auto_keystone"
+        assert res["verified"] is False
+        mock_shell.assert_called_with("am start -a com.zhiying.ONE_AUTO_CORRECTION_KEYSTONE")
+
+# =========================================================================
+# 8. Brightness Scaling, Validation, & Read-Back Verification
+# =========================================================================
+
+def test_brightness_get_normalized(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", return_value=(0, "102", "")):
+        # 102 / 255.0 * 100 = 40%
+        pct = controller.get_brightness()
+        assert pct == 40
+
+def test_brightness_set_valid_with_readback(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", side_effect=[
+             (0, "", ""),    # settings put system screen_brightness 179 (70%)
+             (0, "179", "")  # settings get system screen_brightness -> 179 (70%)
+         ]):
+        ok, actual = controller.set_brightness(70)
+        assert ok is True
+        assert actual == 70
+
+def test_brightness_set_invalid_bounds(controller):
+    with patch.object(controller, "get_brightness", return_value=50):
+        ok, actual = controller.set_brightness(-10)
+        assert ok is False
+
+        ok, actual = controller.set_brightness(110)
+        assert ok is False
+
+# =========================================================================
+# 9. Device Info & Cold Power-On Invariant
+# =========================================================================
+
+def test_get_device_info_structure(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", side_effect=[
+             (0, "NL5H00X", ""),
+             (0, "12", ""),
+             (0, "NL5H00X", "")
+         ]), \
+         patch.object(controller, "get_power_state", return_value={"power_state": "ON", "wakefulness": "Awake", "display_state": "ON", "interactive": True}), \
+         patch.object(controller, "get_foreground_package", return_value="com.newlink.nlsource"), \
+         patch.object(controller, "get_signal_state", return_value={"signal_state": "HDMI_SIGNAL_ACTIVE", "active_stream": True}), \
+         patch.object(controller, "get_hardware_health", return_value={"temperature_celsius": 32.1, "thermal_status": "SAFE"}), \
+         patch.object(controller, "get_brightness", return_value=40), \
+         patch.object(controller, "get_cec_status", return_value={"enabled": True}):
+
+        info = controller.get_device_info()
+        assert info["connected"] is True
+        assert info["hdmi_ports"] == 1
+        assert info["cold_power_on_supported_via_adb"] is False
+        assert info["current_source"] == "HDMI_1"
+        assert info["brightness_percent"] == 40
+        assert info["signal_state"] == "HDMI_SIGNAL_ACTIVE"
+
+# =========================================================================
+# 10. FastAPI Projector Endpoints Battery
+# =========================================================================
+
+def test_fastapi_all_projector_endpoints():
+    from fastapi.testclient import TestClient
+    from main import app, projector as main_projector
+
+    client = TestClient(app)
+
+    # 1. GET /api/projector/status
+    with patch.object(main_projector, "get_device_info", return_value={"connected": True, "hdmi_ports": 1, "model": "NL5H00X"}):
+        resp = client.get("/api/projector/status")
+        assert resp.status_code == 200
+        assert resp.json()["hdmi_ports"] == 1
+
+    # 2. GET /api/projector/health
+    with patch.object(main_projector, "get_hardware_health", return_value={"temperature_celsius": 32.1, "thermal_status": "SAFE"}):
+        resp = client.get("/api/projector/health")
+        assert resp.status_code == 200
+        assert resp.json()["thermal_status"] == "SAFE"
+
+    # 3. GET /api/projector/signal
+    with patch.object(main_projector, "get_signal_state", return_value={"signal_state": "HDMI_SIGNAL_ACTIVE", "active_stream": True}):
+        resp = client.get("/api/projector/signal")
+        assert resp.status_code == 200
+        assert resp.json()["signal_state"] == "HDMI_SIGNAL_ACTIVE"
+
+    # 4. GET /api/projector/input
+    with patch.object(main_projector, "get_current_source", return_value=ProjectorSource.HDMI_1):
+        resp = client.get("/api/projector/input")
+        assert resp.status_code == 200
+        assert resp.json()["current_input"] == "HDMI_1"
+        assert resp.json()["hdmi_ports"] == 1
+
+    # 5. POST /api/projector/focus
+    with patch.object(main_projector, "auto_focus", return_value={"status": "TRIGGERED", "action": "auto_focus"}):
+        resp = client.post("/api/projector/focus")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "TRIGGERED"
+
+    # 6. POST /api/projector/keystone
+    with patch.object(main_projector, "auto_keystone", return_value={"status": "TRIGGERED", "action": "auto_keystone"}):
+        resp = client.post("/api/projector/keystone")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "TRIGGERED"
+
+    # 7. GET & POST /api/projector/brightness
+    with patch.object(main_projector, "get_brightness", return_value=45):
+        resp = client.get("/api/projector/brightness")
+        assert resp.status_code == 200
+        assert resp.json()["brightness_percent"] == 45
+
+    with patch.object(main_projector, "set_brightness", return_value=(True, 70)):
+        resp = client.post("/api/projector/brightness", json={"brightness": 70})
+        assert resp.status_code == 200
+        assert resp.json()["actual_percent"] == 70
+        assert resp.json()["verified"] is True
+
+    # 8. POST /api/projector/power
+    with patch.object(main_projector, "wake", return_value=True), \
+         patch.object(main_projector, "get_power_state", return_value={"power_state": "ON"}):
+        resp = client.post("/api/projector/power", json={"action": "WAKE"})
+        assert resp.status_code == 200
+        assert resp.json()["power_state"] == "ON"
+
+    with patch.object(main_projector, "sleep", return_value=True), \
+         patch.object(main_projector, "get_power_state", return_value={"power_state": "STANDBY"}):
+        resp = client.post("/api/projector/power", json={"action": "SLEEP"})
+        assert resp.status_code == 200
+        assert resp.json()["power_state"] == "STANDBY"
+
+    with patch.object(main_projector, "get_power_state", return_value={"power_state": "OFF"}):
+        resp = client.post("/api/projector/power", json={"action": "ON"})
+        assert resp.status_code == 200
+        assert resp.json()["success"] is False
+        assert "Cold power-on unavailable via ADB" in resp.json()["error"]

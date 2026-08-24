@@ -1,0 +1,157 @@
+{
+  "timestamp": 1787562075.7159538,
+  "fire_tv_target": "192.168.1.5:5555",
+  "soundbar_mac": "54:15:89:DC:A5:79",
+  "bt_cycles": [
+    {
+      "cycle": 1,
+      "disconnect_success": true,
+      "disconnect_method": "DIRECT_DISCONNECTED",
+      "disconnect_latency_ms": 4312,
+      "connect_success": true,
+      "connect_method": "DIRECT_CONNECTED",
+      "connect_latency_ms": 1499,
+      "verified_connected": true
+    },
+    {
+      "cycle": 2,
+      "disconnect_success": true,
+      "disconnect_method": "DIRECT_DISCONNECTED",
+      "disconnect_latency_ms": 1690,
+      "connect_success": true,
+      "connect_method": "DIRECT_CONNECTED",
+      "connect_latency_ms": 2506,
+      "verified_connected": true
+    },
+    {
+      "cycle": 3,
+      "disconnect_success": true,
+      "disconnect_method": "DIRECT_DISCONNECTED",
+      "disconnect_latency_ms": 1400,
+      "connect_success": true,
+      "connect_method": "DIRECT_CONNECTED",
+      "connect_latency_ms": 5790,
+      "verified_connected": true
+    },
+    {
+      "cycle": 4,
+      "disconnect_success": true,
+      "disconnect_method": "DIRECT_DISCONNECTED",
+      "disconnect_latency_ms": 2706,
+      "connect_success": true,
+      "connect_method": "DIRECT_CONNECTED",
+      "connect_latency_ms": 1595,
+      "verified_connected": true
+    },
+    {
+      "cycle": 5,
+      "disconnect_success": true,
+      "disconnect_method": "DIRECT_DISCONNECTED",
+      "disconnect_latency_ms": 3093,
+      "connect_success": true,
+      "connect_method": "DIRECT_CONNECTED",
+      "connect_latency_ms": 3786,
+      "verified_connected": true
+    }
+  ],
+  "provider_matrix": {
+    "youtube": {
+      "display_name": "YouTube",
+      "success": true,
+      "truthful_status": "movie playing",
+      "action_taken": "projector_switch_hdmi1, direct_launch_youtube",
+      "duration_ms": 7826,
+      "verified_foreground": "com.amazon.firetv.youtube",
+      "playback_state": "PLAYING",
+      "expected_autoplay": true
+    },
+    "netflix": {
+      "display_name": "Netflix",
+      "success": true,
+      "truthful_status": "content page opened",
+      "action_taken": "projector_switch_hdmi1, direct_launch_netflix",
+      "duration_ms": 7207,
+      "verified_foreground": "com.netflix.ninja",
+      "playback_state": "PLAYING",
+      "expected_autoplay": false
+    },
+    "prime_video": {
+      "display_name": "Prime Video",
+      "success": false,
+      "truthful_status": "Prime_Video app opened",
+      "action_taken": "projector_switch_hdmi1, app_launch_prime_video",
+      "duration_ms": 11368,
+      "verified_foreground": "com.amazon.firetv.youtube",
+      "playback_state": "PLAYING",
+      "expected_autoplay": false
+    },
+    "apple_tv": {
+      "display_name": "Apple TV",
+      "success": true,
+      "truthful_status": "content page opened",
+      "action_taken": "projector_switch_hdmi1, direct_launch_apple_tv",
+      "duration_ms": 8932,
+      "verified_foreground": "com.apple.atve.amazon.appletv",
+      "playback_state": "PLAYING",
+      "expected_autoplay": false
+    }
+  },
+  "cinema_cycles": [
+    {
+      "start": {
+        "success": true,
+        "status": "movie playing",
+        "latency_ms": 7380
+      },
+      "stop": {
+        "success": true,
+        "status": "cinema stopped and audio restored to PC",
+        "latency_ms": 5149
+      }
+    }
+  ],
+  "natural_language_tests": [
+    {
+      "command": "Play Article 15 on YouTube",
+      "success": true,
+      "status": "YouTube search results displayed",
+      "action": "route_audio_to_fire_tv, projector_switch_hdmi1, youtube_search_fallback",
+      "latency_ms": 23859
+    },
+    {
+      "command": "Put on Stranger Things on Netflix",
+      "success": true,
+      "status": "content page opened",
+      "action": "direct_launch_netflix",
+      "latency_ms": 8531
+    },
+    {
+      "command": "Open Prime Video",
+      "success": false,
+      "status": "Prime_Video app opened",
+      "action": "projector_switch_hdmi1, app_launch_prime_video",
+      "latency_ms": 5154
+    },
+    {
+      "command": "Switch to Apple TV",
+      "success": true,
+      "status": "Apple_Tv app opened",
+      "action": "projector_switch_hdmi1, app_launch_apple_tv",
+      "latency_ms": 7219
+    },
+    {
+      "command": "Quick break",
+      "success": true,
+      "status": "PAUSED",
+      "action": "media_pause",
+      "latency_ms": 1761
+    },
+    {
+      "command": "Goodnight",
+      "success": true,
+      "status": "YouTube search results displayed",
+      "action": "projector_switch_hdmi1, youtube_search_fallback",
+      "latency_ms": 19010
+    }
+  ]
+}

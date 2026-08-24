@@ -59,7 +59,8 @@ sealed class AnimusCommand {
         val target: String
     ) : AnimusCommand()
 
-    object StartMovieMode : AnimusCommand()
+    data class StartMovieMode(val contentTitle: String? = null) : AnimusCommand()
+    data class WatchContent(val title: String, val category: String? = null) : AnimusCommand()
     object StopMovieMode : AnimusCommand()
 
     data class UnknownCommand(

@@ -229,7 +229,7 @@ object BrainCommandValidator {
             }
 
             BrainCommandDto.CMD_START_MOVIE_MODE -> {
-                BrainValidationResult.Valid(AnimusCommand.StartMovieMode)
+                BrainValidationResult.Valid(AnimusCommand.StartMovieMode(contentTitle = dto.title))
             }
 
             BrainCommandDto.CMD_STOP_MOVIE_MODE -> {

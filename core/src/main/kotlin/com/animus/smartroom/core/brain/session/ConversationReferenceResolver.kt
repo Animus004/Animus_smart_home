@@ -76,14 +76,53 @@ object ConversationReferenceResolver {
             )
         }
 
-        // 5. Ambiguous "Turn it off" when both AC and Music are active
-        if (trimmed in setOf("turn it off", "switch it off", "turn off", "stop it")) {
-            if (session.lastActiveTrack != null && session.lastActiveDevice == "AC") {
+        // 5. Contextual "Turn it off" / "Stop it" / "Shut it down"
+        if (trimmed in setOf("turn it off", "switch it off", "turn off", "stop it", "shut it down", "turn that off", "switch that off")) {
+            val hasMovie = session.isMovieModeActive || session.lastActiveDevice in setOf("MOVIE_MODE", "PROJECTOR")
+            val hasAc = session.lastActiveDevice == "AC"
+            val hasMusic = session.lastActiveTrack != null
+
+            if (hasMovie && hasAc) {
+                return BrainResponse.Clarification(
+                    question = "Do you mean Movie Mode or the AC?",
+                    options = listOf("Movie Mode", "AC")
+                )
+            } else if (hasMusic && hasAc) {
                 return BrainResponse.Clarification(
                     question = "Do you mean the AC or the music?",
                     options = listOf("AC", "Music")
                 )
+            } else if (hasMovie) {
+                return BrainResponse.Command(
+                    spokenResponse = "Stopping Movie Mode.",
+                    actions = listOf(BrainAction.StopMovieMode)
+                )
+            } else if (session.lastActiveDevice == "PROJECTOR") {
+                return BrainResponse.Command(
+                    spokenResponse = "Turning off the projector.",
+                    actions = listOf(BrainAction.DeviceCommand("PROJECTOR", "POWER", false))
+                )
+            } else if (hasAc) {
+                return BrainResponse.Command(
+                    spokenResponse = "Turning off the AC.",
+                    actions = listOf(BrainAction.DeviceCommand("AC", "POWER", false))
+                )
+            } else if (hasMusic) {
+                return BrainResponse.Command(
+                    spokenResponse = "Stopping music playback.",
+                    actions = listOf(BrainAction.MusicControl(MusicActionType.PAUSE))
+                )
             }
+        }
+
+        // 6. Contextual Audio Ownership: "Switch it back", "Give it back", "Give speaker back"
+        if (trimmed in setOf("switch it back", "give it back", "give speaker back", "switch back", "give the speaker back", "hand it back")) {
+            val target = if (session.lastAudioOwner?.equals("PC", ignoreCase = true) == true) "FIRE_TV" else "PC"
+            val targetName = if (target == "PC") "computer" else "Fire TV"
+            return BrainResponse.Command(
+                spokenResponse = "Switching audio back to the $targetName.",
+                actions = listOf(BrainAction.ConnectBluetooth(target))
+            )
         }
 
         return null

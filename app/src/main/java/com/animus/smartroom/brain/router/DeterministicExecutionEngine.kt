@@ -2,6 +2,7 @@ package com.animus.smartroom.brain.router
 
 import android.util.Log
 import com.animus.smartroom.bluetooth.BluetoothAudioDeviceManager
+import com.animus.smartroom.core.brain.policy.AdaptiveMovieClimatePolicy
 import com.animus.smartroom.core.brain.router.BrainIntent
 import com.animus.smartroom.core.brain.router.CapabilityRegistry
 import com.animus.smartroom.core.brain.router.ExecutionPlanner
@@ -153,8 +154,45 @@ class DeterministicExecutionEngine(
             }
 
             CapabilityRegistry.ActionCapability.AC_SET_TEMPERATURE -> {
-                val temp = (cmd.parameters["temperature"] ?: cmd.parameters["value"]) as? Number ?: 23
-                val res = registry.executeCapability("AC", com.animus.smartroom.device.model.DeviceCapability.Temperature, temp.toInt())
+                val isAdaptive = cmd.parameters["adaptive"] == true
+                val targetTemp: Int?
+                var isAlreadyOptimal = false
+                var decisionReason = ""
+
+                if (isAdaptive) {
+                    val ambientTemp = (cmd.parameters["ambient_temp"] as? Number)?.toDouble()
+                    val currentAcTemp = (cmd.parameters["current_temp"] as? Number)?.toInt()
+                    val isPowered = cmd.parameters["is_powered"] as? Boolean ?: true
+                    val decision = AdaptiveMovieClimatePolicy.evaluate(
+                        currentAmbientTemp = ambientTemp,
+                        currentAcTemp = currentAcTemp,
+                        isAcPoweredOn = isPowered
+                    )
+                    targetTemp = decision.targetTemperature
+                    isAlreadyOptimal = decision.isAlreadyOptimal
+                    decisionReason = decision.reason
+                } else {
+                    val rawTemp = (cmd.parameters["temperature"] ?: cmd.parameters["value"]) as? Number ?: 23
+                    targetTemp = rawTemp.toInt().coerceIn(AdaptiveMovieClimatePolicy.MIN_TEMPERATURE, AdaptiveMovieClimatePolicy.MAX_TEMPERATURE)
+                    decisionReason = "Set temperature to ${targetTemp}°C"
+                }
+
+                if (targetTemp == null || (isAdaptive && isAlreadyOptimal)) {
+                    tracer?.mark("ACTION_COMPLETED")
+                    tracer?.mark("FINAL_RESULT")
+                    return ExecutionResult(
+                        status = ExecutionResult.Status.ALREADY_IN_STATE,
+                        correlationId = corrId,
+                        intent = cmd.capability.name,
+                        target = "AC",
+                        requested = targetTemp,
+                        verified = targetTemp,
+                        message = decisionReason,
+                        latencyTraceMs = tracer?.getTraceLatencies() ?: emptyMap()
+                    )
+                }
+
+                val res = registry.executeCapability("AC", com.animus.smartroom.device.model.DeviceCapability.Temperature, targetTemp)
                 tracer?.mark("ACTION_COMPLETED")
                 tracer?.mark("HARDWARE_VERIFIED")
                 tracer?.mark("FINAL_RESULT")
@@ -163,9 +201,9 @@ class DeterministicExecutionEngine(
                     correlationId = corrId,
                     intent = cmd.capability.name,
                     target = "AC",
-                    requested = temp.toInt(),
-                    verified = if (res.success) temp.toInt() else null,
-                    message = res.message,
+                    requested = targetTemp,
+                    verified = if (res.success) targetTemp else null,
+                    message = if (res.success) decisionReason.ifBlank { res.message } else res.message,
                     latencyTraceMs = tracer?.getTraceLatencies() ?: emptyMap()
                 )
             }
@@ -287,6 +325,26 @@ class DeterministicExecutionEngine(
         val corrId = routine.correlationId
         tracer?.mark("ACTION_STARTED")
         val plan = ExecutionPlanner.planRoutine(routine)
+
+        if (routine.routineName.uppercase() in setOf("MOVIE_MODE", "ROUTINE_MOVIE_MODE")) {
+            val content = routine.parameters["content"]?.toString() ?: routine.parameters["title"]?.toString()
+            val feedbackRes = musicController?.startMovieModeWithFeedback(content)
+            if (feedbackRes != null && !feedbackRes.success) {
+                tracer?.mark("ACTION_FAILED")
+                tracer?.mark("FINAL_RESULT")
+                return ExecutionResult(
+                    status = ExecutionResult.Status.FAILED,
+                    correlationId = corrId,
+                    intent = routine.routineName,
+                    target = "ROUTINES",
+                    message = feedbackRes.spokenResponse ?: feedbackRes.message,
+                    reason = feedbackRes.status,
+                    latencyTraceMs = tracer?.getTraceLatencies() ?: emptyMap()
+                )
+            }
+        } else if (routine.routineName.uppercase() in setOf("GOODNIGHT_MODE", "ROUTINE_GOODNIGHT_MODE", "SLEEP_ROUTINE")) {
+            musicController?.stopMovieMode()
+        }
 
         for (stage in plan.stages) {
             coroutineScope {

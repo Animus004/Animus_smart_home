@@ -87,6 +87,12 @@ class LocalAnimusBrain(
                                         actionType = action.actionType
                                     )
                                 }
+                                is com.animus.smartroom.core.brain.model.BrainAction.MovieMode -> {
+                                    AnimusCommand.StartMovieMode(contentTitle = action.contentTitle)
+                                }
+                                is com.animus.smartroom.core.brain.model.BrainAction.StopMovieMode -> {
+                                    AnimusCommand.StopMovieMode
+                                }
                                 else -> null
                             }
                         }
@@ -174,7 +180,12 @@ class LocalAnimusBrain(
                     target = parsedCommand.target
                 )
                 is AnimusCommand.StartMovieMode -> BrainCommandDto(
-                    command = BrainCommandDto.CMD_START_MOVIE_MODE
+                    command = BrainCommandDto.CMD_START_MOVIE_MODE,
+                    title = parsedCommand.contentTitle
+                )
+                is AnimusCommand.WatchContent -> BrainCommandDto(
+                    command = BrainCommandDto.CMD_START_MOVIE_MODE,
+                    title = parsedCommand.title
                 )
                 is AnimusCommand.StopMovieMode -> BrainCommandDto(
                     command = BrainCommandDto.CMD_STOP_MOVIE_MODE

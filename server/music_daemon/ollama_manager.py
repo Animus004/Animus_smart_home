@@ -171,6 +171,7 @@ class OllamaManager:
             try:
                 # Launch ollama serve as detached background process with full user environment
                 env = os.environ.copy()
+                env["OLLAMA_HOST"] = f"0.0.0.0:{self.port}"
                 cwd = os.path.dirname(self.ollama_path) if self.ollama_path else None
                 flags = 0
                 if sys.platform == "win32":
@@ -285,7 +286,11 @@ class OllamaManager:
         def _watchdog_loop():
             while not self._stop_event.is_set():
                 try:
-                    if self.current_state == OllamaState.READY or self.current_state == OllamaState.SERVER_READY:
+                    if self.current_state == OllamaState.OFFLINE:
+                        logger.info("[OLLAMA_WATCHDOG] Initial state is OFFLINE. Booting Ollama server and pre-warming model...")
+                        if self.ensure_server_running(timeout=60.0):
+                            self.ensure_model_ready(timeout=120.0)
+                    elif self.current_state == OllamaState.READY or self.current_state == OllamaState.SERVER_READY:
                         if not self._check_http_health():
                             logger.warning("[OLLAMA_WATCHDOG] Server became unreachable. Triggering recovery...")
                             self.recover()

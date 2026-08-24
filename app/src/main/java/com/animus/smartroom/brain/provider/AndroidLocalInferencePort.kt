@@ -110,35 +110,56 @@ class AndroidLocalInferencePort(
     }
 
     override suspend fun generate(prompt: String, context: List<String>): String {
+        val reqId = java.util.UUID.randomUUID().toString().take(8)
+        val startTime = System.currentTimeMillis()
+
         // Strict Gating: If not yet READY or AVAILABLE, wait for warmup to complete or trigger it
         if (_status.value != LocalBrainStatus.READY && _status.value != LocalBrainStatus.BUSY && _status.value != LocalBrainStatus.AVAILABLE) {
-            Log.i(TAG, "[LOCAL_LLM_USER_REQUEST_HELD] User request gated while brain is in status=${_status.value}. Waiting for READY...")
+            Log.i(TAG, "[LOCAL_LLM_USER_REQUEST_HELD] reqId=$reqId User request held while brain is status=${_status.value}. Waiting for READY...")
             if (_status.value == LocalBrainStatus.OFFLINE || _status.value == LocalBrainStatus.DISCONNECTED || _status.value == LocalBrainStatus.FAILED || _status.value == LocalBrainStatus.ERROR) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    warmUp(maxAttempts = 1)
+                val warmed = warmUp(maxAttempts = 1)
+                if (!warmed && _status.value != LocalBrainStatus.READY && _status.value != LocalBrainStatus.AVAILABLE) {
+                    val dur = System.currentTimeMillis() - startTime
+                    Log.e(TAG, "[LOCAL_INFERENCE_DIAGNOSTIC] reqId=$reqId input='$prompt' failureStage=WARMUP_FAILED error=OLLAMA_MODEL_UNAVAILABLE durationMs=$dur")
+                    throw IllegalStateException("OLLAMA_MODEL_UNAVAILABLE: Local brain warmup failed (current status=${_status.value})")
+                }
+            } else {
+                val readyStatus = _status.filter {
+                    it == LocalBrainStatus.READY || it == LocalBrainStatus.AVAILABLE ||
+                    it == LocalBrainStatus.FAILED || it == LocalBrainStatus.OFFLINE ||
+                    it == LocalBrainStatus.DISCONNECTED || it == LocalBrainStatus.ERROR
+                }.first()
+                if (readyStatus != LocalBrainStatus.READY && readyStatus != LocalBrainStatus.AVAILABLE) {
+                    val dur = System.currentTimeMillis() - startTime
+                    Log.e(TAG, "[LOCAL_INFERENCE_DIAGNOSTIC] reqId=$reqId input='$prompt' failureStage=GATING_REJECTED error=OLLAMA_MODEL_UNAVAILABLE durationMs=$dur")
+                    throw IllegalStateException("OLLAMA_MODEL_UNAVAILABLE: Cannot generate completion: Local brain is not in READY state (current status=$readyStatus)")
                 }
             }
-            val readyStatus = _status.filter { it == LocalBrainStatus.READY || it == LocalBrainStatus.AVAILABLE || it == LocalBrainStatus.FAILED || it == LocalBrainStatus.OFFLINE || it == LocalBrainStatus.DISCONNECTED || it == LocalBrainStatus.ERROR }
-                .first()
-            if (readyStatus != LocalBrainStatus.READY && readyStatus != LocalBrainStatus.AVAILABLE) {
-                throw IllegalStateException("Cannot generate completion: Local brain is not in READY state (current status=$readyStatus)")
-            }
-            Log.i(TAG, "[LOCAL_LLM_USER_REQUEST_RELEASED] Gated request released. Status is now READY.")
+            Log.i(TAG, "[LOCAL_LLM_USER_REQUEST_RELEASED] reqId=$reqId Gated request released. Status is now READY.")
         }
 
-        inferenceMutex.withLock {
+        return inferenceMutex.withLock {
             _status.value = LocalBrainStatus.BUSY
-            Log.i(TAG, "[LOCAL_LLM_REQUEST_STARTED] Dispatching user prompt: '$prompt'")
+            Log.i(TAG, "[LOCAL_LLM_REQUEST_STARTED] reqId=$reqId Dispatching user prompt: '$prompt'")
             val result = client.generateCompletion(prompt, context)
-            return result.fold(
+            val dur = System.currentTimeMillis() - startTime
+            result.fold(
                 onSuccess = {
                     _status.value = LocalBrainStatus.READY
+                    Log.i(TAG, "[LOCAL_INFERENCE_DIAGNOSTIC] reqId=$reqId input='$prompt' stage=INFERENCE_SUCCESS durationMs=$dur length=${it.length}")
                     it
                 },
-                onFailure = {
+                onFailure = { err ->
                     _status.value = LocalBrainStatus.READY
-                    Log.e(TAG, "LOCAL_LLM_DEBUG: Generation failed: ${it.message}", it)
-                    throw it
+                    val errorType = when (err) {
+                        is OllamaLocalLlmClient.OllamaError.Timeout -> "INFERENCE_TIMEOUT"
+                        is OllamaLocalLlmClient.OllamaError.NetworkUnavailable -> "OLLAMA_CONNECTION_REFUSED"
+                        is OllamaLocalLlmClient.OllamaError.MalformedResponse -> "QWEN_RESPONSE_PARSE_FAILED"
+                        is kotlinx.coroutines.CancellationException -> "ANDROID_REQUEST_CANCELLED"
+                        else -> "INFERENCE_EXECUTION_FAILED"
+                    }
+                    Log.e(TAG, "[LOCAL_INFERENCE_DIAGNOSTIC] reqId=$reqId input='$prompt' failureStage=$errorType durationMs=$dur error=${err.message}", err)
+                    throw err
                 }
             )
         }

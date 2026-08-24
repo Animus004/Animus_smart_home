@@ -117,6 +117,36 @@ class LocalCommandParser : CommandParser {
             """^(?:buddy,?\s+)?(?:how\s+much\s+time\s+(?:is\s+)?left\s+(?:on\s+(?:the|my)\s+ac\s+timer|on\s+ac\s+timer|on\s+timer)|when\s+is\s+(?:my|the)\s+ac\s+turning\s+off|check\s+ac\s+timer|ac\s+timer\s+status)$""",
             Pattern.CASE_INSENSITIVE
         )
+
+        private val WATCH_CONTENT_REGEX = Pattern.compile(
+            """^(?:buddy,?\s+)?(?:(?:i\s+(?:want|would\s+like)\s+to\s+)?watch|let's\s+watch)\s+(?:the\s+movie\s+|movie\s+|the\s+film\s+|film\s+|the\s+)?(.+)$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val PLAY_MOVIE_REGEX = Pattern.compile(
+            """^(?:buddy,?\s+)?play\s+(?:the\s+movie\s+|movie\s+|the\s+film\s+|film\s+)(.+)$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val PROJECTOR_SOURCE_REGEX = Pattern.compile(
+            """^(?:(?:switch|set|change)\s+)?(?:the\s+)?projector\s+(?:source\s+|input\s+)?(?:to\s+)?(hdmi\s*[123]|android|usb|av|vga)$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val SWITCH_TO_HDMI_REGEX = Pattern.compile(
+            """^(?:switch|set|change)\s+(?:(?:the\s+)?(?:source|input)\s+)?(?:to\s+)?(hdmi\s*[123])$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val AUDIO_OWNERSHIP_PC_REGEX = Pattern.compile(
+            """^(?:(?:buddy|hey animus|animus|please|i\s+(?:want|inqant)(?:\s+you)?\s+to|can\s+you|could\s+you)\s+)?(?:(?:switch|connect|transfer|route|give)\s+(?:to\s+)?(?:the\s+)?(?:lg\s+)?(?:audio|soundbar|speaker|bluetooth)(?:\s+back)?\s+(?:to|from|form|with)\s+(?:my\s+|the\s+)?(?:computer|pc)|connect\s+(?:to\s+)?(?:the\s+)?(?:lg\s+)?(?:speaker|soundbar)\s+(?:from|form|with|to)\s+(?:my\s+|the\s+)?(?:computer|pc)|connect\s+(?:my\s+|the\s+)?(?:computer|pc)\s+to\s+(?:the\s+)?(?:lg\s+)?(?:speaker|soundbar|bluetooth)|connect\s+(?:with\s+)?bluetooth\s+(?:from|form)\s+(?:my\s+|the\s+)?(?:computer|pc)|give\s+(?:the\s+)?(?:speaker|soundbar|audio)\s+back)$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val AUDIO_OWNERSHIP_FIRETV_REGEX = Pattern.compile(
+            """^(?:(?:buddy|hey animus|animus|please|i\s+(?:want|inqant)(?:\s+you)?\s+to|can\s+you|could\s+you)\s+)?(?:(?:switch|connect|transfer|route|give)\s+(?:to\s+)?(?:the\s+)?(?:audio|soundbar|speaker|bluetooth)\s+to\s+(?:the\s+|my\s+)?(?:fire\s*tv|tv|television|stick)|switch\s+to\s+(?:the\s+|my\s+)?(?:fire\s*tv|tv|television|stick))$""",
+            Pattern.CASE_INSENSITIVE
+        )
     }
 
     override fun parse(input: String): AnimusCommand {
@@ -203,17 +233,19 @@ class LocalCommandParser : CommandParser {
             return AnimusCommand.DisconnectBluetoothDevice
         }
 
-        // 5.5 Movie Mode Commands
+        // 5.5 Movie Mode & Content Watch Commands
         if (normalized in setOf(
                 "start movie mode",
                 "turn on movie mode",
                 "start a movie",
                 "movie mode on",
                 "enable movie mode",
-                "start movie"
+                "start movie",
+                "movie mode",
+                "cinema mode"
             )
         ) {
-            return AnimusCommand.StartMovieMode
+            return AnimusCommand.StartMovieMode()
         }
 
         if (normalized in setOf(
@@ -222,10 +254,142 @@ class LocalCommandParser : CommandParser {
                 "turn off movie mode",
                 "movie mode off",
                 "disable movie mode",
-                "stop movie"
+                "stop movie",
+                "exit movie mode",
+                "cancel movie mode",
+                "i'm done watching",
+                "im done watching",
+                "i am done watching",
+                "stop the movie setup",
+                "stop watching",
+                "stop the movie",
+                "done watching"
             )
         ) {
             return AnimusCommand.StopMovieMode
+        }
+
+        // 5.6 Projector Power & Source Commands
+        if (normalized in setOf(
+                "turn on projector",
+                "turn on the projector",
+                "turn the projector on",
+                "turn projector on",
+                "switch on projector",
+                "switch on the projector",
+                "switch the projector on",
+                "switch projector on",
+                "projector on",
+                "power on projector",
+                "power on the projector",
+                "power the projector on",
+                "power projector on",
+                "start projector",
+                "start the projector",
+                "turn on project",
+                "turn the project on",
+                "project on"
+            )
+        ) {
+            return AnimusCommand.SetDeviceCapability(
+                target = "PROJECTOR",
+                capability = com.animus.smartroom.device.model.DeviceCapability.Power,
+                value = true
+            )
+        }
+
+        if (normalized in setOf(
+                "turn off projector",
+                "turn off the projector",
+                "turn the projector off",
+                "turn projector off",
+                "switch off projector",
+                "switch off the projector",
+                "switch the projector off",
+                "switch projector off",
+                "projector off",
+                "power off projector",
+                "power off the projector",
+                "power the projector off",
+                "power projector off",
+                "shut down projector",
+                "shut down the projector",
+                "shut off projector",
+                "shut off the projector",
+                "stop projector",
+                "stop the projector",
+                "turn off project",
+                "turn the project off",
+                "project off",
+                "turn project off",
+                "switch off project"
+            )
+        ) {
+            return AnimusCommand.SetDeviceCapability(
+                target = "PROJECTOR",
+                capability = com.animus.smartroom.device.model.DeviceCapability.Power,
+                value = false
+            )
+        }
+
+        if (normalized in setOf(
+                "soundbar",
+                "speaker",
+                "lg speaker",
+                "lg soundbar",
+                "connect soundbar",
+                "connect speaker",
+                "connect lg speaker"
+            )
+        ) {
+            return AnimusCommand.ConnectBluetoothDevice(deviceName = "PC")
+        }
+
+        val projSourceMatcher = PROJECTOR_SOURCE_REGEX.matcher(trimmed)
+        if (projSourceMatcher.find()) {
+            val rawSource = projSourceMatcher.group(1)?.trim()?.uppercase(Locale.ROOT)
+            val formatted = when {
+                rawSource?.startsWith("HDMI") == true -> rawSource.replace(" ", "_")
+                rawSource != null -> rawSource
+                else -> "HDMI_1"
+            }
+            return AnimusCommand.SetDeviceCapability(
+                target = "PROJECTOR",
+                capability = com.animus.smartroom.device.model.DeviceCapability.SelectInput,
+                value = formatted
+            )
+        }
+
+        val switchToHdmiMatcher = SWITCH_TO_HDMI_REGEX.matcher(trimmed)
+        if (switchToHdmiMatcher.find()) {
+            val rawSource = switchToHdmiMatcher.group(1)?.trim()?.uppercase(Locale.ROOT)
+            val formatted = rawSource?.replace(" ", "_") ?: "HDMI_1"
+            return AnimusCommand.SetDeviceCapability(
+                target = "PROJECTOR",
+                capability = com.animus.smartroom.device.model.DeviceCapability.SelectInput,
+                value = formatted
+            )
+        }
+
+        val playMovieMatcher = PLAY_MOVIE_REGEX.matcher(trimmed)
+        if (playMovieMatcher.find()) {
+            val content = playMovieMatcher.group(1)?.trim()
+            if (!content.isNullOrBlank()) {
+                return AnimusCommand.WatchContent(title = content)
+            }
+        }
+
+        val watchMatcher = WATCH_CONTENT_REGEX.matcher(trimmed)
+        if (watchMatcher.find()) {
+            val content = watchMatcher.group(1)?.trim()
+            if (!content.isNullOrBlank()) {
+                val lowerContent = content.lowercase(Locale.ROOT)
+                return if (lowerContent in setOf("movie", "a movie", "the movie", "something", "tv")) {
+                    AnimusCommand.StartMovieMode()
+                } else {
+                    AnimusCommand.WatchContent(title = content)
+                }
+            }
         }
 
         // 6. AC Power Commands
@@ -440,6 +604,15 @@ class LocalCommandParser : CommandParser {
             if (percent != null && percent in 0..100) {
                 return AnimusCommand.SetVolume(percent)
             }
+        }
+
+        // 7. Authoritative Audio Ownership Commands (PC vs Fire TV)
+        if (AUDIO_OWNERSHIP_PC_REGEX.matcher(trimmed).find()) {
+            return AnimusCommand.SwitchBluetoothDevice("PC")
+        }
+
+        if (AUDIO_OWNERSHIP_FIRETV_REGEX.matcher(trimmed).find()) {
+            return AnimusCommand.SwitchBluetoothDevice("FIRE_TV")
         }
 
         // 7. Switch device commands

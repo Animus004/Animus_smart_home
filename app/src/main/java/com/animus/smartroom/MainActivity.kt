@@ -46,6 +46,9 @@ import com.animus.smartroom.bluetooth.model.BluetoothDeviceState
 import com.animus.smartroom.bluetooth.model.BluetoothUiState
 import com.animus.smartroom.media.model.MusicUiState
 import com.animus.smartroom.media.model.PlaybackStatus
+import com.animus.smartroom.ui.brain.BrainStatusIndicator
+import com.animus.smartroom.ui.brain.VisualBrainState
+import com.animus.smartroom.ui.glass.ImmersiveGlassScreen
 import com.animus.smartroom.ui.theme.AccentGreen
 import com.animus.smartroom.ui.theme.AnimusSmartRoomTheme
 import com.animus.smartroom.voice.VoiceInputState
@@ -72,55 +75,58 @@ class MainActivity : ComponentActivity() {
                     val registeredDevices by viewModel.registeredDevices.collectAsStateWithLifecycle()
                     val tuyaAcState by viewModel.tuyaAcState.collectAsStateWithLifecycle()
                     val isAcOperating by viewModel.isAcOperating.collectAsStateWithLifecycle()
-                    val diagnosticEvents by viewModel.diagnosticEvents.collectAsStateWithLifecycle()
                     val scheduledActions by viewModel.scheduledActions.collectAsStateWithLifecycle()
+                    val visualBrainState by viewModel.visualBrainState.collectAsStateWithLifecycle()
+                    val operationMode by viewModel.operationMode.collectAsStateWithLifecycle()
+                    val widgetSettings by viewModel.widgetSettings.collectAsStateWithLifecycle()
+                    val chatHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
+                    val actionFeedback by viewModel.actionFeedbackState.collectAsStateWithLifecycle()
 
-                    val activeAcTimer = scheduledActions.firstOrNull {
-                        it.targetDeviceType == com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER && it.isPending
-                    }
-
-                    HomeScreen(
-                        bluetoothState = bluetoothUiState,
-                        musicState = musicUiState,
-                        aiState = aiCommandState,
+                    ImmersiveGlassScreen(
+                        visualBrainState = visualBrainState,
                         voiceState = voiceInputState,
+                        isProcessing = aiCommandState.isProcessing,
+                        lastResultMessage = aiCommandState.lastResultMessage,
+                        isSuccess = aiCommandState.isSuccess,
+                        operationMode = operationMode,
+                        onSetOperationMode = { viewModel.setOperationMode(it) },
                         activeBrainProvider = activeBrainProvider,
+                        onSetBrainProvider = { viewModel.setBrainProvider(it) },
                         maskedApiKey = maskedApiKey,
-                        activeRoutine = activeRoutine,
-                        registeredDevices = registeredDevices,
-                        tuyaAcState = tuyaAcState,
-                        isAcOperating = isAcOperating,
-                        diagnosticEvents = diagnosticEvents,
-                        activeAcTimer = activeAcTimer,
-                        onCancelRoutine = { viewModel.cancelActiveRoutine() },
-                        onStopAlarm = { viewModel.stopAlarm() },
-                        onClearDiagnostics = { viewModel.clearDiagnostics() },
-                        onSetAcPower = { on -> viewModel.setAcPower(on) },
-                        onSetAcTemperature = { temp -> viewModel.setAcTemperature(temp) },
-                        onSetAcMode = { mode -> viewModel.setAcMode(mode) },
-                        onSetAcFanSpeed = { speed -> viewModel.setAcFanSpeed(speed) },
-                        onScheduleAcTimer = { mins, on -> viewModel.scheduleAcTimer(mins, on) },
-                        onCancelAcTimer = { viewModel.cancelAcTimer() },
-                        onConnectClick = { viewModel.onConnectClicked() },
-                        onDisconnectClick = { viewModel.onDisconnectClicked() },
-                        onDeviceSelected = { mac -> viewModel.onDeviceSelected(mac) },
-                        onPermissionsResult = { granted -> viewModel.onPermissionsResult(granted) },
-                        getRequiredPermissions = { viewModel.getRequiredPermissions() },
-                        hasPermissions = { viewModel.hasPermissions() },
+                        onSaveApiKey = { viewModel.onSaveGeminiApiKey(it) },
+                        onTestApiKey = { key, callback -> viewModel.onTestGeminiConnection(key, callback) },
+                        widgetSettings = widgetSettings,
+                        onToggleClock = { viewModel.toggleWidgetClock(it) },
+                        onToggleWeather = { viewModel.toggleWidgetWeather(it) },
+                        onToggleMusic = { viewModel.toggleWidgetMusic(it) },
+                        onToggleTelemetry = { viewModel.toggleWidgetTelemetry(it) },
+                        isFloatingOverlayRunning = false,
+                        onToggleFloatingOverlay = { viewModel.toggleFloatingOverlay { } },
+                        chatHistory = chatHistory,
+                        onSendMessage = { viewModel.sendChatMessage(it) },
+                        bluetoothUiState = bluetoothUiState,
+                        musicUiState = musicUiState,
                         onPlayPauseClick = { viewModel.onPlayPauseClicked() },
                         onNextClick = { viewModel.onNextClicked() },
                         onPreviousClick = { viewModel.onPreviousClicked() },
-                        onVolumeChange = { percent -> viewModel.onVolumeChanged(percent) },
-                        onPlayZaraZaraClick = { viewModel.onPlayZaraZaraClicked() },
-                        onExecuteCommand = { cmd -> viewModel.onExecuteCommand(cmd) },
-                        onSetDeviceAlias = { mac, alias -> viewModel.onSetDeviceAlias(mac, alias) },
+                        onVolumeChange = { viewModel.onVolumeChanged(it) },
+                        onPlayPresetSong = { viewModel.onPlayZaraZaraClicked() },
+                        registeredDevices = registeredDevices,
+                        tuyaAcState = tuyaAcState,
+                        isAcOperating = isAcOperating,
+                        onSetAcPower = { viewModel.setAcPower(it) },
+                        onSetAcTemperature = { viewModel.setAcTemperature(it) },
+                        onSetAcMode = { viewModel.setAcMode(it) },
+                        onSetAcFanSpeed = { viewModel.setAcFanSpeed(it) },
+                        scheduledActions = scheduledActions,
+                        activeRoutine = activeRoutine,
+                        onCancelScheduledTimer = { viewModel.cancelAcTimer() },
+                        onCancelRoutine = { viewModel.cancelActiveRoutine() },
+                        onStopAlarm = { viewModel.stopAlarm() },
                         onStartVoiceListening = { viewModel.onStartVoiceListening() },
                         onStopVoiceListening = { viewModel.onStopVoiceListening() },
-                        onCancelVoiceListening = { viewModel.onCancelVoiceListening() },
-                        onSetBrainProvider = { type -> viewModel.setBrainProvider(type) },
-                        onSaveGeminiApiKey = { key -> viewModel.onSaveGeminiApiKey(key) },
-                        onTestGeminiConnection = { key, callback -> viewModel.onTestGeminiConnection(key, callback) },
-                        onToggleFloatingOverlay = { onPermissionNeeded -> viewModel.toggleFloatingOverlay(onPermissionNeeded) }
+                        actionFeedback = actionFeedback,
+                        onDismissFeedback = { viewModel.dismissActionFeedback() }
                     )
                 }
             }
@@ -134,6 +140,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleCommandIntent(intent: Intent?) {
+        val triggerAlarm = intent?.getBooleanExtra("trigger_alarm", false) ?: false
+        if (triggerAlarm) {
+            android.util.Log.i("MainActivity", "[intent-cmd] Received trigger_alarm intent")
+            viewModel.triggerTestAlarm()
+            return
+        }
+
         val rawCommand = intent?.getStringExtra("command")
         val b64Command = intent?.getStringExtra("command_b64")
         val command = when {
@@ -164,6 +177,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun HomeScreen(
+    visualBrainState: VisualBrainState = VisualBrainState.READY,
     bluetoothState: BluetoothUiState,
     musicState: MusicUiState,
     aiState: AiCommandUiState,
@@ -236,12 +250,16 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text(
-                    text = "Animus Smart Room",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Animus Smart Room",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    BrainStatusIndicator(state = visualBrainState, compact = true)
+                }
                 Text(
                     text = "Room Audio & Automation Center",
                     fontSize = 13.sp,
@@ -365,6 +383,7 @@ fun HomeScreen(
 
         // 1. Voice-First AI Command Layer: "Ask Animus"
         AskAnimusCard(
+            visualBrainState = visualBrainState,
             aiState = aiState,
             voiceState = voiceState,
             onStartVoiceListening = onStartVoiceListening,
@@ -519,6 +538,7 @@ fun HomeScreen(
 
 @Composable
 fun AskAnimusCard(
+    visualBrainState: VisualBrainState = VisualBrainState.READY,
     aiState: AiCommandUiState,
     voiceState: VoiceInputState,
     onStartVoiceListening: () -> Unit,
@@ -573,7 +593,7 @@ fun AskAnimusCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Box(
                         modifier = Modifier
@@ -625,7 +645,7 @@ fun AskAnimusCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Brain: ${aiState.activeProviderName}",
+                            text = "Brain: ${aiState.activeProviderName.replace(" (Offline)", "")}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
@@ -634,13 +654,17 @@ fun AskAnimusCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // PRIMARY HERO INTERACTION: Voice Section
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Real-time Brain Visualizer Indicator
+                BrainStatusIndicator(state = visualBrainState, compact = false)
+                Spacer(modifier = Modifier.height(10.dp))
+
                 // Large Microphone Button with animated ripple/pulse
                 Box(
                     contentAlignment = Alignment.Center,

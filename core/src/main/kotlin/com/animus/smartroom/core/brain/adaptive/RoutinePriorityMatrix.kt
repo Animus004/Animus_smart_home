@@ -9,6 +9,7 @@ import java.util.Locale
 object RoutinePriorityMatrix {
 
     const val PRIORITY_GOODNIGHT = 100
+    const val PRIORITY_ALARM = 90
     const val PRIORITY_MOVIE = 70
     const val PRIORITY_MUSIC = 50
     const val PRIORITY_DIRECT_COMMAND = 40
@@ -20,6 +21,7 @@ object RoutinePriorityMatrix {
         val norm = routineOrIntentName.trim().uppercase(Locale.ROOT)
         return when {
             norm.contains("GOODNIGHT") || norm.contains("SHUTDOWN") || norm.contains("EMERGENCY") -> PRIORITY_GOODNIGHT
+            norm.contains("ALARM") || norm.contains("WAKE") -> PRIORITY_ALARM
             norm.contains("MOVIE") || norm.contains("CINEMA") -> PRIORITY_MOVIE
             norm.contains("MUSIC") || norm.contains("SONG") || norm.contains("PLAY") -> PRIORITY_MUSIC
             norm.contains("WORK") || norm.contains("STUDY") -> PRIORITY_WORK

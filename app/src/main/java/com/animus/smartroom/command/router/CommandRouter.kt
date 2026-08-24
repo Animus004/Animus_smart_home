@@ -190,7 +190,8 @@ class CommandRouter(
             is AnimusCommand.ScheduleDeviceAction -> "ScheduleDeviceAction(target='${command.target}', action='${command.action}', delay=${command.delayMinutes}, time='${command.scheduledTime}')"
             is AnimusCommand.CancelScheduledAction -> "CancelScheduledAction(target='${command.target}')"
             is AnimusCommand.QueryScheduledAction -> "QueryScheduledAction(target='${command.target}')"
-            is AnimusCommand.StartMovieMode -> "StartMovieMode"
+            is AnimusCommand.StartMovieMode -> "StartMovieMode(content='${command.contentTitle}')"
+            is AnimusCommand.WatchContent -> "WatchContent(title='${command.title}', category='${command.category}')"
             is AnimusCommand.StopMovieMode -> "StopMovieMode"
             is AnimusCommand.UnknownCommand -> "UnknownCommand(raw='${command.rawText}')"
         }
@@ -329,16 +330,47 @@ class CommandRouter(
                     Log.i(TAG, "[music-resolver] Executing search fallback for '${command.title}' on output '$deviceName'")
                 }
 
-                controller.playTrackPreset(
+                val playResult = controller.playTrackPreset(
                     title = command.title,
                     artist = command.artist,
                     activeDeviceName = deviceName,
                     directVideoId = effectiveVideoId
                 )
-                CommandExecutionResult(
-                    success = true,
-                    message = "Playing ${command.title}"
-                )
+
+                when (playResult) {
+                    is com.animus.smartroom.media.provider.ProviderResult.PlaybackConfirmed,
+                    is com.animus.smartroom.media.provider.ProviderResult.DirectPlaybackStarted -> {
+                        CommandExecutionResult(
+                            success = true,
+                            message = "Playing ${command.title}"
+                        )
+                    }
+                    is com.animus.smartroom.media.provider.ProviderResult.DirectPlayIntentLaunched,
+                    is com.animus.smartroom.media.provider.ProviderResult.SearchOpenedRequiresUserPlay -> {
+                        CommandExecutionResult(
+                            success = true,
+                            message = "Starting ${command.title} in music player"
+                        )
+                    }
+                    is com.animus.smartroom.media.provider.ProviderResult.AppNotInstalled -> {
+                        CommandExecutionResult(
+                            success = false,
+                            message = "Music player is not installed."
+                        )
+                    }
+                    is com.animus.smartroom.media.provider.ProviderResult.AppInstalledButIntentUnresolvable -> {
+                        CommandExecutionResult(
+                            success = false,
+                            message = "Cannot launch music playback intent."
+                        )
+                    }
+                    is com.animus.smartroom.media.provider.ProviderResult.Failed -> {
+                        CommandExecutionResult(
+                            success = false,
+                            message = "Playback failed: ${playResult.reason}"
+                        )
+                    }
+                }
             }
 
             is AnimusCommand.PauseMusic -> {
@@ -397,23 +429,35 @@ class CommandRouter(
             }
 
             is AnimusCommand.ConnectBluetoothDevice -> {
+                val reqTarget = command.deviceName?.trim()?.lowercase(Locale.ROOT)
+                val isPcTarget = reqTarget in setOf("pc", "computer", "my computer", "the computer", "my pc", "the pc")
+                val isFireTvTarget = reqTarget in setOf("fire_tv", "firetv", "fire tv", "tv", "the tv", "stick", "fire stick")
+
+                val pcProvider = musicController?.getPcLocalProvider()
                 val isPcActive = musicController?.getActiveProvider()?.providerId == com.animus.smartroom.media.provider.PcLocalMusicProvider.PROVIDER_ID
-                if (isPcActive) {
-                    Log.i(TAG, "[ai] Executing ConnectBluetoothDevice via PcLocalMusicProvider (Home Smart Room)")
-                    val pcProvider = musicController?.getPcLocalProvider()
-                    val ok = pcProvider?.connectSoundbar() ?: false
-                    return if (ok) {
+
+                if (isPcTarget || (isPcActive && (reqTarget == null || reqTarget in setOf("speaker", "soundbar", "bluetooth", "audio")))) {
+                    Log.i(TAG, "[ai] Executing ConnectBluetoothDevice (PC Soundbar)")
+                    val (ok, msg) = pcProvider?.switchAudioOwnership("PC") ?: Pair(false, "PC provider not available")
+                    if (ok) {
                         musicController?.updateOutputDevice("LG SNC4R(79)", true)
-                        CommandExecutionResult(
-                            success = true,
-                            message = "Soundbar connected"
-                        )
-                    } else {
-                        CommandExecutionResult(
-                            success = false,
-                            message = "Could not connect to the soundbar."
-                        )
                     }
+                    return CommandExecutionResult(
+                        success = ok,
+                        message = if (ok) "Soundbar connected to computer." else "Could not connect the soundbar to the computer."
+                    )
+                }
+
+                if (isFireTvTarget) {
+                    Log.i(TAG, "[ai] Executing ConnectBluetoothDevice (Fire TV Soundbar)")
+                    val (ok, msg) = pcProvider?.switchAudioOwnership("FIRE_TV") ?: Pair(false, "PC provider not available")
+                    if (ok) {
+                        musicController?.updateOutputDevice("Fire TV", true)
+                    }
+                    return CommandExecutionResult(
+                        success = ok,
+                        message = if (ok) "Audio switched to Fire TV." else "Could not switch audio to Fire TV."
+                    )
                 }
 
                 val btMgr = bluetoothManager ?: return CommandExecutionResult(false, "Bluetooth manager is not initialized.")
@@ -535,6 +579,35 @@ class CommandRouter(
             }
 
             is AnimusCommand.SwitchBluetoothDevice -> {
+                val reqTarget = command.deviceName.trim().lowercase(Locale.ROOT)
+                val isPcTarget = reqTarget in setOf("pc", "computer", "my computer", "the computer", "my pc", "the pc")
+                val isFireTvTarget = reqTarget in setOf("fire_tv", "firetv", "fire tv", "tv", "the tv", "stick", "fire stick")
+
+                val pcProvider = musicController?.getPcLocalProvider()
+                if (isPcTarget) {
+                    Log.i(TAG, "[ai] Executing SwitchBluetoothDevice (to PC)")
+                    val (ok, msg) = pcProvider?.switchAudioOwnership("PC") ?: Pair(false, "PC provider not available")
+                    if (ok) {
+                        musicController?.updateOutputDevice("LG SNC4R(79)", true)
+                    }
+                    return CommandExecutionResult(
+                        success = ok,
+                        message = if (ok) "Soundbar connected to computer." else "Could not connect the soundbar to the computer."
+                    )
+                }
+
+                if (isFireTvTarget) {
+                    Log.i(TAG, "[ai] Executing SwitchBluetoothDevice (to Fire TV)")
+                    val (ok, msg) = pcProvider?.switchAudioOwnership("FIRE_TV") ?: Pair(false, "PC provider not available")
+                    if (ok) {
+                        musicController?.updateOutputDevice("Fire TV", true)
+                    }
+                    return CommandExecutionResult(
+                        success = ok,
+                        message = if (ok) "Audio switched to Fire TV." else "Could not switch audio to Fire TV."
+                    )
+                }
+
                 val btMgr = bluetoothManager ?: return CommandExecutionResult(false, "Bluetooth manager is not initialized.")
                 val paired = btMgr.uiState.value.pairedDevices
                 when (val resolution = resolveDeviceTarget(command.deviceName, paired)) {
@@ -733,18 +806,48 @@ class CommandRouter(
             }
 
             is AnimusCommand.StartMovieMode -> {
-                Log.i(TAG, "[ai] Executing StartMovieMode")
+                Log.i(TAG, "[ai] Executing StartMovieMode (content='${command.contentTitle}')")
+                val res = musicController?.startMovieModeWithFeedback(command.contentTitle)
+                val titleInfo = if (!command.contentTitle.isNullOrBlank()) " for '${command.contentTitle}'" else ""
+                val ok = if (musicController != null) (res != null && res.success) else true
+                val msg = if (ok) {
+                    "Starting Movie Mode$titleInfo: waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
+                } else {
+                    res?.spokenResponse ?: res?.message ?: "Failed to start Movie Mode via PC daemon."
+                }
                 CommandExecutionResult(
-                    success = true,
-                    message = "Starting Movie Mode: waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
+                    success = ok,
+                    message = msg
+                )
+            }
+
+            is AnimusCommand.WatchContent -> {
+                Log.i(TAG, "[ai] Executing WatchContent (title='${command.title}', category='${command.category}')")
+                val res = musicController?.startMovieModeWithFeedback(command.title)
+                val ok = if (musicController != null) (res != null && res.success) else true
+                val msg = if (ok) {
+                    "Starting Movie Mode for '${command.title}': waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
+                } else {
+                    res?.spokenResponse ?: res?.message ?: "Failed to start Movie Mode for '${command.title}' via PC daemon."
+                }
+                CommandExecutionResult(
+                    success = ok,
+                    message = msg
                 )
             }
 
             is AnimusCommand.StopMovieMode -> {
                 Log.i(TAG, "[ai] Executing StopMovieMode")
+                val res = musicController?.stopMovieModeWithFeedback()
+                val ok = if (musicController != null) (res != null && res.success) else true
+                val msg = if (ok) {
+                    res?.message ?: "Stopping Movie Mode: shutting down projector and releasing soundbar."
+                } else {
+                    res?.spokenResponse ?: res?.message ?: "Failed to stop Movie Mode via PC daemon."
+                }
                 CommandExecutionResult(
-                    success = true,
-                    message = "Stopping Movie Mode: shutting down projector and releasing soundbar."
+                    success = ok,
+                    message = msg
                 )
             }
 

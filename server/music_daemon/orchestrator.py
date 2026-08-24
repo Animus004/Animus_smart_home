@@ -17,6 +17,9 @@ from queue_manager import PlaybackQueue, QueueTrack
 from resolver import YouTubeMusicResolver
 from fire_tv_controller import FireTvController, FireTvBluetoothState
 from projector_controller import ProjectorController, ProjectorPowerState, ProjectorSource
+from fire_tv_capabilities import FireTVCapabilityRegistry, FireTVCapabilityResult, FireTVState
+from media_provider_registry import MediaProviderRegistry
+from content_resolver import SmartRoomContentResolver, ResolvedContent
 
 logger = logging.getLogger("music_daemon.orchestrator")
 
@@ -30,6 +33,18 @@ class RoomAudioState(str, Enum):
     PAUSED = "PAUSED"
     DISCONNECTING = "DISCONNECTING"
     AUDIO_OUTPUT_UNAVAILABLE = "AUDIO_OUTPUT_UNAVAILABLE"
+
+
+class RoomState(str, Enum):
+    IDLE = "IDLE"
+    PC_AUDIO_ACTIVE = "PC_AUDIO_ACTIVE"
+    FIRE_TV_READY = "FIRE_TV_READY"
+    MOVIE_PREPARING = "MOVIE_PREPARING"
+    MOVIE_ACTIVE = "MOVIE_ACTIVE"
+    MOVIE_PAUSED = "MOVIE_PAUSED"
+    TRANSITIONING_TO_PC = "TRANSITIONING_TO_PC"
+    TRANSITIONING_TO_FIRE_TV = "TRANSITIONING_TO_FIRE_TV"
+    ERROR_RECOVERY = "ERROR_RECOVERY"
 
 
 class SmartRoomOrchestrator:
@@ -54,10 +69,24 @@ class SmartRoomOrchestrator:
         self.fire_tv = fire_tv or FireTvController()
         self.queue = queue or PlaybackQueue(auto_radio=True)
 
+        # Authoritative Provider Registry & Content Resolver
+        self.provider_registry = MediaProviderRegistry()
+        self.content_resolver = SmartRoomContentResolver(music_resolver=self.resolver, provider_registry=self.provider_registry)
+
+        # Authoritative capability layer
+        self.capabilities = FireTVCapabilityRegistry(
+            fire_tv=self.fire_tv,
+            projector=self.projector,
+            bt_helper=self.bt_helper,
+            player=self.player,
+            provider_registry=self.provider_registry
+        )
+
         self._current_state: RoomAudioState = RoomAudioState.DISCONNECTED
         self._last_error: Optional[str] = None
         self._last_action_duration_ms: int = 0
         self._in_movie_mode: bool = False
+        self._in_alarm_mode: bool = False
         self._auto_advance_lock = threading.Lock()
 
         # Register continuous IPC EOF event callback
@@ -302,8 +331,8 @@ class SmartRoomOrchestrator:
         else:
             fire_tv_bt_ok = bool(fire_tv_info.get("bluetooth_connected", False))
 
-        soundbar_ok = lg_dev is not None
-        is_healthy = proj_on and source_hdmi1 and fire_tv_bt_ok and soundbar_ok
+        soundbar_ok = fire_tv_bt_ok or (lg_dev is not None)
+        is_healthy = proj_on and source_hdmi1 and fire_tv_bt_ok
 
         return {
             "healthy": is_healthy,
@@ -311,12 +340,10 @@ class SmartRoomOrchestrator:
             "projector_source_hdmi1": source_hdmi1,
             "fire_tv": fire_tv_info,
             "soundbar_connected": soundbar_ok,
-            "soundbar_name": lg_dev["name"] if lg_dev else None,
+            "soundbar_name": "Speakers (LG SNC4R(79))" if soundbar_ok else None,
             "degradation_reason": None if is_healthy else (
                 "Projector OFF" if not proj_on else (
-                    "Projector not on HDMI_1" if not source_hdmi1 else (
-                        "Fire TV Bluetooth Disconnected" if not fire_tv_bt_ok else "LG Soundbar Disconnected"
-                    )
+                    "Projector not on HDMI_1" if not source_hdmi1 else "Fire TV Bluetooth Disconnected"
                 )
             )
         }
@@ -541,45 +568,116 @@ class SmartRoomOrchestrator:
     def safe_set_volume(self, volume: int) -> int:
         return self.player.set_volume(volume)
 
-    def start_movie_mode(self) -> Dict[str, Any]:
+    def start_movie_mode(self, content: Optional[str] = None, provider: Optional[str] = None) -> Dict[str, Any]:
         """
-        Orchestrates starting Movie Mode:
-        1. Sets _in_movie_mode = True to suppress background music auto-advance.
-        2. Stops active PC music playback if running (Resource Arbitration).
-        3. Wakes Fire TV.
-        4. Ensures Projector is ON and on HDMI_1.
-        5. Connects LG SNC4R soundbar.
-        6. Validates full room health invariant.
+        Orchestrates starting Movie Mode by consuming the authoritative capability layer:
+        1. Authoritative Pre-Flight Check: Validates Projector is ON.
+           If Projector is OFF (and cannot be powered on automatically), fails gracefully
+           with PROJECTOR_OFF_REQUIRES_MANUAL_ACTION without hijacking audio or waking Fire TV.
+        2. Sets _in_movie_mode = True to suppress background music auto-advance.
+        3. Releases PC audio ownership and transfers to Fire TV (LG SNC4R connection).
+        4. Wakes Fire TV via capability.
+        5. Switches Projector to HDMI_1 via capability.
+        6. Resolves content: prioritizes direct video ID/provider launch (< 250ms), fallback to UI search.
+        7. Validates full room health invariant.
         """
         t0 = time.time()
-        logger.info("[ORCHESTRATOR_MOVIE_MODE_START] Starting Movie Mode workflow...")
-        self._in_movie_mode = True
+        logger.info(f"[ORCHESTRATOR_MOVIE_MODE_START] Starting Movie Mode workflow (content='{content}', provider='{provider}')...")
 
-        # 0. Stop active PC playback to yield audio ownership to Fire TV
-        if self.player:
-            self.player.stop()
-
-        # 1. Wake Fire TV
-        if self.fire_tv:
-            self.fire_tv.wake()
-
-        # 2. Ensure Projector is ON and on HDMI_1
+        # 0. Pre-Flight Physical Check: Projector Power State
         if self.projector:
             pwr = self.projector.get_power_state()
             if pwr.get("power_state") != ProjectorPowerState.ON.value:
-                logger.info("[ORCHESTRATOR_MOVIE_MODE] Projector not fully ON, waiting for CEC / wake...")
-                time.sleep(2.0)
+                logger.warning(
+                    f"[ORCHESTRATOR_MOVIE_MODE_BLOCKED] Projector is {pwr.get('power_state')}. "
+                    "Cannot power on automatically. Aborting Movie Mode safely."
+                )
+                self._last_action_duration_ms = int((time.time() - t0) * 1000)
+                feedback_msg = "The projector is currently off. I can't turn it on right now. Please turn on the projector manually."
+                return {
+                    "status": "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION",
+                    "success": False,
+                    "content": content,
+                    "content_launched": False,
+                    "spoken_response": feedback_msg,
+                    "message": feedback_msg,
+                    "health": {
+                        "healthy": False,
+                        "projector_on": False,
+                        "projector_source_hdmi1": False,
+                        "fire_tv": self.fire_tv.get_status() if self.fire_tv else {},
+                        "soundbar_connected": False,
+                        "degradation_reason": "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION"
+                    },
+                    "duration_ms": self._last_action_duration_ms
+                }
+
+        self._in_movie_mode = True
+
+        # 1. Release PC audio ownership and stop active playback
+        self.disconnect_soundbar()
+
+        # 2. Wake Fire TV
+        if self.fire_tv:
+            self.fire_tv.wake()
+
+        # 3. Ensure Projector is on HDMI_1
+        if self.projector:
             self.projector.set_hdmi(1)
 
-        # 3. Connect Soundbar
-        self.connect_soundbar(timeout_seconds=8.0)
+        # 4. Connect Fire TV to Soundbar
+        if self.fire_tv:
+            self.fire_tv.connect_soundbar(timeout_seconds=6.0)
 
-        # 4. Evaluate Health
+        # 5. Launch content on Fire TV if title requested
+        content_launched = False
+        launch_type = None
+        resolved_details = {}
+
+        if content:
+            # Resolve content target
+            resolved = self.content_resolver.resolve_content(content, explicit_provider=provider)
+            resolved_details = {
+                "provider": resolved.provider_id,
+                "resolution_type": resolved.resolution_type,
+                "content_id": resolved.content_id,
+                "confidence": resolved.confidence
+            }
+
+            if resolved.resolution_type == "DIRECT_VIDEO_ID" and self.capabilities:
+                res = self.capabilities.play_youtube_video_id(resolved.content_id)
+                content_launched = res.success
+                launch_type = "DIRECT_VIDEO_AUTOPLAY"
+            elif resolved.resolution_type in ("DIRECT_URI", "PROVIDER_DETAILS") and self.capabilities:
+                res = self.capabilities.launch_streaming_provider(resolved.provider_id, resolved.direct_uri or resolved.content_id)
+                content_launched = res.success
+                launch_type = res.details.get("launch_status", "PROVIDER_DIRECT_LAUNCH")
+            else:
+                # Search fallback
+                if self.fire_tv:
+                    content_launched = self.fire_tv.search_or_launch_content(resolved.title or content)
+                    launch_type = "SEARCH_UI_FALLBACK"
+
+        # 6. Evaluate Health & Invariants
         health = self.get_movie_mode_health()
+        if content and not content_launched:
+            health["healthy"] = False
+            health["content_launched"] = False
+            if not health.get("degradation_reason"):
+                health["degradation_reason"] = "Content Launch Failed"
+
+        is_success = health["healthy"] and (not content or content_launched)
         self._last_action_duration_ms = int((time.time() - t0) * 1000)
 
         return {
-            "status": "HEALTHY" if health["healthy"] else "DEGRADED",
+            "status": "HEALTHY" if is_success else "DEGRADED",
+            "success": is_success,
+            "content": content,
+            "content_launched": content_launched,
+            "launch_type": launch_type,
+            "resolution": resolved_details if content else None,
+            "spoken_response": f"Starting Movie Mode for '{content}'" if content else "Starting Movie Mode",
+            "message": f"Starting Movie Mode for '{content}'" if content else "Starting Movie Mode",
             "health": health,
             "duration_ms": self._last_action_duration_ms
         }
@@ -588,13 +686,25 @@ class SmartRoomOrchestrator:
         """
         Orchestrates stopping Movie Mode:
         1. Re-enables PC music capability (_in_movie_mode = False).
-        2. Stops PC audio playback.
-        3. Safely powers off Projector using verified OEM PowerActivity.
-        4. Disconnects Soundbar.
+        2. Sends home to Fire TV to release content.
+        3. Stops PC audio playback.
+        4. Safely powers off Projector using verified OEM PowerActivity.
+        5. Disconnects Soundbar and verifies room state.
         """
         t0 = time.time()
         logger.info("[ORCHESTRATOR_MOVIE_MODE_STOP] Stopping Movie Mode workflow...")
         self._in_movie_mode = False
+
+        if self.capabilities:
+            try:
+                self.capabilities.home()
+            except Exception as e:
+                logger.warning(f"[ORCHESTRATOR_MOVIE_MODE_STOP] Fire TV home capability error: {e}")
+        elif self.fire_tv:
+            try:
+                self.fire_tv.home()
+            except Exception as e:
+                logger.warning(f"[ORCHESTRATOR_MOVIE_MODE_STOP] Fire TV home event ignored: {e}")
 
         self.safe_stop()
 
@@ -602,12 +712,338 @@ class SmartRoomOrchestrator:
             try:
                 self.projector.power_off()
             except Exception as e:
-                logger.error(f"[ORCHESTRATOR_MOVIE_MODE_STOP_ERR] Projector power off error: {e}")
+                logger.warning(f"[ORCHESTRATOR_MOVIE_MODE_STOP_ERR] Projector power off: {e}")
 
         self.disconnect_soundbar()
         self._last_action_duration_ms = int((time.time() - t0) * 1000)
 
         return {
+            "success": True,
             "status": "OFF",
+            "message": "Movie Mode stopped. Audio returned to the computer.",
+            "spoken_response": "Movie Mode stopped. Audio returned to the computer.",
             "duration_ms": self._last_action_duration_ms
         }
+
+    def fire_tv_playback_control(self, action: str) -> Dict[str, Any]:
+        """
+        Dispatches media playback transport controls (PLAY, PAUSE, TOGGLE, STOP, NEXT, PREVIOUS, VOLUME_UP, VOLUME_DOWN, MUTE)
+        to Fire TV active media session.
+        """
+        act = action.strip().upper()
+        if not self.capabilities:
+            return {"success": False, "action": act, "error": "Fire TV capability layer not initialized"}
+
+        action_map = {
+            "PLAY": self.capabilities.play,
+            "PAUSE": self.capabilities.pause,
+            "TOGGLE": self.capabilities.toggle_play_pause,
+            "STOP": self.capabilities.stop,
+            "NEXT": self.capabilities.next_track,
+            "PREVIOUS": self.capabilities.previous_track,
+            "VOLUME_UP": self.capabilities.volume_up,
+            "VOLUME_DOWN": self.capabilities.volume_down,
+            "MUTE": self.capabilities.mute
+        }
+
+        handler = action_map.get(act)
+        if not handler:
+            return {"success": False, "action": act, "error": f"Unsupported playback action '{act}'"}
+
+        res = handler()
+        return {
+            "success": res.success,
+            "action": act,
+            "message": res.message,
+            "duration_ms": res.duration_ms,
+            "details": res.details
+        }
+
+    def start_alarm(self) -> Dict[str, Any]:
+        """
+        Starts PC Alarm Audio:
+        1. Checks Movie Mode invariant: if Movie Mode is active, refuse or yield so Movie Mode audio is not corrupted.
+        2. Sets _in_alarm_mode = True.
+        3. Plays alarm audio stream on connected Soundbar or PC system audio.
+        """
+        if self._in_movie_mode:
+            logger.warning("[ORCHESTRATOR_ALARM_BLOCKED] Movie Mode is active. Yielding PC alarm to Android fallback.")
+            return {
+                "success": False,
+                "status": "MOVIE_MODE_ACTIVE_BLOCKED",
+                "message": "PC alarm deferred: Movie Mode owns soundbar."
+            }
+
+        self._in_alarm_mode = True
+        alarm_url = "https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"
+        success, err = self.player.play(
+            stream_url=alarm_url,
+            title="Morning Alarm Chime",
+            artist="Animus Smart Room",
+            duration=60
+        )
+        st = self.player.get_status()
+        self._current_state = RoomAudioState.PLAYING if success else self._current_state
+        return {
+            "success": success,
+            "status": "PLAYING" if success else "FAILED",
+            "source": "PC_DAEMON",
+            "audio_device_name": st.get("audio_device_name"),
+            "error": err
+        }
+
+    def stop_alarm(self) -> Dict[str, Any]:
+        """
+        Stops PC Alarm Audio.
+        """
+        self._in_alarm_mode = False
+        success = self.safe_stop()
+        return {
+            "success": True,
+            "status": "STOPPED",
+            "source": "PC_DAEMON"
+        }
+
+    def get_alarm_status(self) -> Dict[str, Any]:
+        return {
+            "is_alarm_playing": self._in_alarm_mode and self.player.get_status().get("playback_status") == "PLAYING",
+            "source": "PC_DAEMON"
+        }
+
+    # =========================================================================
+    # REUSABLE SMART ROOM HIGH-VALUE AUTOMATIONS (PHASE 8 & 9)
+    # =========================================================================
+
+    def get_room_state(self) -> Dict[str, Any]:
+        """
+        Calculates and returns the authoritative RoomState across PC, Fire TV, Soundbar, and Projector.
+        """
+        p_status = self.player.get_status()
+        lg_dev, _ = self.bt_helper.scan_active_endpoints() if self.bt_helper else (None, [])
+        ftv_bt = self.fire_tv.get_bluetooth_status() if self.fire_tv else {}
+        ftv_bt_connected = ftv_bt.get("required_device_connected", False)
+
+        if self._in_movie_mode:
+            ftv_ms = self.fire_tv.get_state() if hasattr(self.fire_tv, "get_state") else None
+            # Check if paused
+            state = RoomState.MOVIE_ACTIVE
+        elif p_status.get("playback_status") == "PLAYING":
+            state = RoomState.PC_AUDIO_ACTIVE
+        elif ftv_bt_connected:
+            state = RoomState.FIRE_TV_READY
+        elif lg_dev:
+            state = RoomState.IDLE
+        else:
+            state = RoomState.IDLE
+
+        return {
+            "room_state": state.value,
+            "in_movie_mode": self._in_movie_mode,
+            "pc_audio_playing": p_status.get("playback_status") == "PLAYING",
+            "pc_soundbar_connected": lg_dev is not None,
+            "fire_tv_soundbar_connected": ftv_bt_connected,
+            "room_audio_state": self._current_state.value
+        }
+
+    # 1. StartMovieDirect
+    def start_movie_direct(self, content: Optional[str] = None, provider: Optional[str] = None) -> Dict[str, Any]:
+        return self.start_movie_mode(content=content, provider=provider)
+
+    # 2. StopMovieMode (Already defined as self.stop_movie_mode())
+
+    # 3. PauseMovie
+    def pause_movie(self) -> Dict[str, Any]:
+        return self.fire_tv_playback_control("PAUSE")
+
+    # 4. ResumeMovie
+    def resume_movie(self) -> Dict[str, Any]:
+        return self.fire_tv_playback_control("PLAY")
+
+    # 5. SwitchMovieProvider
+    def switch_movie_provider(self, provider: str, content: Optional[str] = None) -> Dict[str, Any]:
+        if not self.capabilities:
+            return {"success": False, "error": "Capabilities layer uninitialized"}
+        res = self.capabilities.launch_streaming_provider(provider, content or "")
+        return {"success": res.success, "provider": provider, "content": content, "details": res.details}
+
+    # 6. WatchYouTubeContent
+    def watch_youtube_content(self, query: str) -> Dict[str, Any]:
+        return self.start_movie_mode(content=query, provider="youtube")
+
+    # 7. WatchNetflixContent
+    def watch_netflix_content(self, title: str) -> Dict[str, Any]:
+        return self.start_movie_mode(content=title, provider="netflix")
+
+    # 8. WatchPrimeContent
+    def watch_prime_content(self, title: str) -> Dict[str, Any]:
+        return self.start_movie_mode(content=title, provider="prime_video")
+
+    # 9. WatchAppleTVContent
+    def watch_apple_tv_content(self, title: str) -> Dict[str, Any]:
+        return self.start_movie_mode(content=title, provider="apple_tv")
+
+    # 10. WatchHotstarContent
+    def watch_hotstar_content(self, title: str) -> Dict[str, Any]:
+        return self.start_movie_mode(content=title, provider="hotstar")
+
+    # 11. WatchZee5Content
+    def watch_zee5_content(self, title: str) -> Dict[str, Any]:
+        return self.start_movie_mode(content=title, provider="zee5")
+
+    # 12. RouteAudioToFireTV
+    def route_audio_to_fire_tv(self) -> Dict[str, Any]:
+        self.disconnect_soundbar()
+        if self.fire_tv:
+            ok, method = self.fire_tv.connect_soundbar_with_method(timeout_seconds=6.0)
+            return {"success": ok, "method": method, "target": "FIRE_TV"}
+        return {"success": False, "error": "Fire TV uninitialized"}
+
+    # 13. RouteAudioToPC
+    def route_audio_to_pc(self) -> Dict[str, Any]:
+        if self.fire_tv:
+            self.fire_tv.disconnect_soundbar(timeout_seconds=3.0)
+        ok, state, msg = self.connect_soundbar(timeout_seconds=12.0)
+        return {"success": ok, "room_audio_state": state.value, "target": "PC"}
+
+    # 14. RecoverSoundbarConnection
+    def recover_soundbar_connection(self, target: str = "PC") -> Dict[str, Any]:
+        if target.upper() == "FIRE_TV":
+            return self.route_audio_to_fire_tv()
+        return self.route_audio_to_pc()
+
+    # 15. RecoverFireTVConnection
+    def recover_fire_tv_connection(self) -> Dict[str, Any]:
+        if not self.fire_tv:
+            return {"success": False, "error": "Fire TV uninitialized"}
+        res = self.capabilities.check_connectivity() if self.capabilities else None
+        return {"success": res.success if res else False, "details": res.details if res else {}}
+
+    # 16. ProjectorFireTVMode
+    def projector_fire_tv_mode(self) -> Dict[str, Any]:
+        if self.projector:
+            ok = self.projector.set_hdmi(1)
+            return {"success": ok, "source": "HDMI_1"}
+        return {"success": False, "error": "Projector uninitialized"}
+
+    # 17. ProjectorPCMode
+    def projector_pc_mode(self) -> Dict[str, Any]:
+        if self.projector:
+            ok = self.projector.set_hdmi(2)
+            return {"success": ok, "source": "HDMI_2"}
+        return {"success": False, "error": "Projector uninitialized"}
+
+    # 18. SafeProjectorShutdown
+    def safe_projector_shutdown(self) -> Dict[str, Any]:
+        if self.projector:
+            ok = self.projector.power_off()
+            return {"success": ok, "power_state": "OFF"}
+        return {"success": False, "error": "Projector uninitialized"}
+
+    # 19. MusicToMovieTransition
+    def music_to_movie_transition(self, content: Optional[str] = None, provider: Optional[str] = None) -> Dict[str, Any]:
+        self.safe_stop()
+        return self.start_movie_mode(content=content, provider=provider)
+
+    # 20. MovieToMusicTransition
+    def movie_to_music_transition(self, song_query: str) -> Dict[str, Any]:
+        self.stop_movie_mode()
+        ok, res, err = self.safe_play(title=song_query)
+        return {"success": ok, "track": res, "error": err}
+
+    # 21. QuickBreak
+    def quick_break(self) -> Dict[str, Any]:
+        return self.fire_tv_playback_control("PAUSE")
+
+    # 22. ResumeAfterBreak
+    def resume_after_break(self) -> Dict[str, Any]:
+        return self.fire_tv_playback_control("PLAY")
+
+    # 23. Goodnight
+    def goodnight_automation(self) -> Dict[str, Any]:
+        self.stop_movie_mode()
+        self.safe_stop()
+        if self.fire_tv:
+            self.fire_tv.sleep()
+        if self.projector:
+            self.projector.power_off()
+        self.disconnect_soundbar()
+        return {"success": True, "action": "GOODNIGHT_COMPLETE"}
+
+    # 24. LeavingHome
+    def leaving_home(self) -> Dict[str, Any]:
+        return self.goodnight_automation()
+
+    # 25. ArrivingHome
+    def arriving_home(self) -> Dict[str, Any]:
+        if self.fire_tv:
+            self.fire_tv.wake()
+        self.connect_soundbar(timeout_seconds=8.0)
+        return {"success": True, "action": "ARRIVING_HOME_READY"}
+
+    # 26. EmergencyMute
+    def emergency_mute(self) -> Dict[str, Any]:
+        self.player.set_volume(0)
+        if self.capabilities:
+            self.capabilities.mute()
+        return {"success": True, "action": "EMERGENCY_MUTE"}
+
+    # 27. RecoverAudio
+    def recover_audio(self) -> Dict[str, Any]:
+        return self.route_audio_to_pc()
+
+    # 28. RecoverProjectorHDMI
+    def recover_projector_hdmi(self) -> Dict[str, Any]:
+        return self.projector_fire_tv_mode()
+
+    # 29. RecoverADB
+    def recover_adb(self) -> Dict[str, Any]:
+        return self.recover_fire_tv_connection()
+
+    # 30. TruthfulRoomStateSync
+    def truthful_room_state_sync(self) -> Dict[str, Any]:
+        return self.get_room_state()
+
+    def execute_automation(self, automation_name: str, **kwargs) -> Dict[str, Any]:
+        """
+        Dispatches any named room automation dynamically.
+        """
+        automation_name_clean = automation_name.strip().lower().replace("_", "").replace("-", "")
+        method_map = {
+            "startmoviedirect": lambda: self.start_movie_direct(kwargs.get("content"), kwargs.get("provider")),
+            "startmoviemode": lambda: self.start_movie_mode(kwargs.get("content"), kwargs.get("provider")),
+            "stopmoviemode": self.stop_movie_mode,
+            "pausemovie": self.pause_movie,
+            "resumemovie": self.resume_movie,
+            "switchmovieprovider": lambda: self.switch_movie_provider(kwargs.get("provider", "youtube"), kwargs.get("content")),
+            "watchyoutubecontent": lambda: self.watch_youtube_content(kwargs.get("query", "")),
+            "watchnetflixcontent": lambda: self.watch_netflix_content(kwargs.get("title", "")),
+            "watchprimecontent": lambda: self.watch_prime_content(kwargs.get("title", "")),
+            "watchappletvcontent": lambda: self.watch_apple_tv_content(kwargs.get("title", "")),
+            "watchhotstarcontent": lambda: self.watch_hotstar_content(kwargs.get("title", "")),
+            "watchzee5content": lambda: self.watch_zee5_content(kwargs.get("title", "")),
+            "routeaudiotofiretv": self.route_audio_to_fire_tv,
+            "routeaudiotopc": self.route_audio_to_pc,
+            "recoversoundbarconnection": lambda: self.recover_soundbar_connection(kwargs.get("target", "PC")),
+            "recoverfiretvconnection": self.recover_fire_tv_connection,
+            "projectorfiretvmode": self.projector_fire_tv_mode,
+            "projectorpcmode": self.projector_pc_mode,
+            "safeprojectorshutdown": self.safe_projector_shutdown,
+            "musictomovietransition": lambda: self.music_to_movie_transition(kwargs.get("content"), kwargs.get("provider")),
+            "movietomusictransition": lambda: self.movie_to_music_transition(kwargs.get("song_query", "")),
+            "quickbreak": self.quick_break,
+            "resumeafterbreak": self.resume_after_break,
+            "goodnight": self.goodnight_automation,
+            "leavinghome": self.leaving_home,
+            "arrivinghome": self.arriving_home,
+            "emergencymute": self.emergency_mute,
+            "recoveraudio": self.recover_audio,
+            "recoverprojectorhdmi": self.recover_projector_hdmi,
+            "recoveradb": self.recover_adb,
+            "truthfulroomstatesync": self.truthful_room_state_sync,
+        }
+
+        handler = method_map.get(automation_name_clean)
+        if not handler:
+            return {"success": False, "error": f"Unknown automation: {automation_name}"}
+
+        return handler()

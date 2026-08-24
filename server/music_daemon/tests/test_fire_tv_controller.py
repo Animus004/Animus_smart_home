@@ -30,6 +30,8 @@ Bluetooth Status
   enabled: true
   state: ON
   ConnectionState: STATE_CONNECTED
+  mActiveDevice: 54:15:89:DC:A5:79
+  StateMachine: name=A2dpStateMachine state=Connected
   Bonded devices:
     54:15:89:DC:A5:79 [BR/EDR]
 """
@@ -69,6 +71,32 @@ def test_send_key_not_connected_raises(fire_tv):
     with patch.object(fire_tv, "is_connected", return_value=(False, "disconnected")):
         with pytest.raises(FireTvNotConnectedError):
             fire_tv.home()
+
+def test_is_app_foreground(fire_tv):
+    with patch.object(fire_tv, "_run_shell", return_value=(0, "mCurrentFocus=Window{123 com.amazon.firetv.youtube/dev.cobalt.app.MainActivity}", "")):
+        assert fire_tv.is_app_foreground("com.amazon.firetv.youtube") is True
+        assert fire_tv.is_app_foreground("com.netflix.ninja") is False
+
+def test_search_or_launch_content_verified(fire_tv):
+    with patch.object(fire_tv, "wake", return_value=True), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "Success", "")) as mock_shell, \
+         patch.object(fire_tv, "is_app_foreground", return_value=True):
+        ok = fire_tv.search_or_launch_content("Article 15")
+        assert ok is True
+        # Check am start
+        assert any("am start -n com.amazon.firetv.youtube" in str(c) for c in mock_shell.call_args_list)
+        # Check search navigation & text input
+        assert any("Article%s15" in str(c) for c in mock_shell.call_args_list)
+
+def test_connect_soundbar_already_connected(fire_tv):
+    with patch.object(fire_tv, "is_required_bluetooth_connected", return_value=True):
+        assert fire_tv.connect_soundbar() is True
+
+def test_connect_soundbar_navigation_flow(fire_tv):
+    with patch.object(fire_tv, "is_required_bluetooth_connected", side_effect=[False, False, True]), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "Success", "")) as mock_shell:
+        assert fire_tv.connect_soundbar(force_fallback=True) is True
+        assert any("com.amazon.tv.settings.v2" in str(c) for c in mock_shell.call_args_list)
 
 def test_get_status(fire_tv):
     with patch.object(fire_tv, "is_connected", return_value=(True, "device")), \

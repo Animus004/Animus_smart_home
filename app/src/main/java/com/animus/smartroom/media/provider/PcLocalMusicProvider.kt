@@ -14,11 +14,11 @@ import java.net.URL
  * PC-local music provider that delegates audio search, playback, pause, resume,
  * and volume control to the Animus Music Daemon running on the home PC (http://192.168.1.9:8095).
  */
-class PcLocalMusicProvider(
+open class PcLocalMusicProvider(
     private val host: String = "192.168.1.9",
     private val port: Int = 8095,
     private val connectTimeoutMs: Int = 2000,
-    private val readTimeoutMs: Int = 10000
+    private val readTimeoutMs: Int = 30000
 ) : MusicProvider {
 
     companion object {
@@ -99,6 +99,311 @@ class PcLocalMusicProvider(
         val url = "$baseUrl/api/room/soundbar/disconnect"
         Log.i(TAG, "[PC_ROOM_CONTROL] Sending disconnect soundbar request to $url")
         return@runBlocking dispatchSimpleControl(url)
+    }
+
+    data class MovieModeResult(
+        val success: Boolean,
+        val status: String,
+        val message: String,
+        val spokenResponse: String? = null
+    )
+
+    fun startMovieModeWithFeedback(contentTitle: String? = null): MovieModeResult = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/room/movie-mode/start"
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending start movie mode request to $url (content='$contentTitle')")
+        val json = JSONObject().apply {
+            if (!contentTitle.isNullOrBlank()) {
+                put("content", contentTitle)
+            }
+        }
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 40000
+                doOutput = true
+                doInput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(json.toString())
+                writer.flush()
+            }
+            val code = connection.responseCode
+            val responseText = if (code in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                val err = connection.errorStream
+                if (err != null) BufferedReader(InputStreamReader(err, Charsets.UTF_8)).use { it.readText() } else "HTTP $code"
+            }
+            Log.i(TAG, "[PC_MOVIE_MODE_RESPONSE] $url HTTP $code: $responseText")
+
+            if (code in 200..299) {
+                val jsonResponse = JSONObject(responseText)
+                val status = if (jsonResponse.has("status")) jsonResponse.getString("status") else "UNKNOWN"
+                val isSuccess = jsonResponse.optBoolean("success", false) || status == "HEALTHY"
+                val spoken = if (jsonResponse.has("spoken_response") && !jsonResponse.isNull("spoken_response")) jsonResponse.getString("spoken_response") else null
+                val msg = if (jsonResponse.has("message") && !jsonResponse.isNull("message")) jsonResponse.getString("message") else (if (isSuccess) "Movie Mode started" else status)
+                MovieModeResult(
+                    success = isSuccess,
+                    status = status,
+                    message = msg,
+                    spokenResponse = spoken
+                )
+            } else {
+                MovieModeResult(
+                    success = false,
+                    status = "HTTP_$code",
+                    message = "PC daemon error: $responseText",
+                    spokenResponse = "Failed to communicate with PC daemon."
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PC_MOVIE_MODE_ERROR] Error starting movie mode: ${e.message}", e)
+            MovieModeResult(
+                success = false,
+                status = "NETWORK_ERROR",
+                message = e.message ?: "Network error",
+                spokenResponse = "Cannot connect to the room controller."
+            )
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    fun startMovieMode(contentTitle: String? = null): Boolean {
+        return startMovieModeWithFeedback(contentTitle).success
+    }
+
+    open fun stopMovieModeWithFeedback(): MovieModeResult = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/room/movie-mode/stop"
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending stop movie mode request to $url")
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 20000
+                doOutput = true
+                doInput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write("{}")
+                writer.flush()
+            }
+            val code = connection.responseCode
+            val responseText = if (code in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                val err = connection.errorStream
+                if (err != null) BufferedReader(InputStreamReader(err, Charsets.UTF_8)).use { it.readText() } else "HTTP $code"
+            }
+            Log.i(TAG, "[PC_MOVIE_MODE_STOP_RESPONSE] $url HTTP $code: $responseText")
+
+            if (code in 200..299) {
+                val jsonResponse = JSONObject(responseText)
+                val status = if (jsonResponse.has("status")) jsonResponse.getString("status") else "OFF"
+                val isSuccess = jsonResponse.optBoolean("success", true)
+                val spoken = if (jsonResponse.has("spoken_response") && !jsonResponse.isNull("spoken_response")) jsonResponse.getString("spoken_response") else null
+                val msg = if (jsonResponse.has("message") && !jsonResponse.isNull("message")) jsonResponse.getString("message") else "Movie Mode stopped."
+                MovieModeResult(
+                    success = isSuccess,
+                    status = status,
+                    message = msg,
+                    spokenResponse = spoken
+                )
+            } else {
+                MovieModeResult(
+                    success = false,
+                    status = "HTTP_$code",
+                    message = "PC daemon error: $responseText",
+                    spokenResponse = "Failed to communicate with PC daemon."
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PC_MOVIE_MODE_STOP_ERROR] Error stopping movie mode: ${e.message}", e)
+            MovieModeResult(
+                success = false,
+                status = "NETWORK_ERROR",
+                message = e.message ?: "Network error",
+                spokenResponse = "Cannot connect to the room controller."
+            )
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    open fun stopMovieMode(): Boolean {
+        return stopMovieModeWithFeedback().success
+    }
+
+    open fun setProjectorPower(on: Boolean): Pair<Boolean, String> = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/room/projector/power"
+        val action = if (on) "ON" else "OFF"
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending projector power request: $action to $url")
+        val json = JSONObject().apply {
+            put("action", action)
+        }
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 15000
+                doOutput = true
+                doInput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(json.toString())
+                writer.flush()
+            }
+            val code = connection.responseCode
+            val responseText = if (code in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                val err = connection.errorStream
+                if (err != null) BufferedReader(InputStreamReader(err, Charsets.UTF_8)).use { it.readText() } else "HTTP $code"
+            }
+            Log.i(TAG, "[PC_PROJECTOR_POWER_RESPONSE] $url HTTP $code: $responseText")
+
+            if (code in 200..299) {
+                val jsonResponse = JSONObject(responseText)
+                val isSuccess = jsonResponse.optBoolean("success", false)
+                val powerState = jsonResponse.optString("power_state", if (on) "ON" else "OFF")
+                val msg = jsonResponse.optString("message", if (isSuccess) "Projector is now $powerState." else "Projector power action failed.")
+                Pair(isSuccess, msg)
+            } else {
+                Pair(false, "Projector command returned HTTP $code: $responseText")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PC_PROJECTOR_POWER_ERROR] Error controlling projector power: ${e.message}", e)
+            Pair(false, "Failed to reach projector controller: ${e.message}")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    open fun setProjectorSource(source: String): Pair<Boolean, String> = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/room/projector/source"
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending projector source request: $source to $url")
+        val json = JSONObject().apply {
+            put("source", source)
+        }
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 15000
+                doOutput = true
+                doInput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(json.toString())
+                writer.flush()
+            }
+            val code = connection.responseCode
+            val responseText = if (code in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                val err = connection.errorStream
+                if (err != null) BufferedReader(InputStreamReader(err, Charsets.UTF_8)).use { it.readText() } else "HTTP $code"
+            }
+            Log.i(TAG, "[PC_PROJECTOR_SOURCE_RESPONSE] $url HTTP $code: $responseText")
+
+            if (code in 200..299) {
+                val jsonResponse = JSONObject(responseText)
+                val isSuccess = jsonResponse.optBoolean("success", false)
+                val msg = jsonResponse.optString("message", "Projector source set to $source.")
+                Pair(isSuccess, msg)
+            } else {
+                Pair(false, "Projector source command returned HTTP $code: $responseText")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PC_PROJECTOR_SOURCE_ERROR] Error setting projector source: ${e.message}", e)
+            Pair(false, "Failed to reach projector controller: ${e.message}")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    open fun getProjectorStatus(): JSONObject? = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/room/projector/status"
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 5000
+                setRequestProperty("Accept", "application/json")
+            }
+            val code = connection.responseCode
+            if (code in 200..299) {
+                val text = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+                JSONObject(text)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[PC_PROJECTOR_STATUS_ERROR] Failed to query projector status: ${e.message}")
+            null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    open fun switchAudioOwnership(target: String): Pair<Boolean, String> = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/room/audio/switch"
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending audio ownership switch request to $url (target=$target)")
+        val json = JSONObject().apply {
+            put("target", target)
+        }
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 30000
+                doOutput = true
+                doInput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(json.toString())
+                writer.flush()
+            }
+            val code = connection.responseCode
+            val responseText = if (code in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                val err = connection.errorStream
+                if (err != null) BufferedReader(InputStreamReader(err, Charsets.UTF_8)).use { it.readText() } else "HTTP $code"
+            }
+            Log.i(TAG, "[PC_AUDIO_SWITCH_RESPONSE] $url HTTP $code: $responseText")
+
+            if (code in 200..299) {
+                val jsonResponse = JSONObject(responseText)
+                val isSuccess = jsonResponse.optBoolean("success", false)
+                val msg = jsonResponse.optString("message", if (isSuccess) "Audio ownership switched." else "Audio switch failed.")
+                Pair(isSuccess, msg)
+            } else {
+                Pair(false, "Audio switch returned HTTP $code: $responseText")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PC_AUDIO_SWITCH_ERROR] Error switching audio ownership: ${e.message}", e)
+            Pair(false, "Failed to communicate with audio controller: ${e.message}")
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     fun getSoundbarStatus(): String = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {

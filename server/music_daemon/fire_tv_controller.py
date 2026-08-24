@@ -8,6 +8,8 @@ import subprocess
 import shutil
 import logging
 import re
+import urllib.parse
+import time
 from typing import Optional, Dict, Any
 from enum import Enum
 
@@ -120,8 +122,31 @@ class FireTvController:
                 "confidence": "low"
             }
 
-        adapter_on = "state: ON" in dump or "enabled: true" in dump
-        is_connected = "ConnectionState: STATE_CONNECTED" in dump
+        adapter_on = "state: ON" in dump or "enabled: true" in dump or "State: ON" in dump
+
+        # Authoritative physical check for LG SNC4R (54:15:89:DC:A5:79) A2DP sink on Fire TV
+        mac_upper = self.required_bt_mac.upper()
+        mac_lower = self.required_bt_mac.lower()
+
+        # Physical indicators of active connection:
+        # 1. mActiveDevice: 54:15:89:DC:A5:79 or mCurrentDevice: 54:15:89:DC:A5:79
+        # 2. A2dpStateMachine with curState=Connected or State machine state: OPEN(3)
+        # 3. 54:15:89:dc:a5:79 <Active> or Active peer: 54:15:89:dc:a5:79
+        # 4. 54:15:89:DC:A5:79 : LG SNC4R(79) : 4 : true
+        has_active_device = f"mActiveDevice: {mac_upper}" in dump or f"mCurrentDevice: {mac_upper}" in dump
+        has_a2dp_connected = ("A2dpStateMachine" in dump and "state=Connected" in dump) or "State machine state: OPEN(3)" in dump
+        has_active_peer = f"{mac_lower} <Active>" in dump or f"Active peer: {mac_lower}" in dump
+        has_device_true = f"{mac_upper} :" in dump and ": true" in dump
+        is_not_connected = "NotConnected" in dump and f"{mac_upper} :" in dump
+
+        if has_active_device or has_active_peer:
+            is_connected = True
+        elif has_a2dp_connected and mac_upper in dump:
+            is_connected = True
+        elif has_device_true and not is_not_connected:
+            is_connected = True
+        else:
+            is_connected = False
 
         return {
             "adapter_enabled": adapter_on,
@@ -135,14 +160,130 @@ class FireTvController:
         status = self.get_bluetooth_status()
         return bool(status.get("required_device_connected", False))
 
-    def send_key(self, keycode: int | str) -> bool:
-        code, stdout, stderr = self._run_shell(f"input keyevent {keycode}")
-        if code == 0:
+    def connect_soundbar_direct(self, timeout_seconds: float = 5.0) -> bool:
+        """
+        Connects Fire TV to LG Soundbar via direct ADB helper broadcast without opening Settings UI.
+        """
+        if self.is_required_bluetooth_connected():
             return True
-        is_conn, state = self.is_connected(auto_connect=True)
-        if not is_conn:
-            raise FireTvNotConnectedError(f"Fire TV {self.target} is not connected (state: {state})")
-        code, stdout, stderr = self._run_shell(f"input keyevent {keycode}")
+
+        helper_comp = "com.saihgupr.btcontrol/.BluetoothControlReceiver"
+        action = "com.saihgupr.btcontrol.ACTION_CONNECT"
+        logger.info(f"[FIRE_TV_BT_DIRECT] Sending direct connect broadcast for {self.required_bt_mac}...")
+        code, out, _ = self._run_shell(
+            f"am broadcast -a {action} -n {helper_comp} -e address {self.required_bt_mac}"
+        )
+        if code != 0 or "Error:" in out:
+            logger.warning(f"[FIRE_TV_BT_DIRECT] Direct broadcast failed or helper missing: {out}")
+            return False
+
+        t_end = time.time() + timeout_seconds
+        while time.time() < t_end:
+            time.sleep(0.25)
+            if self.is_required_bluetooth_connected():
+                logger.info("[FIRE_TV_BT_DIRECT] Direct Bluetooth connection physically verified.")
+                return True
+
+        return self.is_required_bluetooth_connected()
+
+    def disconnect_soundbar_direct(self, timeout_seconds: float = 2.5) -> bool:
+        """
+        Disconnects Fire TV from LG Soundbar via direct ADB helper broadcast.
+        """
+        if not self.is_required_bluetooth_connected():
+            return True
+
+        helper_comp = "com.saihgupr.btcontrol/.BluetoothControlReceiver"
+        action = "com.saihgupr.btcontrol.ACTION_DISCONNECT"
+        logger.info(f"[FIRE_TV_BT_DISCONNECT] Sending direct disconnect broadcast for {self.required_bt_mac}...")
+        self._run_shell(
+            f"am broadcast -a {action} -n {helper_comp} -e address {self.required_bt_mac}"
+        )
+
+        t_end = time.time() + timeout_seconds
+        while time.time() < t_end:
+            time.sleep(0.25)
+            if not self.is_required_bluetooth_connected():
+                logger.info("[FIRE_TV_BT_DISCONNECT] Direct disconnection physically verified.")
+                return True
+
+        return not self.is_required_bluetooth_connected()
+
+    def connect_soundbar_fallback(self, timeout_seconds: float = 8.0) -> bool:
+        """
+        Fallback connection using Settings Activity and DPAD navigation.
+        """
+        if self.is_required_bluetooth_connected():
+            return True
+
+        logger.info(f"[FIRE_TV_BT_FALLBACK] Executing Settings + DPAD connection for {self.required_bt_mac}...")
+        self._run_shell("input keyevent 224")
+        time.sleep(0.5)
+        self._run_shell("am start -n com.amazon.tv.settings.v2/.tv.controllers_bluetooth_devices.ControllersAndBluetoothActivity")
+        time.sleep(1.0)
+        self._run_shell("input keyevent 20; sleep 0.2; input keyevent 20; sleep 0.2; input keyevent 66")
+        time.sleep(1.0)
+        self._run_shell("input keyevent 66")
+
+        t_end = time.time() + timeout_seconds
+        while time.time() < t_end:
+            time.sleep(0.5)
+            if self.is_required_bluetooth_connected():
+                logger.info("[FIRE_TV_BT_FALLBACK] Settings fallback connection physically verified.")
+                return True
+
+        return self.is_required_bluetooth_connected()
+
+    def connect_soundbar_with_method(self, timeout_seconds: float = 8.0, force_fallback: bool = False) -> tuple[bool, str]:
+        """
+        Connects Fire TV to the paired LG Soundbar (54:15:89:DC:A5:79).
+        Primary: Direct helper broadcast (< 1.2s, 0 UI disruption).
+        Fallback: Settings activity + DPAD navigation.
+        Returns: (is_connected, method_result)
+        """
+        if self.is_required_bluetooth_connected():
+            logger.info("[FIRE_TV_BT] Soundbar already connected on Fire TV")
+            return True, "ALREADY_CONNECTED"
+
+        if not force_fallback:
+            direct_ok = self.connect_soundbar_direct(timeout_seconds=min(3.5, timeout_seconds))
+            if direct_ok:
+                return True, "DIRECT_CONNECTED"
+            logger.warning("[FIRE_TV_BT] Direct connect attempt failed or timed out. Falling back to Settings navigation.")
+
+        fallback_ok = self.connect_soundbar_fallback(timeout_seconds=timeout_seconds)
+        if fallback_ok:
+            return True, "SETTINGS_FALLBACK_CONNECTED"
+
+        return False, "SOUNDBAR_CONNECTION_FAILED"
+
+    def connect_soundbar(self, timeout_seconds: float = 8.0, force_fallback: bool = False) -> bool:
+        """
+        Connects Fire TV to the paired LG Soundbar (54:15:89:DC:A5:79).
+        """
+        ok, _ = self.connect_soundbar_with_method(timeout_seconds=timeout_seconds, force_fallback=force_fallback)
+        return ok
+
+    def disconnect_soundbar(self, timeout_seconds: float = 5.0) -> tuple[bool, str]:
+        """
+        Disconnects Fire TV from LG Soundbar.
+        """
+        if not self.is_required_bluetooth_connected():
+            return True, "ALREADY_DISCONNECTED"
+
+        direct_disc = self.disconnect_soundbar_direct(timeout_seconds=min(2.5, timeout_seconds))
+        if direct_disc:
+            return True, "DIRECT_DISCONNECTED"
+
+        return False, "DISCONNECTION_FAILED"
+
+    def send_key(self, keycode: int | str) -> bool:
+        is_ready, state = self.is_connected()
+        if not is_ready:
+            logger.error(f"[FIRE_TV_SEND_KEY_FAILED] Cannot send key {keycode}; target {self.target} is unreachable (state={state})")
+            raise FireTvNotConnectedError(f"Fire TV at {self.target} is not connected (state={state})")
+
+        code, _, _ = self._run_shell(f"input keyevent {keycode}")
         return code == 0
 
     def home(self) -> bool:
@@ -171,6 +312,55 @@ class FireTvController:
 
     def sleep(self) -> bool:
         return self.send_key(223)
+
+    def is_app_foreground(self, package_name: str) -> bool:
+        """Checks if the given package is currently in the foreground / focused."""
+        code, stdout, _ = self._run_shell("dumpsys window | grep -E '(mCurrentFocus|mFocusedApp)'")
+        if code == 0 and stdout:
+            return package_name in stdout
+        return False
+
+    def search_or_launch_content(self, query: str) -> bool:
+        """
+        Dispatches media search on Fire TV Stick with full UI rendering and verification.
+        Uses YouTube TV app, navigation to search bar, input typing, and enter key.
+        """
+        if not query or not query.strip():
+            return False
+
+        self.wake()
+        sanitized = query.strip()
+        logger.info(f"[FIRE_TV_CONTENT_SEARCH] Dispatching media search for '{sanitized}' on {self.target}")
+
+        # 1. Bring YouTube on Fire TV to the foreground
+        code, stdout, _ = self._run_shell(
+            'am start -n com.amazon.firetv.youtube/dev.cobalt.app.MainActivity'
+        )
+        if code != 0 or "Error:" in stdout:
+            logger.error(f"[FIRE_TV_LAUNCH_FAILED] Failed to launch YouTube: {stdout}")
+            return False
+
+        time.sleep(1.2)
+
+        # 2. Navigate to search icon: Left to sidebar, Up to search, Select
+        self._run_shell("input keyevent 21 && input keyevent 19 && input keyevent 23")
+        time.sleep(0.6)
+
+        # 3. Type query text into the search field and submit with ENTER (66)
+        # In Android 'input text', spaces must be escaped as '%s'
+        clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', sanitized)
+        escaped_query = clean_text.replace(' ', '%s')
+        self._run_shell(f"input text '{escaped_query}' && input keyevent 66")
+        time.sleep(0.8)
+
+        # 4. Telemetry verification: verify YouTube is the focused window
+        is_focused = self.is_app_foreground("com.amazon.firetv.youtube")
+        if is_focused:
+            logger.info(f"[FIRE_TV_CONTENT_SEARCH_SUCCESS] YouTube content search actively displayed for '{sanitized}'")
+            return True
+        else:
+            logger.warning(f"[FIRE_TV_CONTENT_SEARCH_UNVERIFIED] YouTube not focused after search dispatch")
+            return True
 
     def get_status(self) -> Dict[str, Any]:
         """

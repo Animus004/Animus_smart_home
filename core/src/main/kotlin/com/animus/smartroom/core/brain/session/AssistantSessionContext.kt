@@ -16,7 +16,10 @@ data class AssistantSessionSummary(
     val lastScheduledActionDelayMinutes: Int? = null,
     val lastTaskId: String? = null,
     val lastTaskTitle: String? = null,
-    val pendingClarification: String? = null
+    val pendingClarification: String? = null,
+    val isMovieModeActive: Boolean = false,
+    val lastActiveMovieTitle: String? = null,
+    val lastAudioOwner: String? = null
 )
 
 class AssistantSessionContext(
@@ -49,6 +52,12 @@ class AssistantSessionContext(
         private set
     var pendingClarification: String? = null
         private set
+    var isMovieModeActive: Boolean = false
+        private set
+    var lastActiveMovieTitle: String? = null
+        private set
+    var lastAudioOwner: String? = null
+        private set
 
     fun addTurn(speaker: String, text: String, timestamp: Long = System.currentTimeMillis()) {
         checkExpiry(timestamp)
@@ -57,6 +66,12 @@ class AssistantSessionContext(
         if (turns.size > MAX_TURNS) {
             turns.removeAt(0)
         }
+        lastActivityTimestamp = timestamp
+    }
+
+    fun updateActiveDevice(device: String?, timestamp: Long = System.currentTimeMillis()) {
+        checkExpiry(timestamp)
+        lastActiveDevice = device
         lastActivityTimestamp = timestamp
     }
 
@@ -76,6 +91,24 @@ class AssistantSessionContext(
         checkExpiry(timestamp)
         lastActiveDevice = "AC"
         lastRequestedTemperature = temp.coerceIn(16, 30)
+        lastActivityTimestamp = timestamp
+    }
+
+    fun updateMovieMode(active: Boolean, title: String? = null, timestamp: Long = System.currentTimeMillis()) {
+        checkExpiry(timestamp)
+        isMovieModeActive = active
+        if (active) {
+            lastActiveDevice = "MOVIE_MODE"
+            if (!title.isNullOrBlank()) {
+                lastActiveMovieTitle = title
+            }
+        }
+        lastActivityTimestamp = timestamp
+    }
+
+    fun updateAudioOwner(owner: String, timestamp: Long = System.currentTimeMillis()) {
+        checkExpiry(timestamp)
+        lastAudioOwner = owner
         lastActivityTimestamp = timestamp
     }
 
@@ -111,7 +144,10 @@ class AssistantSessionContext(
             lastScheduledActionDelayMinutes = lastScheduledActionDelayMinutes,
             lastTaskId = lastTaskId,
             lastTaskTitle = lastTaskTitle,
-            pendingClarification = pendingClarification
+            pendingClarification = pendingClarification,
+            isMovieModeActive = isMovieModeActive,
+            lastActiveMovieTitle = lastActiveMovieTitle,
+            lastAudioOwner = lastAudioOwner
         )
     }
 
@@ -126,6 +162,9 @@ class AssistantSessionContext(
         lastTaskId = null
         lastTaskTitle = null
         pendingClarification = null
+        isMovieModeActive = false
+        lastActiveMovieTitle = null
+        lastAudioOwner = null
         lastActivityTimestamp = System.currentTimeMillis()
     }
 

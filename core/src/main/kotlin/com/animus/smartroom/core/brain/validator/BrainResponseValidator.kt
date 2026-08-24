@@ -131,6 +131,8 @@ object BrainResponseValidator {
             }
             is BrainAction.ConnectBluetooth,
             is BrainAction.DisconnectBluetooth,
+            is BrainAction.MovieMode,
+            is BrainAction.StopMovieMode,
             is BrainAction.MusicControl -> ValidationResult.Valid
         }
     }

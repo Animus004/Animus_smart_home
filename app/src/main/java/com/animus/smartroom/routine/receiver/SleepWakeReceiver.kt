@@ -87,11 +87,14 @@ class SleepWakeReceiver : BroadcastReceiver() {
             )
             val storage = RoutineStorage(context.applicationContext)
             val current = storage.getActiveRoutine()
-            if (current != null) {
-                storage.saveActiveRoutine(
-                    current.copy(status = RoutineStatus.ALARMING)
+            val alarming = current?.copy(status = RoutineStatus.ALARMING)
+                ?: com.animus.smartroom.routine.model.RoutineState(
+                    id = routineId,
+                    type = com.animus.smartroom.routine.model.RoutineType.SLEEP,
+                    status = RoutineStatus.ALARMING,
+                    scheduledWakeTime = System.currentTimeMillis()
                 )
-            }
+            storage.saveActiveRoutine(alarming)
             DiagnosticBus.log(
                 tag = "engine",
                 stage = DiagnosticStage.STATE,

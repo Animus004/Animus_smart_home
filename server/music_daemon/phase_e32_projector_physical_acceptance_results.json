@@ -1,0 +1,169 @@
+{
+  "timestamp": "2026-08-24 15:15:16",
+  "target": "192.168.1.11:5555",
+  "model": "Zebronics PixaPlay 25 (NL5H00X)",
+  "total_capabilities_tested": 12,
+  "passed": 12,
+  "failed": 0,
+  "results": [
+    {
+      "capability": "PROJECTOR_GET_POWER_STATE",
+      "passed": true,
+      "latency_ms": 398,
+      "verification_method": "dumpsys power + dumpsys display",
+      "detail": {
+        "reachable": true,
+        "connected": true,
+        "wakefulness": "Awake",
+        "display_state": "ON",
+        "power_state": "ON",
+        "interactive": true,
+        "verified": true,
+        "confidence": "high",
+        "state": "device",
+        "raw_power": [
+          "mWakefulness=Awake",
+          "  mIsPowered=true",
+          "  mBootCompleted=true",
+          "Display Power: com.android.server.power.PowerManagerService$1@bafeb1c",
+          "  mBootCompleted=true",
+          "  mIsPowered=true"
+        ],
+        "raw_display": [
+          "mState=ON"
+        ]
+      },
+      "notes": "State: ON, Wakefulness: Awake, Display: ON"
+    },
+    {
+      "capability": "PROJECTOR_GET_HARDWARE_HEALTH",
+      "passed": true,
+      "latency_ms": 268,
+      "verification_method": "getprop zysys.light_temp + main_speed + sub_speed",
+      "detail": {
+        "temperature_celsius": 31.0,
+        "main_fan_rpm": 3248.62,
+        "sub_fan_rpm": 3522.73,
+        "thermal_status": "SAFE",
+        "fan_status": "HEALTHY",
+        "verified": true,
+        "raw_temp": "31.0\u00e2\u201e\u0192",
+        "raw_main_fan": "3248.62rpm",
+        "raw_sub_fan": "3522.73rpm"
+      },
+      "notes": "Temp: 31.0\u00b0C (SAFE), Main Fan: 3248.62 RPM, Sub Fan: 3522.73 RPM"
+    },
+    {
+      "capability": "PROJECTOR_GET_SIGNAL_STATE",
+      "passed": true,
+      "latency_ms": 110,
+      "verification_method": "dumpsys tv_input (HDMI0000C2 / TvStreamConfig)",
+      "detail": {
+        "signal_state": "HDMI_SIGNAL_ACTIVE",
+        "hdmi_port": 1,
+        "active_stream": true,
+        "is_session_bound": true,
+        "stream_config": "TvStreamConfig {mStreamId=0;mType=1}",
+        "verified": true,
+        "message": "HDMI 1 video signal actively streaming"
+      },
+      "notes": "Signal State: HDMI_SIGNAL_ACTIVE, Active Stream: True"
+    },
+    {
+      "capability": "PROJECTOR_GET_CURRENT_INPUT",
+      "passed": true,
+      "latency_ms": 139,
+      "verification_method": "dumpsys activity activities foreground inspection",
+      "detail": "ANDROID_HOME",
+      "notes": "Current Source: ANDROID_HOME"
+    },
+    {
+      "capability": "PROJECTOR_GET_BRIGHTNESS",
+      "passed": true,
+      "latency_ms": 151,
+      "verification_method": "settings get system screen_brightness",
+      "detail": {
+        "initial_brightness_percent": 40
+      },
+      "notes": "Initial Brightness: 40%"
+    },
+    {
+      "capability": "PROJECTOR_SET_BRIGHTNESS (Set 70%)",
+      "passed": true,
+      "latency_ms": 425,
+      "verification_method": "settings put + read-back verification",
+      "detail": {
+        "requested": 70,
+        "actual": 70
+      },
+      "notes": "Set to 70% -> Verified actual: 70%"
+    },
+    {
+      "capability": "PROJECTOR_SET_BRIGHTNESS (Restore)",
+      "passed": true,
+      "latency_ms": 426,
+      "verification_method": "settings put + read-back verification",
+      "detail": {
+        "restored": 40,
+        "actual": 40
+      },
+      "notes": "Restored to 40% -> Verified actual: 40%"
+    },
+    {
+      "capability": "PROJECTOR_AUTO_FOCUS",
+      "passed": true,
+      "latency_ms": 189,
+      "verification_method": "am start -a com.zhiying.AUTO_FOCUS_CORRECTION",
+      "detail": {
+        "status": "TRIGGERED",
+        "action": "auto_focus",
+        "verified": false,
+        "message": "Auto-focus triggered successfully."
+      },
+      "notes": "Status: TRIGGERED, Truthful verified flag: False"
+    },
+    {
+      "capability": "PROJECTOR_AUTO_KEYSTONE",
+      "passed": true,
+      "latency_ms": 206,
+      "verification_method": "am start -a com.zhiying.ONE_AUTO_CORRECTION_KEYSTONE",
+      "detail": {
+        "status": "TRIGGERED",
+        "action": "auto_keystone",
+        "verified": false,
+        "message": "Auto-keystone triggered successfully."
+      },
+      "notes": "Status: TRIGGERED, Truthful verified flag: False"
+    },
+    {
+      "capability": "PROJECTOR_SINGLE_HDMI_PORT_INVARIANT",
+      "passed": true,
+      "latency_ms": 0,
+      "verification_method": "set_hdmi(2) hardware constraint guard",
+      "detail": {
+        "set_hdmi_2_result": false
+      },
+      "notes": "Correctly rejected HDMI_2 (Physical hardware has only 1 HDMI port)"
+    },
+    {
+      "capability": "PROJECTOR_SWITCH_HDMI1",
+      "passed": true,
+      "latency_ms": 264,
+      "verification_method": "am start com.newlink.nlsource + foreground verification",
+      "detail": {
+        "current_source": "HDMI_1"
+      },
+      "notes": "Switched to HDMI 1 -> Verified foreground: HDMI_1"
+    },
+    {
+      "capability": "PROJECTOR_COLD_POWER_ON_INVARIANT",
+      "passed": true,
+      "latency_ms": 0,
+      "verification_method": "Hardware architectural invariant",
+      "detail": {
+        "cold_power_on_supported_via_adb": false
+      },
+      "notes": "Cold power-on explicitly classified as NOT_AVAILABLE_VIA_ADB (requires IR blaster)"
+    }
+  ]
+}

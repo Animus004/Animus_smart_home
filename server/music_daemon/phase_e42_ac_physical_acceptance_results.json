@@ -1,0 +1,154 @@
+{
+  "timestamp": "2026-08-24 16:30:21",
+  "target_ip": "192.168.1.4",
+  "device_id": "76776532a4e57c0a2ca4",
+  "total_tests": 18,
+  "passed": 18,
+  "failed": 0,
+  "results": [
+    {
+      "test_id": 1,
+      "name": "Connectivity & Initial Telemetry Query",
+      "category": "DIAGNOSTICS",
+      "latency_ms": 323,
+      "result": "Connected (ONLINE)",
+      "passed": true
+    },
+    {
+      "test_id": 2,
+      "name": "Read Physical Ambient Temperature (Sensor)",
+      "category": "TELEMETRY",
+      "latency_ms": 0,
+      "result": "23\u00b0C (Thermistor)",
+      "passed": true
+    },
+    {
+      "test_id": 3,
+      "name": "Read Setpoint Target Temperature",
+      "category": "TELEMETRY",
+      "latency_ms": 0,
+      "result": "24\u00b0C (Setpoint)",
+      "passed": true
+    },
+    {
+      "test_id": 4,
+      "name": "Read Active HVAC Mode",
+      "category": "TELEMETRY",
+      "latency_ms": 0,
+      "result": "Mode: COOL",
+      "passed": true
+    },
+    {
+      "test_id": 5,
+      "name": "Read Blower Fan Speed",
+      "category": "TELEMETRY",
+      "latency_ms": 0,
+      "result": "Fan: HIGH",
+      "passed": true
+    },
+    {
+      "test_id": 6,
+      "name": "Set Target Temperature (22\u00b0C) with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 1158,
+      "result": "Set 22\u00b0C -> Verified 22\u00b0C",
+      "passed": true
+    },
+    {
+      "test_id": 7,
+      "name": "Set Target Temperature (25\u00b0C) with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 1162,
+      "result": "Set 25\u00b0C -> Verified 25\u00b0C",
+      "passed": true
+    },
+    {
+      "test_id": 8,
+      "name": "Set Mode to COOL with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 355,
+      "result": "Mode -> COOL",
+      "passed": true
+    },
+    {
+      "test_id": 9,
+      "name": "Set Fan Speed to MEDIUM with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 2927,
+      "result": "Fan -> MEDIUM",
+      "passed": true
+    },
+    {
+      "test_id": 10,
+      "name": "Set Fan Speed to HIGH with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 3162,
+      "result": "Fan -> HIGH",
+      "passed": true
+    },
+    {
+      "test_id": 11,
+      "name": "Set Fan Speed to LOW with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 2884,
+      "result": "Fan -> LOW",
+      "passed": true
+    },
+    {
+      "test_id": 12,
+      "name": "Set Mode to DRY (Dehumidify) with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 1126,
+      "result": "Mode -> DRY",
+      "passed": true
+    },
+    {
+      "test_id": 13,
+      "name": "Power Cycle OFF with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 1167,
+      "result": "Power: OFF",
+      "passed": true
+    },
+    {
+      "test_id": 14,
+      "name": "Power Cycle ON with Read-Back",
+      "category": "CONTROL",
+      "latency_ms": 1125,
+      "result": "Power: ON",
+      "passed": true
+    },
+    {
+      "test_id": 15,
+      "name": "LAN Transport Heartbeat & Connect Benchmark",
+      "category": "TRANSPORT",
+      "latency_ms": 74,
+      "result": "LAN Heartbeat: True",
+      "passed": true
+    },
+    {
+      "test_id": 16,
+      "name": "Safety Invariant: Reject Heat Mode",
+      "category": "SAFETY",
+      "latency_ms": 0,
+      "result": "REJECTED (Unsupported)",
+      "passed": true
+    },
+    {
+      "test_id": 17,
+      "name": "Safety Invariant: Reject Swing Control",
+      "category": "SAFETY",
+      "latency_ms": 0,
+      "result": "REJECTED (Unsupported)",
+      "passed": true
+    },
+    {
+      "test_id": 18,
+      "name": "Safety Invariant: Reject Out-of-Bounds Temp (14\u00b0C & 35\u00b0C)",
+      "category": "SAFETY",
+      "latency_ms": 0,
+      "result": "REJECTED (Invalid Bound)",
+      "passed": true
+    }
+  ]
+}

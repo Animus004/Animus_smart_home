@@ -27,6 +27,23 @@ object ExecutionPlanner {
                 stages = listOf(
                     PlannedStage(
                         stageIndex = 1,
+                        stageName = "Climate Comfort Preparation",
+                        actions = listOf(
+                            BrainIntent.DirectCommand(
+                                target = CapabilityRegistry.DeviceTarget.AC,
+                                capability = CapabilityRegistry.ActionCapability.AC_POWER_ON,
+                                correlationId = corrId
+                            ),
+                            BrainIntent.DirectCommand(
+                                target = CapabilityRegistry.DeviceTarget.AC,
+                                capability = CapabilityRegistry.ActionCapability.AC_SET_TEMPERATURE,
+                                parameters = mapOf("adaptive" to true),
+                                correlationId = corrId
+                            )
+                        )
+                    ),
+                    PlannedStage(
+                        stageIndex = 2,
                         stageName = "Room Preparation & Power",
                         actions = listOf(
                             BrainIntent.DirectCommand(
@@ -47,7 +64,7 @@ object ExecutionPlanner {
                         )
                     ),
                     PlannedStage(
-                        stageIndex = 2,
+                        stageIndex = 3,
                         stageName = "Input Routing",
                         actions = listOf(
                             BrainIntent.DirectCommand(

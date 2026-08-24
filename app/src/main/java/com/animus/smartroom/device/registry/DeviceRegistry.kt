@@ -133,6 +133,17 @@ class DeviceRegistry {
             }
         }
 
+        // 3.5 Generic Projector / Display keywords
+        val projectorKeywords = setOf("projector", "smart projector", "screen", "display", "zebronics", "home projector", "room projector")
+        if (normalized in projectorKeywords) {
+            val projectorDevices = all.filter { it.type == DeviceType.PROJECTOR || it.type == DeviceType.DISPLAY }
+            return when {
+                projectorDevices.isEmpty() -> DeviceLookupResult.NotFound(query)
+                projectorDevices.size == 1 -> DeviceLookupResult.Match(projectorDevices.first())
+                else -> DeviceLookupResult.Ambiguous(projectorDevices, "Which display device do you want to control?")
+            }
+        }
+
         // 4. Filter by preferred type if provided
         val searchPool = if (preferredType != null) all.filter { it.type == preferredType } else all
 
