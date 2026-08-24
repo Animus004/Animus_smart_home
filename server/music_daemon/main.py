@@ -28,6 +28,7 @@ from ac_command_router import AcCommandRouter
 from pc_controller import PcController
 from pc_command_router import PcCommandRouter
 from room_state.aggregator import RoomStateAggregator
+from capability_registry import UnifiedCapabilityRegistry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("music_daemon.main")
 
-# Initialize Resolver, Player, Projector, Fire TV, Orchestrator, OllamaManager, AC, PC, and RoomState Aggregator
+# Initialize Resolver, Player, Projector, Fire TV, Orchestrator, OllamaManager, AC, PC, RoomState, and Capability Registry
 SECRETS_DIR = Path(__file__).parent / "secrets"
 resolver = YouTubeMusicResolver(secrets_dir=SECRETS_DIR)
 player = MpvPlayer(preferred_device_keyword="LG SNC4R")
@@ -46,7 +47,6 @@ ac_router = AcCommandRouter(controller=ac_controller)
 pc_controller = PcController()
 pc_router = PcCommandRouter(controller=pc_controller)
 ollama_mgr = OllamaManager()
-
 
 orchestrator = SmartRoomOrchestrator(
     resolver=resolver,
@@ -61,6 +61,8 @@ room_state_aggregator = RoomStateAggregator(
     pc_controller=pc_controller,
     orchestrator=orchestrator
 )
+unified_capability_registry = UnifiedCapabilityRegistry()
+
 automation_registry = AutomationRegistry()
 firetv_service = FireTvService(
     capabilities=orchestrator.capabilities,
@@ -655,6 +657,13 @@ def get_room_status_endpoint() -> Dict[str, Any]:
 def get_room_state_endpoint() -> Dict[str, Any]:
     """Returns authoritative canonical RoomState snapshot compiled from verified physical controllers."""
     return room_state_aggregator.get_room_state().to_dict()
+
+
+@app.get("/api/capabilities")
+def get_capabilities_endpoint() -> Dict[str, Any]:
+    """Returns authoritative machine-readable catalog of all smart room capabilities."""
+    return unified_capability_registry.export_catalog_dict()
+
 
 
 
