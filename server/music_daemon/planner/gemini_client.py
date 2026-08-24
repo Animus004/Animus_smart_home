@@ -90,18 +90,21 @@ class GeminiPlannerClient:
         self,
         user_request: str,
         room_state: RoomState,
-        context: Optional[Dict[str, Any]] = None,
-        preferences: Optional[Dict[str, Any]] = None
+        context: Optional[Union[Dict[str, Any], Any]] = None,
+        preferences: Optional[Union[Dict[str, Any], Any]] = None
     ) -> str:
         """
-        Assembles structured prompt with sanitized RoomState and Capability Catalog.
+        Assembles structured prompt with sanitized RoomState, Capability Catalog, Context, and Preferences.
         """
+        ctx_dict = context.to_dict() if hasattr(context, "to_dict") else (context or {})
+        pref_dict = preferences.to_dict() if hasattr(preferences, "to_dict") else (preferences or {})
+
         payload = {
             "user_request": user_request,
             "room_state": room_state.to_sanitized_prompt_dict(),
             "available_capabilities": self.registry.export_prompt_schema_dict(),
-            "environmental_context": context or {},
-            "user_preferences": preferences or {}
+            "context": ctx_dict,
+            "preferences": pref_dict
         }
         return json.dumps(payload, indent=2)
 

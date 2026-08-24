@@ -29,6 +29,7 @@ from pc_controller import PcController
 from pc_command_router import PcCommandRouter
 from room_state.aggregator import RoomStateAggregator
 from capability_registry import UnifiedCapabilityRegistry
+from context import PreferenceManager, ContextEngine
 from planner import (
     PlanValidator,
     GeminiPlannerClient,
@@ -69,6 +70,11 @@ room_state_aggregator = RoomStateAggregator(
     orchestrator=orchestrator
 )
 unified_capability_registry = UnifiedCapabilityRegistry()
+preference_manager = PreferenceManager(registry=unified_capability_registry)
+context_engine = ContextEngine(
+    preference_manager=preference_manager,
+    room_state_aggregator=room_state_aggregator
+)
 planner_validator = PlanValidator(registry=unified_capability_registry)
 planner_client = GeminiPlannerClient(registry=unified_capability_registry, validator=planner_validator)
 
@@ -1124,6 +1130,19 @@ def get_canonical_room_state() -> Dict[str, Any]:
     return st.to_sanitized_prompt_dict()
 
 
+@app.get("/api/preferences")
+def get_user_preferences() -> Dict[str, Any]:
+    """Returns active user and room preferences with capability-bound validation."""
+    return preference_manager.get_preferences().to_dict()
+
+
+@app.get("/api/context")
+def get_context_snapshot() -> Dict[str, Any]:
+    """Returns full, fresh context snapshot (temporal, room semantic, weather PIN 741235, preferences)."""
+    current_state = room_state_aggregator.get_room_state()
+    return context_engine.build_context_snapshot(room_state=current_state).to_dict()
+
+
 @app.post("/api/planner/plan")
 def plan_room_orchestration(req: PlannerPlanRequest) -> Dict[str, Any]:
     """
@@ -1137,13 +1156,15 @@ def plan_room_orchestration(req: PlannerPlanRequest) -> Dict[str, Any]:
         )
 
     current_state = room_state_aggregator.get_room_state()
+    active_context = req.context or context_engine.build_context_snapshot(room_state=current_state).to_dict()
+    active_preferences = req.preferences or preference_manager.get_preferences().to_dict()
 
     try:
         validation_res = planner_client.generate_and_validate_plan(
             user_request=req.request,
             room_state=current_state,
-            context=req.context,
-            preferences=req.preferences
+            context=active_context,
+            preferences=active_preferences
         )
         return validation_res.to_dict()
     except GeminiApiUnavailableError as e:
@@ -1186,14 +1207,16 @@ def execute_validated_plan_endpoint(req: PlannerPlanRequest) -> Dict[str, Any]:
         )
 
     current_state = room_state_aggregator.get_room_state()
+    active_context = req.context or context_engine.build_context_snapshot(room_state=current_state).to_dict()
+    active_preferences = req.preferences or preference_manager.get_preferences().to_dict()
 
     try:
         # Step 1: Generate plan from Gemini
         validation_res = planner_client.generate_and_validate_plan(
             user_request=req.request,
             room_state=current_state,
-            context=req.context,
-            preferences=req.preferences
+            context=active_context,
+            preferences=active_preferences
         )
 
         # Step 2: Ensure validation succeeded
