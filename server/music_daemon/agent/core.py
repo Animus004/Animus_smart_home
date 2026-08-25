@@ -71,6 +71,16 @@ from agent.long_horizon_goals import LongHorizonGoalManager
 from agent.scheduler import RoomScheduler, ScheduledTask, ScheduledTaskStatus
 from agent.behavioral_profile import BehavioralProfileManager, PreferenceProvenance
 from agent.situation_engine import SituationEngine, RoomSituation
+from agent.reasoning_engine import ReasoningEngine, ReasoningResult
+from agent.goal_arbitrator import GoalArbitrator, ArbitrationDecision, ArbitrationOutcome
+from agent.policy_engine import PolicyEngine, PolicyAuthorization
+from agent.preference_model import LearnedPreference
+from agent.learning_engine import LearningEngine
+from agent.autonomy_policy import AutonomyCapability, AutonomyGrantLevel
+from agent.autonomy_manager import AutonomyManager
+from agent.room_brain import RoomBrain, UnifiedRoomSummary
+from agent.conversation_engine import ConversationEngine, ConversationTurn
+from agent.voice_ingress import VoiceIngressAdapter, VoiceTurnPayload
 
 logger = logging.getLogger("music_daemon.agent.core")
 
@@ -155,6 +165,30 @@ class AnimusPersonalAgent:
         self.comfort_engine = ComfortEngine()
         self.proactive_engine = ProactiveEngine(enabled=True, event_bus=self.room_event_bus)
         self.recovery_engine = RecoveryEngine(max_attempts=1)
+
+        # Initialize Stage 7-10 Advanced Intelligence & Conversational Brain
+        self.reasoning_engine = ReasoningEngine()
+        self.goal_arbitrator = GoalArbitrator(self.room_event_bus)
+        self.policy_engine = PolicyEngine()
+        self.learning_engine = LearningEngine()
+        self.autonomy_manager = AutonomyManager()
+        self.conversation_engine = ConversationEngine()
+        self.voice_ingress = VoiceIngressAdapter(on_transcript_received=lambda payload: self.interact(payload.transcript))
+        self.room_brain = RoomBrain(
+            reasoning_engine=self.reasoning_engine,
+            goal_arbitrator=self.goal_arbitrator,
+            policy_engine=self.policy_engine,
+            learning_engine=self.learning_engine,
+            autonomy_manager=self.autonomy_manager,
+            room_state_aggregator=self.room_state_aggregator,
+            event_bus=self.room_event_bus,
+            situation_engine=self.situation_engine,
+            behavior_mode_manager=self.mode_manager,
+            goal_manager=self.long_horizon_goals,
+            scheduler=self.scheduler,
+            media_session_manager=self.media_session_manager
+        )
+
 
 
 
