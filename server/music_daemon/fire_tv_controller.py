@@ -313,12 +313,88 @@ class FireTvController:
     def sleep(self) -> bool:
         return self.send_key(223)
 
+    def volume_up(self) -> bool:
+        """Sends KEYCODE_VOLUME_UP (24)."""
+        return self.send_key(24)
+
+    def volume_down(self) -> bool:
+        """Sends KEYCODE_VOLUME_DOWN (25)."""
+        return self.send_key(25)
+
+    def mute(self) -> bool:
+        """Sends KEYCODE_VOLUME_MUTE (164)."""
+        return self.send_key(164)
+
+    def media_play(self) -> bool:
+        """Sends KEYCODE_MEDIA_PLAY (126)."""
+        return self.send_key(126)
+
+    def media_pause(self) -> bool:
+        """Sends KEYCODE_MEDIA_PAUSE (127)."""
+        return self.send_key(127)
+
+    def media_toggle(self) -> bool:
+        """Sends KEYCODE_MEDIA_PLAY_PAUSE (85)."""
+        return self.send_key(85)
+
+    def media_stop(self) -> bool:
+        """Sends KEYCODE_MEDIA_STOP (86)."""
+        return self.send_key(86)
+
+    def media_next(self) -> bool:
+        """Sends KEYCODE_MEDIA_NEXT (87)."""
+        return self.send_key(87)
+
+    def media_previous(self) -> bool:
+        """Sends KEYCODE_MEDIA_PREVIOUS (88)."""
+        return self.send_key(88)
+
+    def launch_streaming_provider(self, provider: str, content: Optional[str] = None) -> bool:
+        """Launches streaming provider app on Fire TV (Netflix, Prime, Hotstar, YouTube)."""
+        self.wake()
+        p = provider.lower()
+        if "netflix" in p:
+            code, _, _ = self._run_shell("am start -n com.netflix.ninja/.MainActivity")
+            return code == 0
+        elif "prime" in p or "amazon" in p:
+            code, _, _ = self._run_shell("am start -n com.amazon.avod/com.amazon.avod.client.activity.HomeScreenActivity")
+            return code == 0
+        elif "youtube" in p:
+            return self.launch_youtube()
+        elif "hotstar" in p or "disney" in p:
+            code, _, _ = self._run_shell("am start -n in.startv.hotstar/in.startv.hotstar.splash.SplashActivity")
+            return code == 0
+        else:
+            code, _, _ = self._run_shell(f"am start -a android.intent.action.VIEW -d '{provider}'")
+            return code == 0
+
+    def media_direct_provider(self, provider: str, content: Optional[str] = None) -> bool:
+        return self.launch_streaming_provider(provider, content)
+
+    def launch_youtube(self) -> bool:
+        """Launches YouTube application via Cobalt MainActivity."""
+        self.wake()
+        code, _, _ = self._run_shell("am start -n com.amazon.firetv.youtube/dev.cobalt.app.MainActivity")
+        return code == 0
+
+    def app_launch_youtube(self) -> bool:
+        return self.launch_youtube()
+
     def is_app_foreground(self, package_name: str) -> bool:
         """Checks if the given package is currently in the foreground / focused."""
         code, stdout, _ = self._run_shell("dumpsys window | grep -E '(mCurrentFocus|mFocusedApp)'")
         if code == 0 and stdout:
             return package_name in stdout
         return False
+
+    def get_foreground_app(self) -> Optional[str]:
+        """Queries the current focused / foreground application package name."""
+        code, stdout, _ = self._run_shell("dumpsys window | grep -E '(mCurrentFocus|mFocusedApp)'")
+        if code == 0 and stdout:
+            match = re.search(r'([a-zA-Z0-9_.]+)/[a-zA-Z0-9_.]+', stdout)
+            if match:
+                return match.group(1)
+        return None
 
     def search_or_launch_content(self, query: str) -> bool:
         """

@@ -46,6 +46,16 @@ CRITICAL OPERATIONAL RULES:
 5. You must NEVER output shell commands, Python code, PowerShell, ADB commands, UDP packets, COM calls, or raw file paths.
 6. Express all actions strictly as canonical capability IDs with validated parameter objects.
 7. Return only a valid JSON object strictly matching the GeminiStructuredPlan schema.
+
+SEMANTIC AUDIO & ROUTING RULES:
+8. Volume Arbitration ("Make it quieter", "Turn it down", "Volume up"):
+   - Inspect `context.room_summary.active_audio_producer` and `context.room_summary.media_playback_state`:
+     - If active_audio_producer == "FIRE_TV" -> select FIRE_TV_VOLUME_DOWN (or FIRE_TV_VOLUME_UP / FIRE_TV_MUTE).
+     - If active_audio_producer == "PC" -> select PC_SET_VOLUME (or PC_MUTE).
+     - If active_audio_producer == "UNKNOWN" -> do not guess; safely refer to preferences.audio or target device.
+9. Movie Mode Audio Routing ("Let's watch something", "Movie mode"):
+   - If `context.room_summary.soundbar_route_required` is True -> include SOUNDBAR_ROUTE_TO_FIRE_TV.
+   - If soundbar is already owned by FIRE_TV (soundbar_route_required is False) -> omit redundant routing or allow executor idempotency to skip.
 """.strip()
 
 

@@ -158,6 +158,11 @@ class RoomSemanticContext(BaseModel):
     is_room_idle: bool
     current_audio_owner: str
     room_mode: str
+    active_audio_producer: str = "UNKNOWN"
+    media_playback_state: str = "UNKNOWN"
+    desired_audio_owner: Optional[str] = None
+    soundbar_route_required: bool = False
+    audio_routing_reason: str = "UNINITIALIZED"
     provenance: ContextProvenance = Field(
         default_factory=lambda: ContextProvenance(source="CANONICAL_ROOM_STATE", status=ContextProvenanceStatus.DERIVED, ttl_seconds=5.0)
     )
@@ -169,6 +174,11 @@ class RoomSemanticContext(BaseModel):
             "is_room_idle": self.is_room_idle,
             "current_audio_owner": self.current_audio_owner,
             "room_mode": self.room_mode,
+            "active_audio_producer": self.active_audio_producer,
+            "media_playback_state": self.media_playback_state,
+            "desired_audio_owner": self.desired_audio_owner,
+            "soundbar_route_required": self.soundbar_route_required,
+            "audio_routing_reason": self.audio_routing_reason,
             "provenance": self.provenance.to_dict()
         }
 

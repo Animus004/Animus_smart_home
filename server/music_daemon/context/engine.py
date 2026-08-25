@@ -201,8 +201,16 @@ class ContextEngine:
         # Room Mode
         room_mode = str(state.environment.room_mode.value or "IDLE").upper()
 
+        # Audio Stream & Active Producer Extraction
+        if hasattr(state, "audio_stream") and state.audio_stream:
+            active_prod = str(state.audio_stream.active_producer.value or "UNKNOWN").upper()
+            pb_state = str(state.audio_stream.playback_state.value or "UNKNOWN").upper()
+        else:
+            active_prod = "UNKNOWN"
+            pb_state = "UNKNOWN"
+
         # Media Playing Check
-        is_media_playing = room_mode in ("CINEMA", "MUSIC", "MEDIA_PLAYING") or (
+        is_media_playing = pb_state == "PLAYING" or room_mode in ("CINEMA", "MUSIC", "MEDIA_PLAYING") or (
             state.fire_tv.foreground_app.value not in (None, "com.amazon.tv.launcher", "UNKNOWN")
             and is_proj_active
         )
@@ -210,12 +218,45 @@ class ContextEngine:
         # Room Idle Check
         is_idle = not is_proj_active and not is_media_playing and state.ac.power.value is False
 
+        # Desired Audio Routing & Reason Derivation
+        desired_owner = None
+        route_required = False
+        routing_reason = "NO_ROUTING_REQUIRED"
+
+        if room_mode == "CINEMA" or is_proj_active or active_prod == "FIRE_TV":
+            desired_owner = "FIRE_TV"
+            if audio_owner == "FIRE_TV":
+                route_required = False
+                routing_reason = "ALREADY_SATISFIED"
+            elif audio_owner == "PC":
+                route_required = True
+                routing_reason = "NEEDS_TRANSFER_TO_FIRE_TV"
+            else:
+                route_required = False
+                routing_reason = "UNKNOWN_CURRENT_OWNER"
+        elif active_prod == "PC":
+            desired_owner = "PC"
+            if audio_owner == "PC":
+                route_required = False
+                routing_reason = "ALREADY_SATISFIED"
+            elif audio_owner == "FIRE_TV":
+                route_required = True
+                routing_reason = "NEEDS_TRANSFER_TO_PC"
+            else:
+                route_required = False
+                routing_reason = "UNKNOWN_CURRENT_OWNER"
+
         return RoomSemanticContext(
             is_projector_active=is_proj_active,
             is_media_playing=is_media_playing,
             is_room_idle=is_idle,
             current_audio_owner=audio_owner,
             room_mode=room_mode,
+            active_audio_producer=active_prod,
+            media_playback_state=pb_state,
+            desired_audio_owner=desired_owner,
+            soundbar_route_required=route_required,
+            audio_routing_reason=routing_reason,
             provenance=ContextProvenance(
                 source="CANONICAL_ROOM_STATE",
                 status=ContextProvenanceStatus.DERIVED,

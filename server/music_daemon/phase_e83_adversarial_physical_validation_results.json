@@ -1,0 +1,3616 @@
+{
+  "phase": "E.8.3",
+  "title": "Phase E.8.3 Adversarial Physical Multi-Step Orchestration Validation",
+  "timestamp": "2026-08-25 00:25:17",
+  "total_scenarios": 21,
+  "physically_verified": 21,
+  "physically_failed": 0,
+  "pass_rate_percent": 100.0,
+  "initial_run_baseline": {
+    "timestamp": 1787596794.8205757,
+    "projector": {
+      "power": true,
+      "source": "HDMI_1",
+      "brightness": 40
+    },
+    "fire_tv": {
+      "online": false,
+      "power_state": "OFFLINE",
+      "foreground_app": null,
+      "soundbar_connected": false
+    },
+    "pc": {
+      "master_volume": 20,
+      "is_muted": false,
+      "default_endpoint": "Speakers (LG SNC4R(79))",
+      "bluetooth_radio_active": true
+    },
+    "soundbar": {
+      "current_owner": "PC",
+      "is_connected": true
+    },
+    "semantic_audio": {
+      "active_producer": "NONE",
+      "playback_state": "IDLE",
+      "desired_audio_owner": "FIRE_TV",
+      "soundbar_route_required": true,
+      "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+    },
+    "ac": {
+      "power": true,
+      "target_temperature": 24,
+      "mode": "COOL",
+      "fan_speed": "LOW"
+    }
+  },
+  "records": [
+    {
+      "scenario_id": "A1",
+      "category": "GROUP_A_CINEMA_MATRIX",
+      "name": "A1: Cold Start / Soundbar on PC (Wake + Route to Fire TV)",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787596811.222214,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 4
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 3,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 4,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 1,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 1,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 1,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787596839.2268665,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 3,
+        "total_steps": 4,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "ANDROID_HOME",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 21417,
+      "detail": "Full wake and audio transfer executed and verified on hardware.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:10:52"
+    },
+    {
+      "scenario_id": "A2",
+      "category": "GROUP_A_CINEMA_MATRIX",
+      "name": "A2: Cold Start / Soundbar Already on Fire TV (Idempotent Route Preservation)",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787596868.4107876,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 4
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 3,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 4,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 1,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 1,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 1,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787596889.5965796,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "MODE_C_IDEMPOTENCY_SKIP",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SKIPPED",
+        "skipped_count": 4,
+        "total_steps": 4,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 14144,
+      "detail": "Soundbar step skipped via live idempotency (0 Bluetooth churn).",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:11:41"
+    },
+    {
+      "scenario_id": "A3",
+      "category": "GROUP_A_CINEMA_MATRIX",
+      "name": "A3: Everything Ready (Maximum Physical Idempotency)",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787596919.3441021,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 4
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 3,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 4,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 1,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 1,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 1,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787596940.8453052,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "MODE_C_IDEMPOTENCY_SKIP",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SKIPPED",
+        "skipped_count": 4,
+        "total_steps": 4,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 14312,
+      "detail": "Idempotency preserved (0 Bluetooth churn).",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:12:31"
+    },
+    {
+      "scenario_id": "A4",
+      "category": "GROUP_A_CINEMA_MATRIX",
+      "name": "A4: Projector on Android Home (HDMI 1 Correction Only, 0 Bluetooth Churn)",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787596967.6258192,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 4
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 3,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 4,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 1,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 1,
+        "projector_hdmi_dispatches": 1,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787596992.1686134,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 3,
+        "total_steps": 4,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 17626,
+      "detail": "HDMI1 input corrected while soundbar routing remained untouched.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:13:21"
+    },
+    {
+      "scenario_id": "A5",
+      "category": "GROUP_A_CINEMA_MATRIX",
+      "name": "A5: PC Active Audio (Cinema Intent Preempts Audio Ownership)",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597014.9047284,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 1,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597035.3848221,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 0,
+        "total_steps": 1,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 13139,
+      "detail": "Cinema intent took soundbar ownership from PC.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:14:05"
+    },
+    {
+      "scenario_id": "F1",
+      "category": "FIRE_TV_ASLEEP_EDGE_CASES",
+      "name": "F1: Fire TV Asleep + Projector ON + Soundbar on PC",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597057.2606618,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 2
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 1,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597077.2531784,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 1,
+        "total_steps": 2,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "ANDROID_HOME",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 14131,
+      "detail": "Fire TV awakened and audio transferred in safe sequence.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:14:50"
+    },
+    {
+      "scenario_id": "F2",
+      "category": "FIRE_TV_ASLEEP_EDGE_CASES",
+      "name": "F2: Fire TV Asleep + Projector ON + Soundbar on Fire TV",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597106.17229,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 2
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 1,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597117.9330773,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "MODE_C_IDEMPOTENCY_SKIP",
+      "expected_capabilities": [
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SKIPPED",
+        "skipped_count": 2,
+        "total_steps": 2,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "ANDROID_HOME",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 5928,
+      "detail": "Fire TV awakened, soundbar route preserved with 0 churn.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:15:30"
+    },
+    {
+      "scenario_id": "F3",
+      "category": "FIRE_TV_ASLEEP_EDGE_CASES",
+      "name": "F3: Fire TV Asleep + Projector OFF + Soundbar on PC",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597142.207047,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 4
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 3,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 4,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 1,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 1,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 1,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597167.641542,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 3,
+        "total_steps": 4,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "ANDROID_HOME",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 19368,
+      "detail": "Full multi-device wake and transfer sequence completed.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:16:20"
+    },
+    {
+      "scenario_id": "Y1",
+      "category": "YOUTUBE_ORCHESTRATION",
+      "name": "Y1: Put on YouTube from Cold Start",
+      "command": "Put on YouTube.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597191.444411,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 5,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 5
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 3,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 4,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 5,
+          "capability_id": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 1,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 1,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 1,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        },
+        {
+          "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597230.948253,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.firetv.youtube",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "FIRE_TV",
+          "playback_state": "PLAYING",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV",
+        "FIRE_TV_APP_LAUNCH_YOUTUBE"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 3,
+        "total_steps": 5,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 32253,
+      "detail": "YouTube launched on Fire TV (com.amazon.firetv.youtube).",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:17:24"
+    },
+    {
+      "scenario_id": "Y2",
+      "category": "YOUTUBE_ORCHESTRATION",
+      "name": "Y2: Put on YouTube when Everything Ready",
+      "command": "Put on YouTube.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597261.2888844,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597277.222543,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.firetv.youtube",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "FIRE_TV",
+          "playback_state": "PLAYING",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "FIRE_TV_APP_LAUNCH_YOUTUBE"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 0,
+        "total_steps": 1,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 8887,
+      "detail": "YouTube launched with 0 display/audio churn (com.amazon.firetv.youtube).",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:18:11"
+    },
+    {
+      "scenario_id": "Y3",
+      "category": "YOUTUBE_ORCHESTRATION",
+      "name": "Y3: Put on YouTube with Projector on Android Home (Switch HDMI1 + Launch)",
+      "command": "Put on YouTube.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597301.2295053,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 2
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 1,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        },
+        {
+          "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597323.5637212,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.firetv.youtube",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "FIRE_TV",
+          "playback_state": "PLAYING",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_APP_LAUNCH_YOUTUBE"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 0,
+        "total_steps": 2,
+        "soundbar_owner": "PC",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 15512,
+      "detail": "Switched to HDMI1 and launched YouTube.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:18:51"
+    },
+    {
+      "scenario_id": "Y4",
+      "category": "YOUTUBE_ORCHESTRATION",
+      "name": "Y4: Movie Mode Command ('Movie mode') with Maximum Idempotency",
+      "command": "Movie mode",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597349.4792159,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 4
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 2,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 3,
+          "capability_id": "FIRE_TV_POWER_WAKE",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        },
+        {
+          "step_id": 4,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 1,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 1,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 1,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 1
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597371.1509452,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "MODE_C_IDEMPOTENCY_SKIP",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SKIPPED",
+        "skipped_count": 4,
+        "total_steps": 4,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 14395,
+      "detail": "Movie mode recognized satisfied physical state; 100% idempotent skip.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:19:42"
+    },
+    {
+      "scenario_id": "P1",
+      "category": "AUDIO_PRODUCER_DISAMBIGUATION",
+      "name": "P1: Make it Quieter \u2014 Fire TV Playing (Targets Fire TV, PC Unmodified)",
+      "command": "Make it quieter.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597394.3930051,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.firetv.youtube",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 98,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "FIRE_TV",
+          "playback_state": "PLAYING",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "FIRE_TV",
+        "playback_state": "PLAYING",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_VOLUME_DOWN",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "FIRE_TV_VOLUME_DOWN",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "FIRE_TV_VOLUME_DOWN",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597411.474606,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.firetv.youtube",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 98,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "FIRE_TV",
+          "playback_state": "PLAYING",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "FIRE_TV_VOLUME_DOWN"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 0,
+        "total_steps": 1,
+        "soundbar_owner": "PC",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 98
+      },
+      "passed": true,
+      "duration_ms": 9297,
+      "detail": "Fire TV volume attenuated, PC volume remained strictly unmodified at 98%.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:20:19"
+    },
+    {
+      "scenario_id": "P2",
+      "category": "AUDIO_PRODUCER_DISAMBIGUATION",
+      "name": "P2: Make it Quieter \u2014 PC Active (Targets PC CoreAudio)",
+      "command": "Make it quieter.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597427.9643154,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 98,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PC",
+          "capability": "PC_SET_VOLUME",
+          "parameters": {
+            "volume": 88
+          },
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PC_SET_VOLUME",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PC_SET_VOLUME",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597442.562757,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 88,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "PC_SET_VOLUME"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 0,
+        "total_steps": 1,
+        "soundbar_owner": "PC",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 88
+      },
+      "passed": true,
+      "duration_ms": 7167,
+      "detail": "PC CoreAudio master volume attenuated to exactly 88%.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:20:49"
+    },
+    {
+      "scenario_id": "P3",
+      "category": "AUDIO_PRODUCER_DISAMBIGUATION",
+      "name": "P3: Both Devices Active (Deterministic E.8.2 Soundbar Arbitration Policy)",
+      "command": "Make it quieter.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597458.510939,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_VOLUME_DOWN",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "FIRE_TV_VOLUME_DOWN",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "FIRE_TV_VOLUME_DOWN",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597474.039712,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "FIRE_TV_VOLUME_DOWN"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 0,
+        "total_steps": 1,
+        "soundbar_owner": "PC",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 8436,
+      "detail": "Ambiguity resolved via deterministic E.8.2 soundbar-ownership policy.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:21:22"
+    },
+    {
+      "scenario_id": "P4",
+      "category": "AUDIO_PRODUCER_DISAMBIGUATION",
+      "name": "P4: Neither Device Playing (Safe Non-Destructive Dispatch)",
+      "command": "Make it quieter.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597489.3392713,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_VOLUME_DOWN",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "FIRE_TV_VOLUME_DOWN",
+          "status": "VERIFIED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "FIRE_TV_VOLUME_DOWN",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597505.2593584,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "classification": "SUCCESS_EXECUTED_AND_VERIFIED",
+      "expected_capabilities": [
+        "FIRE_TV_VOLUME_DOWN"
+      ],
+      "actual": {
+        "overall_status": "SUCCESS",
+        "skipped_count": 0,
+        "total_steps": 1,
+        "soundbar_owner": "PC",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 8385,
+      "detail": "Safe non-destructive volume dispatch executed.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:21:51"
+    },
+    {
+      "scenario_id": "P5",
+      "category": "AUDIO_PRODUCER_DISAMBIGUATION",
+      "name": "P5: Parameter Boundary Rejection (Volume=150% -> Fail-Closed OUT_OF_RANGE)",
+      "command": "Set volume to 150%.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597519.3363304,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PC",
+          "capability": "PC_SET_VOLUME",
+          "parameters": {
+            "volume": 150
+          },
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": false,
+        "errors": [
+          {
+            "error_code": "OUT_OF_RANGE",
+            "step_id": 1,
+            "capability": "PC_SET_VOLUME",
+            "field": "volume",
+            "message": "Parameter 'volume' value 150 is invalid or out of bounds [0, 100]."
+          }
+        ],
+        "validated_steps_count": 0
+      },
+      "execution_trace": [],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PC_SET_VOLUME",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597526.5331497,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "classification": "MODE_B_VALIDATOR_REJECTION",
+      "expected_capabilities": [
+        "PC_SET_VOLUME"
+      ],
+      "actual": {
+        "overall_status": "FAILED",
+        "skipped_count": 0,
+        "total_steps": 0,
+        "soundbar_owner": "PC",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 0,
+      "detail": "PlanValidator strictly rejected out-of-range volume parameter.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:22:13"
+    },
+    {
+      "scenario_id": "SD-01",
+      "category": "STATE_DRIFT_RESILIENCE",
+      "name": "SD-01: Soundbar Route Drift (State Changes T3 Pre-Dispatch -> Idempotency Skip)",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597542.742556,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 1,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597561.140828,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "MODE_C_IDEMPOTENCY_SKIP",
+      "expected_capabilities": [
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "overall_status": "SKIPPED",
+        "skipped_count": 1,
+        "total_steps": 1,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 11198,
+      "detail": "Executor refreshed live state post-drift and safely skipped redundant transfer.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:22:52"
+    },
+    {
+      "scenario_id": "SD-02",
+      "category": "STATE_DRIFT_RESILIENCE",
+      "name": "SD-02: Projector Source Drift (HDMI1 Established T3 Pre-Dispatch -> Idempotency Skip)",
+      "command": "Let's watch something.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597581.792187,
+        "projector": {
+          "power": true,
+          "source": "ANDROID_HOME",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": true,
+        "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": [],
+        "validated_steps_count": 1
+      },
+      "execution_trace": [
+        {
+          "step_id": 1,
+          "capability_id": "PROJECTOR_SWITCH_HDMI1",
+          "status": "SKIPPED",
+          "verified": true,
+          "error": null
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 1,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597593.1918764,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": false
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "Speakers (LG SNC4R(79))",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "PC",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": true,
+          "audio_routing_reason": "NEEDS_TRANSFER_TO_FIRE_TV"
+        }
+      },
+      "classification": "MODE_C_IDEMPOTENCY_SKIP",
+      "expected_capabilities": [
+        "PROJECTOR_SWITCH_HDMI1"
+      ],
+      "actual": {
+        "overall_status": "SKIPPED",
+        "skipped_count": 1,
+        "total_steps": 1,
+        "soundbar_owner": "PC",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 4735,
+      "detail": "Live readback detected HDMI1 active and skipped redundant intent.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:23:20"
+    },
+    {
+      "scenario_id": "REP-01",
+      "category": "CONSECUTIVE_COMMAND_IDEMPOTENCY",
+      "name": "REP-01: 3x Consecutive 'Let's watch something' (Zero Hardware Churn on Runs 2 & 3)",
+      "command": "Let's watch something. (x3)",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597675.1446078,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {},
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 2,
+          "device": "PROJECTOR",
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 3,
+          "device": "FIRE_TV",
+          "capability": "FIRE_TV_POWER_WAKE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        },
+        {
+          "step_id": 4,
+          "device": "ORCHESTRATOR",
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": true,
+        "errors": []
+      },
+      "execution_trace": [
+        {
+          "iteration": 1,
+          "total_steps": 4,
+          "skipped_steps": 3,
+          "status": "SUCCESS"
+        },
+        {
+          "iteration": 2,
+          "total_steps": 4,
+          "skipped_steps": 4,
+          "status": "SKIPPED"
+        },
+        {
+          "iteration": 3,
+          "total_steps": 4,
+          "skipped_steps": 4,
+          "status": "SKIPPED"
+        }
+      ],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 2,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 2,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 2,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 2
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "PROJECTOR_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "PROJECTOR_SWITCH_HDMI1",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "FIRE_TV_POWER_WAKE",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        },
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+          "status": "EXPECTED_GENERATED_IDEMPOTENCY_SKIPPED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597682.324785,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "MODE_C_IDEMPOTENCY_SKIP",
+      "expected_capabilities": [
+        "PROJECTOR_POWER_WAKE",
+        "PROJECTOR_SWITCH_HDMI1",
+        "FIRE_TV_POWER_WAKE",
+        "SOUNDBAR_ROUTE_TO_FIRE_TV"
+      ],
+      "actual": {
+        "run1": {
+          "iteration": 1,
+          "total_steps": 4,
+          "skipped_steps": 3,
+          "status": "SUCCESS"
+        },
+        "run2": {
+          "iteration": 2,
+          "total_steps": 4,
+          "skipped_steps": 4,
+          "status": "SKIPPED"
+        },
+        "run3": {
+          "iteration": 3,
+          "total_steps": 4,
+          "skipped_steps": 4,
+          "status": "SKIPPED"
+        }
+      },
+      "passed": true,
+      "duration_ms": 0,
+      "detail": "Run 2 skipped 4/4, Run 3 skipped 4/4.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:24:45"
+    },
+    {
+      "scenario_id": "PF-01",
+      "category": "PARTIAL_FAILURE_RESILIENCE",
+      "name": "PF-01: Unknown / Unavailable Subsystem Capability Rejection",
+      "command": "Route audio to microwave.",
+      "verdict": "PHYSICAL_VERIFIED",
+      "baseline_state": {
+        "timestamp": 1787597693.300807,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "semantic_context": {
+        "active_producer": "NONE",
+        "playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "generated_plan": [
+        {
+          "step_id": 1,
+          "device": "KITCHEN",
+          "capability": "SOUNDBAR_ROUTE_TO_MICROWAVE",
+          "parameters": {},
+          "priority": 1,
+          "execution_mode": "SEQUENTIAL",
+          "preconditions": [],
+          "expected_state_transition": null,
+          "on_failure": "CONTINUE_BEST_EFFORT",
+          "fallback_step": null
+        }
+      ],
+      "validation_result": {
+        "is_valid": false,
+        "errors": [
+          {
+            "error_code": "UNKNOWN_CAPABILITY",
+            "step_id": 1,
+            "capability": "SOUNDBAR_ROUTE_TO_MICROWAVE",
+            "field": null,
+            "message": "Capability 'SOUNDBAR_ROUTE_TO_MICROWAVE' is not registered in the authoritative catalog."
+          }
+        ],
+        "validated_steps_count": 0
+      },
+      "execution_trace": [],
+      "churn_metrics": {
+        "route_dispatch_count": 0,
+        "route_skip_count": 0,
+        "projector_power_dispatches": 0,
+        "projector_power_skips": 0,
+        "projector_hdmi_dispatches": 0,
+        "projector_hdmi_skips": 0,
+        "fire_tv_wake_dispatches": 0,
+        "fire_tv_wake_skips": 0
+      },
+      "lifecycle_audit": [
+        {
+          "capability": "SOUNDBAR_ROUTE_TO_MICROWAVE",
+          "status": "EXPECTED_GENERATED_EXECUTED"
+        }
+      ],
+      "physical_readback": {
+        "timestamp": 1787597700.3731341,
+        "projector": {
+          "power": true,
+          "source": "HDMI_1",
+          "brightness": 40
+        },
+        "fire_tv": {
+          "online": true,
+          "power_state": "AWAKE",
+          "foreground_app": "com.amazon.tv.launcher",
+          "soundbar_connected": true
+        },
+        "pc": {
+          "master_volume": 20,
+          "is_muted": false,
+          "default_endpoint": "2270W (NVIDIA High Definition Audio)",
+          "bluetooth_radio_active": true
+        },
+        "soundbar": {
+          "current_owner": "FIRE_TV",
+          "is_connected": true
+        },
+        "semantic_audio": {
+          "active_producer": "NONE",
+          "playback_state": "IDLE",
+          "desired_audio_owner": "FIRE_TV",
+          "soundbar_route_required": false,
+          "audio_routing_reason": "ALREADY_SATISFIED"
+        }
+      },
+      "classification": "MODE_B_VALIDATOR_REJECTION",
+      "expected_capabilities": [
+        "SOUNDBAR_ROUTE_TO_MICROWAVE"
+      ],
+      "actual": {
+        "overall_status": "FAILED",
+        "skipped_count": 0,
+        "total_steps": 0,
+        "soundbar_owner": "FIRE_TV",
+        "projector_source": "HDMI_1",
+        "fire_tv_power": "AWAKE",
+        "pc_volume": 20
+      },
+      "passed": true,
+      "duration_ms": 0,
+      "detail": "Unknown capability fail-closed rejection verified.",
+      "restoration_verified": true,
+      "timestamp": "2026-08-25 00:25:09"
+    }
+  ]
+}

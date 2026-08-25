@@ -17,9 +17,11 @@ from room_state.models import (
     FireTvState,
     PcState,
     SoundbarState,
-    RoomEnvironmentState
+    RoomEnvironmentState,
+    AudioStreamState
 )
 from room_state.derivations import derive_projector_signal_active, derive_soundbar_state
+from room_state.audio_resolver import AudioContextResolver
 
 logger = logging.getLogger("room_state.aggregator")
 
@@ -42,6 +44,10 @@ class RoomStateAggregator:
         self.fire_tv = fire_tv_controller
         self.pc = pc_controller
         self.orchestrator = orchestrator
+        self.audio_resolver = AudioContextResolver(
+            orchestrator=self.orchestrator,
+            fire_tv_controller=self.fire_tv
+        )
 
     def get_room_state(self, current_time: Optional[float] = None) -> RoomState:
         """
@@ -104,6 +110,16 @@ class RoomStateAggregator:
         # ---------------------------------------------------------------------
         env_state = self._aggregate_environment(now, sb_state)
 
+        # ---------------------------------------------------------------------
+        # 7. Semantic Audio Stream & Producer Resolution
+        # ---------------------------------------------------------------------
+        audio_stream_state = self.audio_resolver.resolve(
+            pc_state=pc_state,
+            fire_tv_state=ftv_state,
+            soundbar_state=sb_state,
+            observed_at=now
+        )
+
         return RoomState(
             timestamp=now,
             is_consistent=is_consistent,
@@ -112,7 +128,8 @@ class RoomStateAggregator:
             fire_tv=ftv_state,
             pc=pc_state,
             soundbar=sb_state,
-            environment=env_state
+            environment=env_state,
+            audio_stream=audio_stream_state
         )
 
     # =========================================================================

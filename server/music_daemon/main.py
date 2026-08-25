@@ -7,8 +7,9 @@ authenticated status, Device Portal Bluetooth auto-reconnection, and Smart Room 
 from contextlib import asynccontextmanager
 import logging
 import threading
+import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
@@ -37,6 +38,7 @@ from planner import (
     GeminiResponseError,
     PlanExecutor
 )
+from agent import AnimusPersonalAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -99,6 +101,14 @@ planner_executor = PlanExecutor(
     fire_tv_controller=fire_tv,
     firetv_service=firetv_service,
     orchestrator=orchestrator
+)
+animus_personal_agent = AnimusPersonalAgent(
+    registry=unified_capability_registry,
+    room_state_aggregator=room_state_aggregator,
+    context_engine=context_engine,
+    preference_manager=preference_manager,
+    planner_client=planner_client,
+    planner_executor=planner_executor
 )
 
 
@@ -1257,6 +1267,113 @@ def execute_validated_plan_endpoint(req: PlannerPlanRequest) -> Dict[str, Any]:
                 "message": str(e)
             }
         )
+
+
+# =========================================================================
+# PHASE F.1 PERSONAL AGENT REST ENDPOINTS
+# =========================================================================
+
+class AgentInteractRequest(BaseModel):
+    utterance: str = Field(..., min_length=1, description="Natural language conversational turn/request from user")
+
+
+class TaskCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, description="Title of the task")
+    description: Optional[str] = Field(default=None, description="Optional task description")
+    priority: str = Field(default="MEDIUM", description="Priority: LOW, MEDIUM, HIGH, CRITICAL")
+    category: str = Field(default="GENERAL", description="Category: WORK, LEARNING, PERSONAL, GENERAL")
+
+
+@app.post("/api/agent/interact")
+def agent_interact_endpoint(req: AgentInteractRequest) -> Dict[str, Any]:
+    """
+    Primary conversational agent interaction endpoint.
+    Processes intent, checks routines/memory, executes orchestration if clear, and provides feedback.
+    """
+    resp = animus_personal_agent.interact(req.utterance)
+    return resp.model_dump()
+
+
+@app.get("/api/agent/brief")
+def agent_daily_brief_endpoint() -> Dict[str, Any]:
+    """Generates a fresh morning or daily briefing."""
+    current_state = room_state_aggregator.get_room_state()
+    ctx = context_engine.build_context_snapshot(room_state=current_state)
+    brief = animus_personal_agent.daily_brief_engine.generate_morning_brief(
+        room_state=current_state,
+        weather_info=ctx.weather.to_dict()
+    )
+    return {
+        "brief": brief,
+        "timestamp": time.time()
+    }
+
+
+@app.get("/api/agent/profile")
+def get_agent_user_profile() -> Dict[str, Any]:
+    """Returns the authoritative UserProfile."""
+    return animus_personal_agent.user_model.to_dict()
+
+
+@app.post("/api/agent/profile")
+def update_agent_user_profile(updates: Dict[str, Any]) -> Dict[str, Any]:
+    """Updates fields on the authoritative UserProfile."""
+    updated = animus_personal_agent.user_model.update_profile(updates)
+    animus_personal_agent.persistence.save_state(
+        animus_personal_agent.user_model,
+        animus_personal_agent.memory,
+        animus_personal_agent.task_manager
+    )
+    return updated.model_dump()
+
+
+@app.get("/api/agent/tasks")
+def get_agent_tasks(include_completed: bool = False) -> List[Dict[str, Any]]:
+    """Lists all active or completed tasks."""
+    tasks = animus_personal_agent.task_manager.list_tasks(include_completed=include_completed)
+    return [t.model_dump() for t in tasks]
+
+
+@app.post("/api/agent/tasks")
+def create_agent_task(req: TaskCreateRequest) -> Dict[str, Any]:
+    """Creates a new task in the agent task store."""
+    from agent.models import TaskPriority
+    try:
+        p = TaskPriority(req.priority.upper())
+    except ValueError:
+        p = TaskPriority.MEDIUM
+    task = animus_personal_agent.task_manager.create_task(
+        title=req.title,
+        description=req.description,
+        priority=p,
+        category=req.category
+    )
+    animus_personal_agent.persistence.save_state(
+        animus_personal_agent.user_model,
+        animus_personal_agent.memory,
+        animus_personal_agent.task_manager
+    )
+    return task.model_dump()
+
+
+@app.post("/api/agent/tasks/{task_id}/complete")
+def complete_agent_task_endpoint(task_id: str) -> Dict[str, Any]:
+    """Marks a task as completed."""
+    completed = animus_personal_agent.task_manager.complete_task(task_id)
+    if not completed:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found.")
+    animus_personal_agent.persistence.save_state(
+        animus_personal_agent.user_model,
+        animus_personal_agent.memory,
+        animus_personal_agent.task_manager
+    )
+    return {"status": "SUCCESS", "task": completed.model_dump()}
+
+
+@app.get("/api/agent/memory")
+def get_agent_memory_summary() -> Dict[str, Any]:
+    """Returns structured 9-category memory summary."""
+    return animus_personal_agent.memory.to_dict_summary()
 
 
 if __name__ == "__main__":

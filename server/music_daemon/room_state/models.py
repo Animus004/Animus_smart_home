@@ -5,6 +5,7 @@ Authoritatively defines physical room state with strict provenance, timestamping
 
 from __future__ import annotations
 import time
+from enum import Enum
 from typing import TypeVar, Generic, Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
@@ -34,7 +35,8 @@ from room_state.freshness import (
     PC_BT_TTL,
     SOUNDBAR_OWNER_TTL,
     SOUNDBAR_CONNECTED_TTL,
-    ENVIRONMENT_MODE_TTL
+    ENVIRONMENT_MODE_TTL,
+    AUDIO_STREAM_TTL
 )
 
 T = TypeVar("T")
@@ -197,6 +199,42 @@ class SoundbarState(BaseModel):
         }
 
 
+class ActiveAudioProducer(str, Enum):
+    """Authoritative semantic classification of the device actively producing audio."""
+    PC = "PC"
+    FIRE_TV = "FIRE_TV"
+    NONE = "NONE"
+    UNKNOWN = "UNKNOWN"
+
+
+class MediaPlaybackState(str, Enum):
+    """Authoritative semantic classification of media playback state."""
+    PLAYING = "PLAYING"
+    PAUSED = "PAUSED"
+    BUFFERING = "BUFFERING"
+    IDLE = "IDLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class AudioStreamState(BaseModel):
+    """
+    Authoritative Semantic Audio Stream & Producer State.
+    Captures live audio flow, media playback activity, and active audio route.
+    """
+    active_producer: StateField[str] = Field(default_factory=lambda: StateField.unknown("AUDIO_STREAM_UNINITIALIZED"))
+    playback_state: StateField[str] = Field(default_factory=lambda: StateField.unknown("AUDIO_STREAM_UNINITIALIZED"))
+    active_app_or_media_source: StateField[Optional[str]] = Field(default_factory=lambda: StateField.unknown("AUDIO_STREAM_UNINITIALIZED"))
+    soundbar_route_active: StateField[bool] = Field(default_factory=lambda: StateField.unknown("AUDIO_STREAM_UNINITIALIZED"))
+
+    def to_dict(self, current_time: Optional[float] = None) -> Dict[str, Any]:
+        return {
+            "active_producer": self.active_producer.to_dict(AUDIO_STREAM_TTL, current_time),
+            "playback_state": self.playback_state.to_dict(AUDIO_STREAM_TTL, current_time),
+            "active_app_or_media_source": self.active_app_or_media_source.to_dict(AUDIO_STREAM_TTL, current_time),
+            "soundbar_route_active": self.soundbar_route_active.to_dict(AUDIO_STREAM_TTL, current_time),
+        }
+
+
 class RoomEnvironmentState(BaseModel):
     """High-Level Room Environment & Mode Tracking."""
     room_mode: StateField[str] = Field(default_factory=lambda: StateField.unknown("ENVIRONMENT_UNINITIALIZED"))
@@ -226,6 +264,7 @@ class RoomState(BaseModel):
     pc: PcState = Field(default_factory=PcState)
     soundbar: SoundbarState = Field(default_factory=SoundbarState)
     environment: RoomEnvironmentState = Field(default_factory=RoomEnvironmentState)
+    audio_stream: AudioStreamState = Field(default_factory=AudioStreamState)
 
     def to_dict(self, current_time: Optional[float] = None) -> Dict[str, Any]:
         """Serializes RoomState to structured JSON-compliant dict with live provenance checks."""
@@ -239,6 +278,7 @@ class RoomState(BaseModel):
             "pc": self.pc.to_dict(now),
             "soundbar": self.soundbar.to_dict(now),
             "environment": self.environment.to_dict(now),
+            "audio_stream": self.audio_stream.to_dict(now),
         }
 
     def to_sanitized_prompt_dict(self, current_time: Optional[float] = None) -> Dict[str, Any]:

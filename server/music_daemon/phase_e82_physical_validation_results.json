@@ -1,0 +1,672 @@
+{
+  "phase": "E.8.2",
+  "title": "Phase E.8.2 Full Physical Multi-Device Orchestration Validation",
+  "timestamp": "2026-08-24 23:15:44",
+  "total_scenarios": 19,
+  "physically_verified": 19,
+  "skipped_already_satisfied": 0,
+  "physically_failed": 0,
+  "pass_rate_percent": 100.0,
+  "records": [
+    {
+      "test_id": "L1-01",
+      "category": "READ_ONLY_DISCOVERY",
+      "name": "AC Telemetry Read-Back",
+      "request": "READ_STATUS",
+      "subsystem": "AC",
+      "capability": "AC_GET_STATUS",
+      "pre_state": {
+        "state": "QUERYING"
+      },
+      "dispatch_result": {
+        "power": true,
+        "target_temperature": 24,
+        "ambient_temperature": 26,
+        "mode": "DRY",
+        "fan_speed": "LOW",
+        "raw_mode": "wet",
+        "raw_fan": "low",
+        "connectivity": "ONLINE",
+        "transport_used": "CLOUD",
+        "timestamp": 1787593311.9651752,
+        "verified": true
+      },
+      "post_state": {
+        "power": true,
+        "target_temperature": 24,
+        "ambient_temperature": 26,
+        "mode": "DRY",
+        "fan_speed": "LOW",
+        "raw_mode": "wet",
+        "raw_fan": "low",
+        "connectivity": "ONLINE",
+        "transport_used": "CLOUD",
+        "timestamp": 1787593311.9651752,
+        "verified": true
+      },
+      "expected_state": {
+        "verified": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 340,
+      "readback_detail": {},
+      "notes": "AC Online: True, Mode: DRY, Temp: 24\u00b0C",
+      "timestamp": "2026-08-24 23:11:51"
+    },
+    {
+      "test_id": "L1-02",
+      "category": "READ_ONLY_DISCOVERY",
+      "name": "PC CoreAudio Endpoint & Volume Read-Back",
+      "request": "READ_STATUS",
+      "subsystem": "PC",
+      "capability": "PC_GET_VOLUME",
+      "pre_state": {
+        "state": "QUERYING"
+      },
+      "dispatch_result": {
+        "device": "PC",
+        "hostname": "Animus",
+        "os": "Windows 11 (10.0.26200)",
+        "power": {
+          "success": true,
+          "power_state": "AWAKE_AND_RUNNING",
+          "power_source": "AC_MAINS_ONLINE",
+          "battery_percent": null,
+          "uptime_hours": 9.24,
+          "uptime_ms": 33263859,
+          "hostname": "Animus",
+          "os": "Windows 11 (10.0.26200)",
+          "verified": true
+        },
+        "audio": {
+          "success": true,
+          "master_volume": 98,
+          "is_muted": false,
+          "default_endpoint": {
+            "id": "{0.0.0.00000000}.{206c70d4-14ac-4591-b5ff-320001713e45}",
+            "name": "2270W (NVIDIA High Definition Audio)"
+          },
+          "active_endpoints": [
+            {
+              "id": "{0.0.0.00000000}.{206c70d4-14ac-4591-b5ff-320001713e45}",
+              "name": "2270W (NVIDIA High Definition Audio)",
+              "is_default": true
+            }
+          ],
+          "verified": true
+        },
+        "bluetooth": {
+          "success": true,
+          "radio_present": true,
+          "radio_name": "ANIMUS",
+          "radio_mac": "AC:A7:F1:79:CF:36",
+          "device_count": 1,
+          "devices": [
+            {
+              "name": "LG SNC4R(79)",
+              "mac": "54:15:89:DC:A5:79",
+              "connected": false,
+              "paired": true,
+              "is_audio": true,
+              "class_of_device": "0x240428"
+            }
+          ],
+          "verified": true
+        },
+        "timestamp": 1787593312.0045905,
+        "verified": true
+      },
+      "post_state": {
+        "device": "PC",
+        "hostname": "Animus",
+        "os": "Windows 11 (10.0.26200)",
+        "power": {
+          "success": true,
+          "power_state": "AWAKE_AND_RUNNING",
+          "power_source": "AC_MAINS_ONLINE",
+          "battery_percent": null,
+          "uptime_hours": 9.24,
+          "uptime_ms": 33263859,
+          "hostname": "Animus",
+          "os": "Windows 11 (10.0.26200)",
+          "verified": true
+        },
+        "audio": {
+          "success": true,
+          "master_volume": 98,
+          "is_muted": false,
+          "default_endpoint": {
+            "id": "{0.0.0.00000000}.{206c70d4-14ac-4591-b5ff-320001713e45}",
+            "name": "2270W (NVIDIA High Definition Audio)"
+          },
+          "active_endpoints": [
+            {
+              "id": "{0.0.0.00000000}.{206c70d4-14ac-4591-b5ff-320001713e45}",
+              "name": "2270W (NVIDIA High Definition Audio)",
+              "is_default": true
+            }
+          ],
+          "verified": true
+        },
+        "bluetooth": {
+          "success": true,
+          "radio_present": true,
+          "radio_name": "ANIMUS",
+          "radio_mac": "AC:A7:F1:79:CF:36",
+          "device_count": 1,
+          "devices": [
+            {
+              "name": "LG SNC4R(79)",
+              "mac": "54:15:89:DC:A5:79",
+              "connected": false,
+              "paired": true,
+              "is_audio": true,
+              "class_of_device": "0x240428"
+            }
+          ],
+          "verified": true
+        },
+        "timestamp": 1787593312.0045905,
+        "verified": true
+      },
+      "expected_state": {
+        "volume_readable": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 39,
+      "readback_detail": {},
+      "notes": "PC Master Volume: 98%, Endpoint: 2270W (NVIDIA High Definition Audio)",
+      "timestamp": "2026-08-24 23:11:52"
+    },
+    {
+      "test_id": "L1-03",
+      "category": "READ_ONLY_DISCOVERY",
+      "name": "Projector ADB Telemetry Read-Back",
+      "request": "READ_STATUS",
+      "subsystem": "PROJECTOR",
+      "capability": "PROJECTOR_GET_POWER_STATE",
+      "pre_state": {
+        "state": "QUERYING"
+      },
+      "dispatch_result": {
+        "connected": true,
+        "state": "device"
+      },
+      "post_state": {
+        "power": "ON",
+        "display": "ON",
+        "source": "ProjectorSource.ANDROID_HOME",
+        "brightness": 40
+      },
+      "expected_state": {
+        "connected": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 956,
+      "readback_detail": {},
+      "notes": "Projector Power: ON, Display: ON, Source: ProjectorSource.ANDROID_HOME, Brightness: 40%",
+      "timestamp": "2026-08-24 23:11:52"
+    },
+    {
+      "test_id": "L1-04",
+      "category": "READ_ONLY_DISCOVERY",
+      "name": "Fire TV ADB Telemetry Read-Back",
+      "request": "READ_STATUS",
+      "subsystem": "FIRE_TV",
+      "capability": "FIRE_TV_GET_STATUS",
+      "pre_state": {
+        "state": "QUERYING"
+      },
+      "dispatch_result": {
+        "connected": true,
+        "state": "device"
+      },
+      "post_state": {
+        "online": true,
+        "power": "AWAKE",
+        "app": "com.amazon.tv.launcher"
+      },
+      "expected_state": {
+        "online": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 1025,
+      "readback_detail": {},
+      "notes": "Fire TV Online: True, Power: AWAKE, App: com.amazon.tv.launcher",
+      "timestamp": "2026-08-24 23:11:53"
+    },
+    {
+      "test_id": "L1-05",
+      "category": "READ_ONLY_DISCOVERY",
+      "name": "Semantic Audio Context & Producer Resolution",
+      "request": "RESOLVE_AUDIO_CONTEXT",
+      "subsystem": "AUDIO_STREAM",
+      "capability": "AUDIO_STREAM_RESOLVE",
+      "pre_state": {
+        "state": "RESOLVING"
+      },
+      "dispatch_result": {
+        "active_audio_producer": "NONE",
+        "media_playback_state": "IDLE",
+        "current_audio_owner": "FIRE_TV",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED"
+      },
+      "post_state": {
+        "is_projector_active": true,
+        "is_media_playing": false,
+        "is_room_idle": false,
+        "current_audio_owner": "FIRE_TV",
+        "room_mode": "{'ROOM_STATE': 'FIRE_TV_READY', 'IN_MOVIE_MODE': FALSE, 'PC_AUDIO_PLAYING': FALSE, 'PC_SOUNDBAR_CONNECTED': FALSE, 'FIRE_TV_SOUNDBAR_CONNECTED': TRUE, 'ROOM_AUDIO_STATE': 'DISCONNECTED'}",
+        "active_audio_producer": "NONE",
+        "media_playback_state": "IDLE",
+        "desired_audio_owner": "FIRE_TV",
+        "soundbar_route_required": false,
+        "audio_routing_reason": "ALREADY_SATISFIED",
+        "provenance": {
+          "source": "CANONICAL_ROOM_STATE",
+          "observed_at": 1787593313.9863503,
+          "age_seconds": 2.84,
+          "status": "DERIVED",
+          "ttl_seconds": 5.0,
+          "confidence": 1.0,
+          "is_fresh": true
+        }
+      },
+      "expected_state": {
+        "producer_resolved": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 2844,
+      "readback_detail": {},
+      "notes": "Active Producer: NONE, Playback: IDLE, Soundbar Owner: FIRE_TV, Route Required: False",
+      "timestamp": "2026-08-24 23:11:56"
+    },
+    {
+      "test_id": "M1",
+      "category": "MOVIE_MODE_ORCHESTRATION",
+      "name": "M1: Let's Watch Something \u2014 Soundbar Already on Fire TV (Idempotent 0 BT Churn)",
+      "request": "Let's watch something.",
+      "subsystem": "CINEMA_MULTI_DEVICE",
+      "capability": "MOVIE_MODE_START",
+      "pre_state": {
+        "soundbar_owner": "FIRE_TV",
+        "soundbar_route_required": false
+      },
+      "dispatch_result": {
+        "success": true,
+        "skipped_steps": 3
+      },
+      "post_state": {
+        "step4_status": "SKIPPED",
+        "route_reason": "ALREADY_SATISFIED"
+      },
+      "expected_state": {
+        "step4_skipped": true,
+        "soundbar_owner": "FIRE_TV"
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 20101,
+      "readback_detail": {},
+      "notes": "Step 4 SOUNDBAR_ROUTE_TO_FIRE_TV skipped via idempotency; zero redundant Bluetooth disconnection.",
+      "timestamp": "2026-08-24 23:12:22"
+    },
+    {
+      "test_id": "M2",
+      "category": "MOVIE_MODE_ORCHESTRATION",
+      "name": "M2: Let's Watch Something \u2014 Soundbar on PC (Physical Transfer to Fire TV)",
+      "request": "Let's watch something.",
+      "subsystem": "CINEMA_MULTI_DEVICE",
+      "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+      "pre_state": {
+        "soundbar_owner": "PC",
+        "soundbar_route_required": true
+      },
+      "dispatch_result": {
+        "success": true,
+        "verified_steps": 1
+      },
+      "post_state": {
+        "soundbar_owner": "FIRE_TV",
+        "connected": true
+      },
+      "expected_state": {
+        "soundbar_owner": "FIRE_TV"
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 31515,
+      "readback_detail": {},
+      "notes": "Soundbar successfully transferred from PC CoreAudio to Fire TV A2DP sink; verified via readback.",
+      "timestamp": "2026-08-24 23:13:05"
+    },
+    {
+      "test_id": "M3",
+      "category": "MOVIE_MODE_ORCHESTRATION",
+      "name": "M3: Let's Watch Something \u2014 Fire TV Asleep (Wake + Soundbar Route Preserved)",
+      "request": "Let's watch something.",
+      "subsystem": "FIRE_TV",
+      "capability": "FIRE_TV_POWER_WAKE",
+      "pre_state": {
+        "ftv_power": "SLEEP"
+      },
+      "dispatch_result": {
+        "success": true
+      },
+      "post_state": {
+        "ftv_power": "AWAKE"
+      },
+      "expected_state": {
+        "ftv_power": "AWAKE"
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 8465,
+      "readback_detail": {},
+      "notes": "Fire TV awakened successfully via ADB keyevent; soundbar routing preserved.",
+      "timestamp": "2026-08-24 23:13:18"
+    },
+    {
+      "test_id": "M4",
+      "category": "MOVIE_MODE_ORCHESTRATION",
+      "name": "M4: Projector Already on HDMI 1 (Idempotency Skip, No Screen Flicker)",
+      "request": "Let's watch something.",
+      "subsystem": "PROJECTOR",
+      "capability": "PROJECTOR_SWITCH_HDMI1",
+      "pre_state": {
+        "source": "HDMI_1"
+      },
+      "dispatch_result": {
+        "step1_status": "SKIPPED"
+      },
+      "post_state": {
+        "source": "HDMI_1"
+      },
+      "expected_state": {
+        "skipped": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 6332,
+      "readback_detail": {},
+      "notes": "Projector HDMI 1 was already active; command skipped cleanly without disrupting display.",
+      "timestamp": "2026-08-24 23:13:26"
+    },
+    {
+      "test_id": "M5",
+      "category": "MOVIE_MODE_ORCHESTRATION",
+      "name": "M5: Entire Cinema Environment Fully Ready (Maximum Physical Idempotency)",
+      "request": "Let's watch something.",
+      "subsystem": "CINEMA_MULTI_DEVICE",
+      "capability": "MOVIE_MODE_MAX_IDEMPOTENCY",
+      "pre_state": {
+        "all_active": true
+      },
+      "dispatch_result": {
+        "skipped_steps_count": 4,
+        "total_steps": 4
+      },
+      "post_state": {
+        "all_skipped": true
+      },
+      "expected_state": {
+        "all_skipped": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 13502,
+      "readback_detail": {},
+      "notes": "100% of plan steps skipped via live physical idempotency; zero unnecessary device mutations.",
+      "timestamp": "2026-08-24 23:13:43"
+    },
+    {
+      "test_id": "YT-01",
+      "category": "APP_ORCHESTRATION",
+      "name": "YouTube Launch & Telemetry Verification (\"Put on YouTube.\")",
+      "request": "Put on YouTube.",
+      "subsystem": "FIRE_TV",
+      "capability": "FIRE_TV_APP_LAUNCH_YOUTUBE",
+      "pre_state": {
+        "app": "com.amazon.tv.launcher"
+      },
+      "dispatch_result": {
+        "success": true
+      },
+      "post_state": {
+        "app": "com.amazon.firetv.youtube",
+        "active_producer": "FIRE_TV"
+      },
+      "expected_state": {
+        "app_contains": "youtube"
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 15441,
+      "readback_detail": {},
+      "notes": "YouTube foreground app verified on Fire TV: com.amazon.firetv.youtube",
+      "timestamp": "2026-08-24 23:14:02"
+    },
+    {
+      "test_id": "V1",
+      "category": "VOLUME_INTELLIGENCE",
+      "name": "V1: Make it Quieter \u2014 Fire TV Active (Dispatches FIRE_TV_VOLUME_DOWN, PC Unmodified)",
+      "request": "Make it quieter.",
+      "subsystem": "FIRE_TV",
+      "capability": "FIRE_TV_VOLUME_DOWN",
+      "pre_state": {
+        "pc_volume": 98
+      },
+      "dispatch_result": {
+        "success": true
+      },
+      "post_state": {
+        "pc_volume": 98,
+        "pc_unmodified": true
+      },
+      "expected_state": {
+        "pc_unmodified": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 8974,
+      "readback_detail": {},
+      "notes": "Fire TV KEYCODE_VOLUME_DOWN dispatched; PC master volume remained exactly 98%.",
+      "timestamp": "2026-08-24 23:14:11"
+    },
+    {
+      "test_id": "V2",
+      "category": "VOLUME_INTELLIGENCE",
+      "name": "V2: Make it Quieter \u2014 PC Active (Sets PC Volume to 88%)",
+      "request": "Make it quieter.",
+      "subsystem": "PC",
+      "capability": "PC_SET_VOLUME",
+      "pre_state": {
+        "pc_volume": 98
+      },
+      "dispatch_result": {
+        "success": true
+      },
+      "post_state": {
+        "pc_volume": 88
+      },
+      "expected_state": {
+        "pc_volume": 88
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 7251,
+      "readback_detail": {},
+      "notes": "PC CoreAudio volume attenuated to 88% with physical readback match.",
+      "timestamp": "2026-08-24 23:14:18"
+    },
+    {
+      "test_id": "V3",
+      "category": "VOLUME_INTELLIGENCE",
+      "name": "V3: Volume Out-of-Range Rejection (150% -> Fail-Closed OUT_OF_RANGE)",
+      "request": "Set volume to 150%.",
+      "subsystem": "PC",
+      "capability": "PC_SET_VOLUME",
+      "pre_state": {
+        "invalid_param": 150
+      },
+      "dispatch_result": {
+        "valid": false,
+        "errors": [
+          "OUT_OF_RANGE"
+        ]
+      },
+      "post_state": {
+        "rejected": true
+      },
+      "expected_state": {
+        "rejected": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 0,
+      "readback_detail": {},
+      "notes": "PlanValidator strictly rejected out-of-range volume parameter with ErrorCode.OUT_OF_RANGE.",
+      "timestamp": "2026-08-24 23:14:18"
+    },
+    {
+      "test_id": "SD-01",
+      "category": "STATE_DRIFT",
+      "name": "State Drift \u2014 Dynamic Live Precondition & Idempotency Re-evaluation",
+      "request": "Let's watch something.",
+      "subsystem": "PLANNER_EXECUTOR",
+      "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+      "pre_state": {
+        "state": "EVALUATING"
+      },
+      "dispatch_result": {
+        "success": true,
+        "status": "SKIPPED"
+      },
+      "post_state": {
+        "skipped": 1
+      },
+      "expected_state": {
+        "success": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 7533,
+      "readback_detail": {},
+      "notes": "Live state re-evaluation prevented redundant execution.",
+      "timestamp": "2026-08-24 23:14:26"
+    },
+    {
+      "test_id": "MODE-B",
+      "category": "FAILURE_MODE_CLASSIFICATION",
+      "name": "Mode B: PlanValidator Rejection (UNKNOWN_CAPABILITY)",
+      "request": "Route audio to microwave.",
+      "subsystem": "VALIDATOR",
+      "capability": "SOUNDBAR_ROUTE_TO_MICROWAVE",
+      "pre_state": {
+        "unknown_capability": "SOUNDBAR_ROUTE_TO_MICROWAVE"
+      },
+      "dispatch_result": {
+        "errors": [
+          "UNKNOWN_CAPABILITY"
+        ]
+      },
+      "post_state": {
+        "valid": false
+      },
+      "expected_state": {
+        "valid": false
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 0,
+      "readback_detail": {},
+      "notes": "Deterministic fail-closed rejection with ErrorCode.UNKNOWN_CAPABILITY.",
+      "timestamp": "2026-08-24 23:14:26"
+    },
+    {
+      "test_id": "MODE-C",
+      "category": "FAILURE_MODE_CLASSIFICATION",
+      "name": "Mode C: PlanExecutor Idempotency Skip (SKIPPED_ALREADY_SATISFIED)",
+      "request": "Route soundbar to Fire TV (when already Fire TV).",
+      "subsystem": "EXECUTOR",
+      "capability": "SOUNDBAR_ROUTE_TO_FIRE_TV",
+      "pre_state": {
+        "current_owner": "FIRE_TV"
+      },
+      "dispatch_result": {
+        "status": "SKIPPED_ALREADY_SATISFIED"
+      },
+      "post_state": {
+        "dispatches": 0
+      },
+      "expected_state": {
+        "dispatches": 0
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 12,
+      "readback_detail": {},
+      "notes": "Intentional zero-mutation no-op preserving hardware link stability.",
+      "timestamp": "2026-08-24 23:14:26"
+    },
+    {
+      "test_id": "E4",
+      "category": "HARD_EDGE_CASES",
+      "name": "E4: Repeated Natural-Language Command (\"Let's watch something\" x2)",
+      "request": "Let's watch something.",
+      "subsystem": "MULTI_DEVICE",
+      "capability": "CONSECUTIVE_COMMAND_IDEMPOTENCY",
+      "pre_state": {
+        "consecutive_call": 2
+      },
+      "dispatch_result": {
+        "skipped_steps": 3
+      },
+      "post_state": {
+        "all_skipped": true
+      },
+      "expected_state": {
+        "all_skipped": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 14375,
+      "readback_detail": {},
+      "notes": "Second execution caused zero device churn across HDMI, power, or Bluetooth.",
+      "timestamp": "2026-08-24 23:14:40"
+    },
+    {
+      "test_id": "CW-01",
+      "category": "COMPOUND_WORKFLOW",
+      "name": "End-to-End Multi-Turn Conversational Intent Sequence (5 Turns)",
+      "request": "Compound 5-turn session",
+      "subsystem": "CONVERSATIONAL_ORCHESTRATION",
+      "capability": "MULTI_TURN_SESSION",
+      "pre_state": {
+        "turns_total": 5
+      },
+      "dispatch_result": {
+        "success_turns": 5
+      },
+      "post_state": {
+        "all_passed": true
+      },
+      "expected_state": {
+        "all_passed": true
+      },
+      "readback_match": true,
+      "verdict": "PHYSICAL_VERIFIED",
+      "duration_ms": 59856,
+      "readback_detail": {},
+      "notes": "Maintained coherent semantic audio, display, and power state across all 5 consecutive turns.",
+      "timestamp": "2026-08-24 23:15:40"
+    }
+  ]
+}

@@ -1,0 +1,210 @@
+{
+  "phase": "PHASE_F2_CONTINUOUS_AGENT_PHYSICAL_VALIDATION",
+  "total_scenarios": 20,
+  "passed_scenarios": 20,
+  "failed_scenarios": 0,
+  "pass_rate_pct": 100.0,
+  "total_conversational_turns": 72,
+  "results": [
+    {
+      "test_id": "L1-NL01",
+      "level": "Level 1",
+      "description": "Basic Natural-Language Device Control",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 35910.01,
+      "notes": "Understood natural phrasings and executed without syntax dependency.",
+      "details": {}
+    },
+    {
+      "test_id": "L2-FU01..03",
+      "level": "Level 2",
+      "description": "Generic Command + Follow-Up Intelligence",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 36446.28,
+      "notes": "Asked focused single-question follow-ups for cinema and relaxation.",
+      "details": {}
+    },
+    {
+      "test_id": "L3-C1",
+      "level": "Level 3",
+      "description": "Multi-Turn Conversation Flow (C1)",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 93478.67,
+      "notes": "5-turn conversational flow maintained context and resolved relative references.",
+      "details": {}
+    },
+    {
+      "test_id": "L4-REF",
+      "level": "Level 4",
+      "description": "Pronoun and Context Reference Testing",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 81578.36,
+      "notes": "Resolved 'it' to active YouTube playback and cinema display.",
+      "details": {}
+    },
+    {
+      "test_id": "L5-PREF",
+      "level": "Level 5",
+      "description": "User Preference Intelligence & AC Independence",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 26001.97,
+      "notes": "AC remained independent during movie request as per policy.",
+      "details": {}
+    },
+    {
+      "test_id": "L6-MEM",
+      "level": "Level 6",
+      "description": "9-Tier Memory Taxonomy & Fact Insulation",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 8589.57,
+      "notes": "Assumptions insulated from permanent facts with zero silent promotion.",
+      "details": {}
+    },
+    {
+      "test_id": "L7-ROUT",
+      "level": "Level 7",
+      "description": "Routine Intelligence Across Daily Cycle",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 26967.59,
+      "notes": "Morning brief, lunch trigger, and night routine recognized accurately.",
+      "details": {}
+    },
+    {
+      "test_id": "L8-TASK",
+      "level": "Level 8",
+      "description": "Task & Reminder Bookkeeping Lifecycle",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 18408.55,
+      "notes": "Task creation, due retrieval, and lifecycle management verified.",
+      "details": {}
+    },
+    {
+      "test_id": "L9-CAP",
+      "level": "Level 9",
+      "description": "Capability Awareness & Registry Queries",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 18276.24,
+      "notes": "Capability introspection and truthful unsupported explanations verified.",
+      "details": {}
+    },
+    {
+      "test_id": "L10-SESS",
+      "level": "Level 10",
+      "description": "Continuous Multi-Device Session (8 Turns)",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 139479.54,
+      "notes": "8-turn continuous session executed with zero context loss.",
+      "details": {}
+    },
+    {
+      "test_id": "L11-INT",
+      "level": "Level 11",
+      "description": "Interruption & Topic Switching",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 77428.31,
+      "notes": "Topic switch from entertainment follow-up to task creation handled cleanly.",
+      "details": {}
+    },
+    {
+      "test_id": "L12-FOLL",
+      "level": "Level 12",
+      "description": "Follow-Up Interruption Handling",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 18414.72,
+      "notes": "Follow-up question superseded without accidental device launch.",
+      "details": {}
+    },
+    {
+      "test_id": "L13-RECOV",
+      "level": "Level 13",
+      "description": "Failure + Recovery & Truthful Feedback",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 9146.04,
+      "notes": "Refused out-of-bounds command safely without false success claim.",
+      "details": {}
+    },
+    {
+      "test_id": "L14-DRIFT",
+      "level": "Level 14",
+      "description": "Planning -> Execution State Drift Adaptation",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 33908.25,
+      "notes": "State drift dynamically evaluated against fresh RoomState (SKIPPED redundant step).",
+      "details": {}
+    },
+    {
+      "test_id": "L15-REP",
+      "level": "Level 15",
+      "description": "Repeated Natural Commands Zero-Churn Audit",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 117486.85,
+      "notes": "Repeated identical commands produced zero hardware churn on repeated turns.",
+      "details": {}
+    },
+    {
+      "test_id": "L16-PERS",
+      "level": "Level 16",
+      "description": "Personality & Behavioral Constraints",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 9474.86,
+      "notes": "Natural addressing as 'buddy' without robotic repetition or name overuse.",
+      "details": {}
+    },
+    {
+      "test_id": "L17-LOOP",
+      "level": "Level 17",
+      "description": "Complete Daily Agent Loop (8 Phases)",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 90833.41,
+      "notes": "Complete 8-phase daily agent loop executed seamlessly.",
+      "details": {}
+    },
+    {
+      "test_id": "L18-AUDIT",
+      "level": "Level 18",
+      "description": "Bookkeeping & State Consistency Audit",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 0.02,
+      "notes": "Memory, tasks, and physical state are mutually consistent with 0 contradictions.",
+      "details": {}
+    },
+    {
+      "test_id": "L19-LONG",
+      "level": "Level 19",
+      "description": "20-Turn Continuous Conversational Session",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 236828.56,
+      "notes": "20-turn continuous conversational session executed with 100% coherence.",
+      "details": {}
+    },
+    {
+      "test_id": "L20-REST",
+      "level": "Level 20",
+      "description": "Final Physical Baseline Restoration",
+      "passed": true,
+      "classification": "SUCCESS_VERIFIED",
+      "duration_ms": 5390.07,
+      "notes": "Dynamic initial run baseline restored non-destructively and read back verified.",
+      "details": {}
+    }
+  ]
+}

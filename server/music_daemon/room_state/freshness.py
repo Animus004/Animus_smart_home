@@ -43,6 +43,7 @@ PC_BT_TTL = 3.0                  # Windows 64-bit BluetoothApis
 SOUNDBAR_OWNER_TTL = 3.0         # Joint PC/Fire TV routing derivation
 SOUNDBAR_CONNECTED_TTL = 3.0     # A2DP sink connection state
 ENVIRONMENT_MODE_TTL = 5.0       # Orchestrator state
+AUDIO_STREAM_TTL = 5.0           # Semantic audio stream & active producer state
 
 
 def is_fresh(observed_at: float, ttl_seconds: float, current_time: Optional[float] = None) -> bool:

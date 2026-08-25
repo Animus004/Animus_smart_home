@@ -401,6 +401,16 @@ class PlanExecutor:
             owner = state.soundbar.current_owner
             return owner.effective_provenance(5.0, now) in (Provenance.OBSERVED, Provenance.DERIVED) and str(owner.value).upper() == "PC"
 
+        # Fire TV Power Wake
+        if cid == "FIRE_TV_POWER_WAKE":
+            p = state.fire_tv.power_state
+            return p.effective_provenance(10.0, now) in (Provenance.OBSERVED, Provenance.DERIVED) and str(p.value).upper() == "AWAKE"
+
+        # Fire TV Power Sleep
+        if cid == "FIRE_TV_POWER_SLEEP":
+            p = state.fire_tv.power_state
+            return p.effective_provenance(10.0, now) in (Provenance.OBSERVED, Provenance.DERIVED) and str(p.value).upper() in ("SLEEP", "STANDBY", "ASLEEP")
+
         return False
 
     # =========================================================================
@@ -775,11 +785,30 @@ class PlanExecutor:
             return False, {"error": "SmartRoomOrchestrator unavailable"}
 
         if cid == "SOUNDBAR_ROUTE_TO_FIRE_TV":
-            return self.orchestrator.transfer_audio_to_fire_tv()
+            fn = getattr(self.orchestrator, "transfer_audio_to_fire_tv", None) or getattr(self.orchestrator, "route_audio_to_fire_tv", None)
+            if callable(fn):
+                res = fn()
+                if isinstance(res, dict):
+                    return res.get("success", True), res
+                elif isinstance(res, tuple):
+                    return res[0], ({"state": res[1].value} if hasattr(res[1], "value") else {"result": res[1]})
+                return bool(res), {"result": res}
+            return False, {"error": "transfer_audio_to_fire_tv / route_audio_to_fire_tv unavailable on orchestrator"}
         elif cid == "SOUNDBAR_ROUTE_TO_PC":
-            return self.orchestrator.restore_audio_to_pc()
+            fn = getattr(self.orchestrator, "restore_audio_to_pc", None) or getattr(self.orchestrator, "route_audio_to_pc", None)
+            if callable(fn):
+                res = fn()
+                if isinstance(res, dict):
+                    return res.get("success", True), res
+                elif isinstance(res, tuple):
+                    return res[0], ({"state": res[1].value} if hasattr(res[1], "value") else {"result": res[1]})
+                return bool(res), {"result": res}
+            return False, {"error": "restore_audio_to_pc / route_audio_to_pc unavailable on orchestrator"}
         elif cid == "SOUNDBAR_GET_OWNERSHIP":
-            return True, self.orchestrator.get_audio_ownership()
+            fn = getattr(self.orchestrator, "get_audio_ownership", None) or getattr(self.orchestrator, "get_room_state", None)
+            if callable(fn):
+                return True, fn()
+            return True, {"owner": "UNKNOWN"}
 
         return False, {"error": f"Unhandled soundbar capability '{cid}'"}
 

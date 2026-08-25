@@ -898,12 +898,16 @@ class SmartRoomOrchestrator:
             return {"success": ok, "method": method, "target": "FIRE_TV"}
         return {"success": False, "error": "Fire TV uninitialized"}
 
+    transfer_audio_to_fire_tv = route_audio_to_fire_tv
+
     # 13. RouteAudioToPC
     def route_audio_to_pc(self) -> Dict[str, Any]:
         if self.fire_tv:
             self.fire_tv.disconnect_soundbar(timeout_seconds=3.0)
         ok, state, msg = self.connect_soundbar(timeout_seconds=12.0)
         return {"success": ok, "room_audio_state": state.value, "target": "PC"}
+
+    restore_audio_to_pc = route_audio_to_pc
 
     # 14. RecoverSoundbarConnection
     def recover_soundbar_connection(self, target: str = "PC") -> Dict[str, Any]:
