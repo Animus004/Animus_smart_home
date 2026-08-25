@@ -1,22 +1,22 @@
 {
   "phase": "PHASE_F3_REAL_WORLD_AGENT_SIMULATION",
-  "execution_timestamp": "2026-08-25 11:00:30",
+  "execution_timestamp": "2026-08-25 16:10:21",
   "total_turns": 45,
-  "passed_turns": 45,
+  "passed_turns": 40,
   "failed_turns": 0,
-  "critical_turns": 0,
-  "unauthorized_mutations_count": 0,
-  "pass_rate_pct": 100.0,
-  "overall_quality_verdict": "PASS",
+  "critical_turns": 5,
+  "unauthorized_mutations_count": 6,
+  "pass_rate_pct": 88.89,
+  "overall_quality_verdict": "CRITICAL_FAILURE",
   "turns": [
     {
       "session_id": "session_a",
       "session_name": "Morning",
       "turn_number": 1,
-      "timestamp": 1787635231.8025398,
-      "duration_ms": 5886.66,
+      "timestamp": 1787653659.1448312,
+      "duration_ms": 14092.31,
       "user_message": "Buddy, I'm up.",
-      "agent_response": "Good morning, buddy! Here's your briefing for today:\n\nToday's Priorities:\n  1. Work session begins after 11:00\n  2. Daily focus: learn SQL\n  3. Guitar practice session planned for ~17:00\n\nPending Tasks (5 items):\n  - Learn and practice SQL [HIGH]\n  - Work deliverables & development [HIGH]\n  - Check server logs [HIGH]\n  - Guitar practice session [MEDIUM]\n  ... and 1 more\n\nScheduled Reminders:\n  - Review window functions at 12:50\n  - Practice guitar at 11:50\n  - Check server logs at 10:50\n\nWould you like me to put on some morning motivation music to start the day?",
+      "agent_response": "Good morning, buddy! Here's your briefing for today:\n\nToday's Priorities:\n  1. Work session begins after 11:00\n  2. Daily focus: learn SQL\n  3. Guitar practice session planned for ~17:00\n\nPending Tasks (4 items):\n  - Learn and practice SQL [HIGH]\n  - Work deliverables & development [HIGH]\n  - Guitar practice session [MEDIUM]\n  - Practice guitar [MEDIUM]\n\nScheduled Reminders:\n  - Practice guitar at 16:57\n\nWould you like me to put on some morning motivation music to start the day?",
       "understood_intent": "MORNING_ROUTINE_BRIEF",
       "expected_intents": [
         "MORNING_ROUTINE_BRIEF"
@@ -30,9 +30,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -50,7 +50,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -59,9 +59,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -79,7 +79,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -98,10 +98,10 @@
       "session_id": "session_a",
       "session_name": "Morning",
       "turn_number": 2,
-      "timestamp": 1787635240.8970933,
-      "duration_ms": 6079.95,
+      "timestamp": 1787653680.473887,
+      "duration_ms": 14067.06,
       "user_message": "What's on my plate today?",
-      "agent_response": "Here is what's on your agenda, buddy:\n1. Learn and practice SQL (HIGH priority)\n2. Work deliverables & development (HIGH priority)\n3. Check server logs (HIGH priority)\n4. Guitar practice session (MEDIUM priority)\n5. Practice guitar (MEDIUM priority)",
+      "agent_response": "Here is what's on your agenda, buddy:\n1. Learn and practice SQL (HIGH priority)\n2. Work deliverables & development (HIGH priority)\n3. Guitar practice session (MEDIUM priority)\n4. Practice guitar (MEDIUM priority)",
       "understood_intent": "TASK_SCHEDULE_QUERY",
       "expected_intents": [
         "TASK_SCHEDULE_QUERY"
@@ -115,9 +115,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -135,7 +135,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -144,9 +144,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -164,7 +164,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -183,8 +183,8 @@
       "session_id": "session_a",
       "session_name": "Morning",
       "turn_number": 3,
-      "timestamp": 1787635250.1249342,
-      "duration_ms": 6248.58,
+      "timestamp": 1787653701.7838748,
+      "duration_ms": 14446.84,
       "user_message": "Put on something to get me moving.",
       "agent_response": "Playing some morning motivation music for you, buddy!",
       "understood_intent": "PLAY_MUSIC",
@@ -200,9 +200,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -220,7 +220,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -229,9 +229,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -249,7 +249,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -268,8 +268,8 @@
       "session_id": "session_a",
       "session_name": "Morning",
       "turn_number": 4,
-      "timestamp": 1787635259.410016,
-      "duration_ms": 6001.19,
+      "timestamp": 1787653723.6019504,
+      "duration_ms": 13898.51,
       "user_message": "Make it a little louder.",
       "agent_response": "Sure buddy \u2014 are you listening on the Fire TV or the PC?",
       "understood_intent": "ADJUST_VOLUME_AMBIGUOUS",
@@ -286,9 +286,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -306,7 +306,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -315,9 +315,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -335,7 +335,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -354,8 +354,8 @@
       "session_id": "session_a",
       "session_name": "Morning",
       "turn_number": 5,
-      "timestamp": 1787635268.6553411,
-      "duration_ms": 6472.69,
+      "timestamp": 1787653744.654626,
+      "duration_ms": 14036.69,
       "user_message": "I'm heading to my desk.",
       "agent_response": "Noted, buddy \u2014 heading to your desk.",
       "understood_intent": "USER_LOCATION_UPDATE",
@@ -371,9 +371,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -391,7 +391,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -400,9 +400,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -420,7 +420,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -439,8 +439,8 @@
       "session_id": "session_b",
       "session_name": "Work Session",
       "turn_number": 6,
-      "timestamp": 1787635278.3252988,
-      "duration_ms": 5872.25,
+      "timestamp": 1787653765.7659583,
+      "duration_ms": 13927.51,
       "user_message": "I need to start working.",
       "agent_response": "Focus mode active, buddy. I'll minimize interruptions so you can focus on SQL.",
       "understood_intent": "ENTER_WORK_FOCUS_MODE",
@@ -456,9 +456,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -476,7 +476,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -485,9 +485,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -505,7 +505,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -524,8 +524,8 @@
       "session_id": "session_b",
       "session_name": "Work Session",
       "turn_number": 7,
-      "timestamp": 1787635287.3120582,
-      "duration_ms": 15803.03,
+      "timestamp": 1787653786.7135444,
+      "duration_ms": 37848.53,
       "user_message": "Set the AC to 24.",
       "agent_response": "All set, buddy \u2014 I've prepared AC power on. (the AC to 24\u00b0C was already in place).",
       "understood_intent": "GENERAL_ROOM_COMMAND",
@@ -540,13 +540,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "6397916a-aaf1-4238-86ac-622180f32743",
-        "plan_id": "ca1e25fe-36c9-47fa-96a7-4fd4454fe6a2",
+        "execution_id": "f718286e-e790-434f-bc4f-caef25f199ed",
+        "plan_id": "3e869dab-70c1-4e38-b6a0-f29544c5a405",
         "user_request": "Set the AC to 24.",
         "intent": "SET_AC_TEMPERATURE",
-        "started_at": 1787635293.2161198,
-        "completed_at": 1787635303.1130862,
-        "duration_ms": 9896.97,
+        "started_at": 1787653800.4630258,
+        "completed_at": 1787653824.559917,
+        "duration_ms": 24096.89,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 2,
@@ -562,8 +562,8 @@
             "capability_id": "AC_POWER_ON",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635293.2161229,
-            "completed_at": 1787635300.448761,
+            "started_at": 1787653800.4630296,
+            "completed_at": 1787653817.8579333,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -575,7 +575,7 @@
             "readback_result": {
               "matched": true,
               "observed": true,
-              "verification_time": 3.109
+              "verification_time": 6.972
             },
             "verified": true,
             "error_code": null,
@@ -589,8 +589,8 @@
               "temperature": 24
             },
             "status": "SKIPPED",
-            "started_at": 1787635300.4487917,
-            "completed_at": 1787635303.1130574,
+            "started_at": 1787653817.857972,
+            "completed_at": 1787653824.559881,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -604,9 +604,9 @@
       },
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -624,7 +624,7 @@
         "ac": {
           "power": false,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -633,9 +633,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -653,7 +653,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -672,8 +672,8 @@
       "session_id": "session_b",
       "session_name": "Work Session",
       "turn_number": 8,
-      "timestamp": 1787635306.2492247,
-      "duration_ms": 5855.18,
+      "timestamp": 1787653831.766128,
+      "duration_ms": 14114.4,
       "user_message": "Make it quieter.",
       "agent_response": "Sure buddy \u2014 are you listening on the Fire TV or the PC?",
       "understood_intent": "ADJUST_VOLUME_AMBIGUOUS",
@@ -691,9 +691,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -711,7 +711,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -720,9 +720,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -740,7 +740,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -759,8 +759,8 @@
       "session_id": "session_b",
       "session_name": "Work Session",
       "turn_number": 9,
-      "timestamp": 1787635315.1360047,
-      "duration_ms": 5477.43,
+      "timestamp": 1787653852.959713,
+      "duration_ms": 13899.9,
       "user_message": "Quiet mode please.",
       "agent_response": "Got it, buddy.",
       "understood_intent": "GENERAL_ROOM_COMMAND",
@@ -778,9 +778,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -798,7 +798,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -807,9 +807,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -827,7 +827,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -846,8 +846,8 @@
       "session_id": "session_b",
       "session_name": "Work Session",
       "turn_number": 10,
-      "timestamp": 1787635323.5133219,
-      "duration_ms": 6314.19,
+      "timestamp": 1787653873.932196,
+      "duration_ms": 13662.33,
       "user_message": "Can you adjust the bedroom fan?",
       "agent_response": "I can't control the fan yet, buddy. I can control the Projector, Fire TV, LG Soundbar, PC Audio, and AC.",
       "understood_intent": "UNSUPPORTED_DEVICE_CONTROL",
@@ -863,9 +863,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -883,7 +883,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -892,9 +892,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -912,7 +912,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -931,8 +931,8 @@
       "session_id": "session_c",
       "session_name": "SQL Learning",
       "turn_number": 11,
-      "timestamp": 1787635332.8426502,
-      "duration_ms": 5616.8,
+      "timestamp": 1787653894.7301083,
+      "duration_ms": 14012.06,
       "user_message": "Time to focus on SQL.",
       "agent_response": "Focus mode active, buddy. I'll minimize interruptions so you can focus on SQL.",
       "understood_intent": "ENTER_WORK_FOCUS_MODE",
@@ -948,9 +948,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -968,7 +968,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -977,9 +977,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -997,7 +997,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1016,8 +1016,8 @@
       "session_id": "session_c",
       "session_name": "SQL Learning",
       "turn_number": 12,
-      "timestamp": 1787635341.4968712,
-      "duration_ms": 5992.39,
+      "timestamp": 1787653915.9602118,
+      "duration_ms": 14191.99,
       "user_message": "Remind me to review window functions.",
       "agent_response": "Got it, buddy \u2014 I'll remind you to 'Review window functions'.",
       "understood_intent": "BOOKKEEPING_REQUEST",
@@ -1033,9 +1033,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -1053,7 +1053,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1062,9 +1062,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -1082,7 +1082,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1101,8 +1101,8 @@
       "session_id": "session_c",
       "session_name": "SQL Learning",
       "turn_number": 13,
-      "timestamp": 1787635350.5195737,
-      "duration_ms": 5652.74,
+      "timestamp": 1787653937.4639332,
+      "duration_ms": 22056.74,
       "user_message": "Actually remind me after lunch.",
       "agent_response": "Got it, buddy \u2014 I've updated your reminder for 'Review window functions' to after lunch.",
       "understood_intent": "BOOKKEEPING_REQUEST",
@@ -1118,9 +1118,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -1138,7 +1138,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1147,9 +1147,9 @@
       },
       "physical_after": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -1167,7 +1167,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1186,8 +1186,8 @@
       "session_id": "session_c",
       "session_name": "SQL Learning",
       "turn_number": 14,
-      "timestamp": 1787635359.196012,
-      "duration_ms": 5682.17,
+      "timestamp": 1787653966.6541078,
+      "duration_ms": 13807.11,
       "user_message": "What did I just add?",
       "agent_response": "You just added a reminder to 'Review window functions', buddy.",
       "understood_intent": "TASK_SCHEDULE_QUERY",
@@ -1203,9 +1203,9 @@
       "execution_summary": null,
       "physical_before": {
         "projector": {
-          "power": true,
-          "source": "ANDROID_HOME",
-          "brightness": 40
+          "power": false,
+          "source": "UNKNOWN",
+          "brightness": 0
         },
         "fire_tv": {
           "power": "AWAKE",
@@ -1223,7 +1223,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1233,7 +1233,7 @@
       "physical_after": {
         "projector": {
           "power": true,
-          "source": "ANDROID_HOME",
+          "source": "HDMI_1",
           "brightness": 40
         },
         "fire_tv": {
@@ -1252,27 +1252,33 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
           "playback_state": "IDLE"
         }
       },
-      "physical_mutations": [],
-      "unauthorized_mutations": [],
-      "mutation_authorized": true,
+      "physical_mutations": [
+        "Projector Power: False -> True",
+        "Projector Source: UNKNOWN -> HDMI_1"
+      ],
+      "unauthorized_mutations": [
+        "Projector Power: False -> True",
+        "Projector Source: UNKNOWN -> HDMI_1"
+      ],
+      "mutation_authorized": false,
       "readback_verified": true,
       "response_truthful": true,
-      "verdict": "PASS",
-      "verdict_reason": "Empirical physical evidence, intent, follow-up, and response verified"
+      "verdict": "CRITICAL",
+      "verdict_reason": "Unauthorized physical mutations observed: Projector Power: False -> True, Projector Source: UNKNOWN -> HDMI_1"
     },
     {
       "session_id": "session_c",
       "session_name": "SQL Learning",
       "turn_number": 15,
-      "timestamp": 1787635367.7661295,
-      "duration_ms": 5948.73,
+      "timestamp": 1787653986.4551766,
+      "duration_ms": 6961.27,
       "user_message": "Okay, focusing now.",
       "agent_response": "Got it, buddy \u2014 good luck with your focus session!",
       "understood_intent": "CONVERSATIONAL_ACK",
@@ -1289,7 +1295,7 @@
       "physical_before": {
         "projector": {
           "power": true,
-          "source": "ANDROID_HOME",
+          "source": "HDMI_1",
           "brightness": 40
         },
         "fire_tv": {
@@ -1308,7 +1314,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1318,7 +1324,7 @@
       "physical_after": {
         "projector": {
           "power": true,
-          "source": "ANDROID_HOME",
+          "source": "HDMI_1",
           "brightness": 40
         },
         "fire_tv": {
@@ -1337,7 +1343,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1356,8 +1362,8 @@
       "session_id": "session_d",
       "session_name": "Lunch Transition",
       "turn_number": 16,
-      "timestamp": 1787635376.5734332,
-      "duration_ms": 5767.91,
+      "timestamp": 1787653996.4932408,
+      "duration_ms": 7045.41,
       "user_message": "I had lunch.",
       "agent_response": "Lunch done, buddy? Want to do a quick guitar session, or get back into SQL?",
       "understood_intent": "LUNCH_COMPLETED_TRIGGER",
@@ -1374,7 +1380,7 @@
       "physical_before": {
         "projector": {
           "power": true,
-          "source": "ANDROID_HOME",
+          "source": "HDMI_1",
           "brightness": 40
         },
         "fire_tv": {
@@ -1393,7 +1399,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1422,27 +1428,31 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
           "playback_state": "IDLE"
         }
       },
-      "physical_mutations": [],
-      "unauthorized_mutations": [],
-      "mutation_authorized": true,
+      "physical_mutations": [
+        "Projector Source: HDMI_1 -> ANDROID_HOME"
+      ],
+      "unauthorized_mutations": [
+        "Projector Source: HDMI_1 -> ANDROID_HOME"
+      ],
+      "mutation_authorized": false,
       "readback_verified": true,
       "response_truthful": true,
-      "verdict": "PASS",
-      "verdict_reason": "Empirical physical evidence, intent, follow-up, and response verified"
+      "verdict": "CRITICAL",
+      "verdict_reason": "Unauthorized physical mutations observed: Projector Source: HDMI_1 -> ANDROID_HOME"
     },
     {
       "session_id": "session_d",
       "session_name": "Lunch Transition",
       "turn_number": 17,
-      "timestamp": 1787635385.3241994,
-      "duration_ms": 5653.48,
+      "timestamp": 1787654007.9113479,
+      "duration_ms": 5965.24,
       "user_message": "What was I supposed to do after lunch?",
       "agent_response": "After lunch, you're scheduled to: Review window functions, buddy.",
       "understood_intent": "TASK_SCHEDULE_QUERY",
@@ -1478,7 +1488,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1507,7 +1517,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1526,8 +1536,8 @@
       "session_id": "session_d",
       "session_name": "Lunch Transition",
       "turn_number": 18,
-      "timestamp": 1787635394.0677652,
-      "duration_ms": 5639.42,
+      "timestamp": 1787654016.6157553,
+      "duration_ms": 7339.82,
       "user_message": "Let's do SQL for 30 minutes.",
       "agent_response": "Starting a 30-minute SQL focus session, buddy. Focus mode active!",
       "understood_intent": "START_FOCUS_SESSION",
@@ -1563,7 +1573,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1592,7 +1602,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1611,8 +1621,8 @@
       "session_id": "session_d",
       "session_name": "Lunch Transition",
       "turn_number": 19,
-      "timestamp": 1787635402.8453817,
-      "duration_ms": 5910.28,
+      "timestamp": 1787654027.5798404,
+      "duration_ms": 6403.06,
       "user_message": "Mark window functions as done.",
       "agent_response": "I've marked 'Review window functions' as completed, buddy.",
       "understood_intent": "COMPLETE_TASK",
@@ -1648,7 +1658,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1677,7 +1687,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1696,8 +1706,8 @@
       "session_id": "session_d",
       "session_name": "Lunch Transition",
       "turn_number": 20,
-      "timestamp": 1787635411.719792,
-      "duration_ms": 5518.76,
+      "timestamp": 1787654036.6926908,
+      "duration_ms": 5263.69,
       "user_message": "Great, that's done.",
       "agent_response": "Awesome job, buddy!",
       "understood_intent": "CONVERSATIONAL_ACK",
@@ -1733,7 +1743,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1762,7 +1772,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1781,10 +1791,10 @@
       "session_id": "session_e",
       "session_name": "Afternoon Guitar",
       "turn_number": 21,
-      "timestamp": 1787635420.431453,
-      "duration_ms": 5658.46,
+      "timestamp": 1787654044.6432226,
+      "duration_ms": 5181.85,
       "user_message": "Remind me to practice guitar at 5.",
-      "agent_response": "Got it, buddy \u2014 you already have a reminder scheduled for 'Practice guitar' at 11:50.",
+      "agent_response": "Got it, buddy \u2014 you already have a reminder scheduled for 'Practice guitar' at 16:57.",
       "understood_intent": "BOOKKEEPING_REQUEST",
       "expected_intents": [
         "BOOKKEEPING_REQUEST"
@@ -1818,7 +1828,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1847,7 +1857,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1866,10 +1876,10 @@
       "session_id": "session_e",
       "session_name": "Afternoon Guitar",
       "turn_number": 22,
-      "timestamp": 1787635429.237189,
-      "duration_ms": 6176.06,
+      "timestamp": 1787654052.5157776,
+      "duration_ms": 5077.03,
       "user_message": "Remind me about guitar.",
-      "agent_response": "Got it, buddy \u2014 you already have a reminder scheduled for 'Practice guitar' at 11:50.",
+      "agent_response": "Got it, buddy \u2014 you already have a reminder scheduled for 'Practice guitar' at 16:57.",
       "understood_intent": "BOOKKEEPING_REQUEST",
       "expected_intents": [
         "BOOKKEEPING_REQUEST"
@@ -1903,7 +1913,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1932,7 +1942,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -1951,8 +1961,8 @@
       "session_id": "session_e",
       "session_name": "Afternoon Guitar",
       "turn_number": 23,
-      "timestamp": 1787635438.512685,
-      "duration_ms": 5870.54,
+      "timestamp": 1787654060.268639,
+      "duration_ms": 5083.16,
       "user_message": "I'm practicing guitar now.",
       "agent_response": "Enjoy your guitar practice, buddy!",
       "understood_intent": "USER_STATE_UPDATE",
@@ -1988,7 +1998,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2017,7 +2027,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2036,8 +2046,8 @@
       "session_id": "session_e",
       "session_name": "Afternoon Guitar",
       "turn_number": 24,
-      "timestamp": 1787635447.4505105,
-      "duration_ms": 5472.55,
+      "timestamp": 1787654068.1440408,
+      "duration_ms": 4979.88,
       "user_message": "Did I finish my guitar practice on the list?",
       "agent_response": "Your guitar practice session is still pending on your list, buddy.",
       "understood_intent": "TASK_SCHEDULE_QUERY",
@@ -2073,7 +2083,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2102,7 +2112,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2121,8 +2131,8 @@
       "session_id": "session_e",
       "session_name": "Afternoon Guitar",
       "turn_number": 25,
-      "timestamp": 1787635456.1098888,
-      "duration_ms": 14994.81,
+      "timestamp": 1787654075.7402978,
+      "duration_ms": 13943.32,
       "user_message": "Set AC to 25.",
       "agent_response": "All set, buddy \u2014 I've prepared the AC to 25\u00b0C. (AC power on was already in place).",
       "understood_intent": "GENERAL_ROOM_COMMAND",
@@ -2137,13 +2147,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "b3e481d7-ac8f-46c4-bd29-2e4a50aec1d3",
-        "plan_id": "b1e611e0-955c-4371-b29a-ebe4d0610f3c",
+        "execution_id": "e8df371c-3439-415a-8c2f-ac951b560210",
+        "plan_id": "f1fb387f-43fb-4fe1-965d-ee71db5fc6a5",
         "user_request": "Set AC to 25.",
         "intent": "SET_AC_TEMPERATURE",
-        "started_at": 1787635461.7865162,
-        "completed_at": 1787635471.1025438,
-        "duration_ms": 9316.03,
+        "started_at": 1787654080.956494,
+        "completed_at": 1787654089.6811597,
+        "duration_ms": 8724.67,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 2,
@@ -2159,8 +2169,8 @@
             "capability_id": "AC_POWER_ON",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635461.7865186,
-            "completed_at": 1787635464.3293376,
+            "started_at": 1787654080.956497,
+            "completed_at": 1787654083.3929737,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2178,13 +2188,13 @@
               "temperature": 25
             },
             "status": "VERIFIED",
-            "started_at": 1787635464.329369,
-            "completed_at": 1787635471.1025183,
+            "started_at": 1787654083.3930159,
+            "completed_at": 1787654089.6811216,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
               "target_temperature": 25,
-              "ambient_temperature": 31,
+              "ambient_temperature": 26,
               "transport": "CLOUD",
               "verified": true,
               "message": "Target temperature set to 25\u00b0C (verified read-back)."
@@ -2192,7 +2202,7 @@
             "readback_result": {
               "matched": true,
               "observed": 25,
-              "verification_time": 2.769
+              "verification_time": 2.326
             },
             "verified": true,
             "error_code": null,
@@ -2222,7 +2232,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2251,7 +2261,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2272,8 +2282,8 @@
       "session_id": "session_f",
       "session_name": "Evening Mood",
       "turn_number": 26,
-      "timestamp": 1787635474.1119606,
-      "duration_ms": 5678.59,
+      "timestamp": 1787654092.4122212,
+      "duration_ms": 5143.67,
       "user_message": "I'm exhausted buddy.",
       "agent_response": "You've had a busy day, buddy. Want some music, a movie, or just a quiet room, buddy?",
       "understood_intent": "USER_MOOD_STATEMENT",
@@ -2299,8 +2309,8 @@
           "soundbar_connected": false
         },
         "soundbar": {
-          "current_owner": "NONE",
-          "is_connected": false
+          "current_owner": "PC",
+          "is_connected": true
         },
         "pc": {
           "volume": 20,
@@ -2309,7 +2319,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2338,27 +2348,31 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
           "playback_state": "IDLE"
         }
       },
-      "physical_mutations": [],
-      "unauthorized_mutations": [],
-      "mutation_authorized": true,
+      "physical_mutations": [
+        "Soundbar Owner: PC -> NONE"
+      ],
+      "unauthorized_mutations": [
+        "Soundbar Owner: PC -> NONE"
+      ],
+      "mutation_authorized": false,
       "readback_verified": true,
       "response_truthful": true,
-      "verdict": "PASS",
-      "verdict_reason": "Empirical physical evidence, intent, follow-up, and response verified"
+      "verdict": "CRITICAL",
+      "verdict_reason": "Unauthorized physical mutations observed: Soundbar Owner: PC -> NONE"
     },
     {
       "session_id": "session_f",
       "session_name": "Evening Mood",
       "turn_number": 27,
-      "timestamp": 1787635482.812864,
-      "duration_ms": 5794.67,
+      "timestamp": 1787654100.2106001,
+      "duration_ms": 5150.61,
       "user_message": "I want something relaxing.",
       "agent_response": "Want some music, a movie, or just a quiet room, buddy?",
       "understood_intent": "RELAXATION_INTENT",
@@ -2394,7 +2408,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2413,8 +2427,8 @@
           "soundbar_connected": false
         },
         "soundbar": {
-          "current_owner": "NONE",
-          "is_connected": false
+          "current_owner": "PC",
+          "is_connected": true
         },
         "pc": {
           "volume": 20,
@@ -2423,27 +2437,31 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
           "playback_state": "IDLE"
         }
       },
-      "physical_mutations": [],
-      "unauthorized_mutations": [],
-      "mutation_authorized": true,
+      "physical_mutations": [
+        "Soundbar Owner: NONE -> PC"
+      ],
+      "unauthorized_mutations": [
+        "Soundbar Owner: NONE -> PC"
+      ],
+      "mutation_authorized": false,
       "readback_verified": true,
       "response_truthful": true,
-      "verdict": "PASS",
-      "verdict_reason": "Empirical physical evidence, intent, follow-up, and response verified"
+      "verdict": "CRITICAL",
+      "verdict_reason": "Unauthorized physical mutations observed: Soundbar Owner: NONE -> PC"
     },
     {
       "session_id": "session_f",
       "session_name": "Evening Mood",
       "turn_number": 28,
-      "timestamp": 1787635491.859123,
-      "duration_ms": 5593.32,
+      "timestamp": 1787654107.9698563,
+      "duration_ms": 5204.41,
       "user_message": "No, not music.",
       "agent_response": "Understood, no music. Would you like a movie, or just a quiet room, buddy?",
       "understood_intent": "RELAXATION_NARROW_OPTIONS",
@@ -2470,8 +2488,8 @@
           "soundbar_connected": false
         },
         "soundbar": {
-          "current_owner": "NONE",
-          "is_connected": false
+          "current_owner": "PC",
+          "is_connected": true
         },
         "pc": {
           "volume": 20,
@@ -2480,7 +2498,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2509,27 +2527,31 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
           "playback_state": "IDLE"
         }
       },
-      "physical_mutations": [],
-      "unauthorized_mutations": [],
-      "mutation_authorized": true,
+      "physical_mutations": [
+        "Soundbar Owner: PC -> NONE"
+      ],
+      "unauthorized_mutations": [
+        "Soundbar Owner: PC -> NONE"
+      ],
+      "mutation_authorized": false,
       "readback_verified": true,
       "response_truthful": true,
-      "verdict": "PASS",
-      "verdict_reason": "Empirical physical evidence, intent, follow-up, and response verified"
+      "verdict": "CRITICAL",
+      "verdict_reason": "Unauthorized physical mutations observed: Soundbar Owner: PC -> NONE"
     },
     {
       "session_id": "session_f",
       "session_name": "Evening Mood",
       "turn_number": 29,
-      "timestamp": 1787635500.5786948,
-      "duration_ms": 30939.9,
+      "timestamp": 1787654116.1745942,
+      "duration_ms": 28599.47,
       "user_message": "Let's chill with a movie then.",
       "agent_response": "All set, buddy \u2014 I've prepared the Fire TV HDMI display, soundbar routed to Fire TV. (the projector, Fire TV was already in place). Sure buddy \u2014 Netflix, Apple Tv, Prime Video, or YouTube?",
       "understood_intent": "START_CINEMA_ENTERTAINMENT",
@@ -2543,13 +2565,13 @@
       "action_taken": true,
       "deterministic_prep_done": true,
       "execution_summary": {
-        "execution_id": "d719cc4b-b965-4d03-bd3b-2a5dadeb9617",
-        "plan_id": "8a95d89e-8ea9-478d-81c1-c1c9a413d416",
+        "execution_id": "3ec9e221-6f19-4956-a29e-98b79ca57d3a",
+        "plan_id": "409500f0-d0bb-45cc-9993-fcc3e103843a",
         "user_request": "Let's watch something.",
         "intent": "MOVIE_MODE",
-        "started_at": 1787635506.6082482,
-        "completed_at": 1787635531.5184472,
-        "duration_ms": 24910.2,
+        "started_at": 1787654121.5829852,
+        "completed_at": 1787654144.773833,
+        "duration_ms": 23190.85,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 4,
@@ -2565,8 +2587,8 @@
             "capability_id": "PROJECTOR_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635506.6082501,
-            "completed_at": 1787635509.2221231,
+            "started_at": 1787654121.582987,
+            "completed_at": 1787654124.265914,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2582,8 +2604,8 @@
             "capability_id": "PROJECTOR_SWITCH_HDMI1",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635509.2221537,
-            "completed_at": 1787635515.917528,
+            "started_at": 1787654124.2659526,
+            "completed_at": 1787654129.848273,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -2592,7 +2614,7 @@
             "readback_result": {
               "matched": true,
               "observed": "HDMI_1",
-              "verification_time": 3.813
+              "verification_time": 2.737
             },
             "verified": true,
             "error_code": null,
@@ -2604,8 +2626,8 @@
             "capability_id": "FIRE_TV_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635515.917554,
-            "completed_at": 1787635519.1964316,
+            "started_at": 1787654129.848304,
+            "completed_at": 1787654132.8922322,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2621,8 +2643,8 @@
             "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635519.1964624,
-            "completed_at": 1787635531.5184197,
+            "started_at": 1787654132.8922646,
+            "completed_at": 1787654144.773798,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -2632,7 +2654,7 @@
             "readback_result": {
               "matched": true,
               "observed": "FIRE_TV",
-              "verification_time": 3.071
+              "verification_time": 2.624
             },
             "verified": true,
             "error_code": null,
@@ -2662,7 +2684,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2691,7 +2713,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2713,8 +2735,8 @@
       "session_id": "session_f",
       "session_name": "Evening Mood",
       "turn_number": 30,
-      "timestamp": 1787635534.7263732,
-      "duration_ms": 18268.11,
+      "timestamp": 1787654147.9007869,
+      "duration_ms": 16248.95,
       "user_message": "Let's watch something.",
       "agent_response": "Everything is already set up and ready, buddy. Sure buddy \u2014 Netflix, Apple Tv, Prime Video, or YouTube?",
       "understood_intent": "START_CINEMA_ENTERTAINMENT",
@@ -2728,13 +2750,13 @@
       "action_taken": true,
       "deterministic_prep_done": true,
       "execution_summary": {
-        "execution_id": "842f3305-a9a5-4b2c-9a9f-e31947bc9544",
-        "plan_id": "891d7081-db0f-443b-b572-0220ae84ae34",
+        "execution_id": "1bbfa6f6-49e0-4ccf-af1e-a027a52a7079",
+        "plan_id": "fda52942-8ab4-4eea-963f-6d21d77e32f0",
         "user_request": "Let's watch something.",
         "intent": "MOVIE_MODE",
-        "started_at": 1787635541.50869,
-        "completed_at": 1787635552.9943383,
-        "duration_ms": 11485.65,
+        "started_at": 1787654153.6121535,
+        "completed_at": 1787654164.149506,
+        "duration_ms": 10537.35,
         "success": true,
         "overall_status": "SKIPPED",
         "total_steps": 4,
@@ -2750,8 +2772,8 @@
             "capability_id": "PROJECTOR_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635541.5086923,
-            "completed_at": 1787635544.4930904,
+            "started_at": 1787654153.6121554,
+            "completed_at": 1787654156.2508829,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2767,8 +2789,8 @@
             "capability_id": "PROJECTOR_SWITCH_HDMI1",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635544.4931204,
-            "completed_at": 1787635547.3302112,
+            "started_at": 1787654156.2509189,
+            "completed_at": 1787654158.6654832,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2784,8 +2806,8 @@
             "capability_id": "FIRE_TV_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635547.3302424,
-            "completed_at": 1787635550.1211357,
+            "started_at": 1787654158.6655178,
+            "completed_at": 1787654161.380713,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2801,8 +2823,8 @@
             "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635550.1211689,
-            "completed_at": 1787635552.9943063,
+            "started_at": 1787654161.3807483,
+            "completed_at": 1787654164.1494586,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2836,7 +2858,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2865,7 +2887,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -2884,8 +2906,8 @@
       "session_id": "session_g",
       "session_name": "Entertainment",
       "turn_number": 31,
-      "timestamp": 1787635556.0702984,
-      "duration_ms": 27117.35,
+      "timestamp": 1787654166.979813,
+      "duration_ms": 25373.15,
       "user_message": "Netflix.",
       "agent_response": "All set, buddy \u2014 I've prepared Netflix on Fire TV. (the projector, the Fire TV HDMI display, Fire TV, soundbar routed to Fire TV was already in place).",
       "understood_intent": "GENERAL_ROOM_COMMAND",
@@ -2900,13 +2922,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "025066e8-9cc6-472d-b208-05fdcc63b1a8",
-        "plan_id": "c7fc7a74-6b14-4765-a973-396a36b50294",
+        "execution_id": "5c61078c-13b8-41c9-94a2-71e8e35b1e2c",
+        "plan_id": "6e5476be-d953-4c62-90c7-ac204987a171",
         "user_request": "Put on Netflix",
         "intent": "LAUNCH_NETFLIX",
-        "started_at": 1787635563.0872567,
-        "completed_at": 1787635583.1851668,
-        "duration_ms": 20097.91,
+        "started_at": 1787654172.9909496,
+        "completed_at": 1787654192.3505883,
+        "duration_ms": 19359.64,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 5,
@@ -2922,8 +2944,8 @@
             "capability_id": "PROJECTOR_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635563.0872586,
-            "completed_at": 1787635565.9494805,
+            "started_at": 1787654172.990951,
+            "completed_at": 1787654175.7797318,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2939,8 +2961,8 @@
             "capability_id": "PROJECTOR_SWITCH_HDMI1",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635565.9495132,
-            "completed_at": 1787635568.8779647,
+            "started_at": 1787654175.7797651,
+            "completed_at": 1787654178.5200887,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2956,8 +2978,8 @@
             "capability_id": "FIRE_TV_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635568.8779964,
-            "completed_at": 1787635571.761799,
+            "started_at": 1787654178.5201275,
+            "completed_at": 1787654181.3747916,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -2975,8 +2997,8 @@
               "provider": "netflix"
             },
             "status": "VERIFIED",
-            "started_at": 1787635571.7618408,
-            "completed_at": 1787635579.619361,
+            "started_at": 1787654181.3748264,
+            "completed_at": 1787654189.0780406,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -2985,7 +3007,7 @@
             "readback_result": {
               "matched": true,
               "observed": "INSTANTANEOUS_ACTION_VERIFIED",
-              "verification_time": 3.277
+              "verification_time": 3.367
             },
             "verified": true,
             "error_code": null,
@@ -2997,8 +3019,8 @@
             "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635579.6193879,
-            "completed_at": 1787635583.18514,
+            "started_at": 1787654189.0780702,
+            "completed_at": 1787654192.3505569,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -3032,7 +3054,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "NONE",
@@ -3061,7 +3083,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3082,8 +3104,8 @@
       "session_id": "session_g",
       "session_name": "Entertainment",
       "turn_number": 32,
-      "timestamp": 1787635587.0937142,
-      "duration_ms": 29484.52,
+      "timestamp": 1787654195.675168,
+      "duration_ms": 26041.23,
       "user_message": "Actually no, put on YouTube instead.",
       "agent_response": "All set, buddy \u2014 I've prepared YouTube on Fire TV. (the projector, the Fire TV HDMI display, Fire TV, soundbar routed to Fire TV was already in place).",
       "understood_intent": "PLAY_YOUTUBE",
@@ -3097,13 +3119,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "d158c08c-a9b1-437e-8e82-13c92af3224c",
-        "plan_id": "97d77a89-2897-47b5-80c1-24e04757e98f",
+        "execution_id": "1c7ef837-aba8-4f39-ad45-5e2cce4e8af2",
+        "plan_id": "74acc0a4-33f0-45fe-beea-ef0eab99e2ee",
         "user_request": "Actually no, put on YouTube instead.",
         "intent": "PLAY_YOUTUBE",
-        "started_at": 1787635594.490621,
-        "completed_at": 1787635616.4799335,
-        "duration_ms": 21989.31,
+        "started_at": 1787654202.2195005,
+        "completed_at": 1787654221.713707,
+        "duration_ms": 19494.21,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 5,
@@ -3119,8 +3141,8 @@
             "capability_id": "PROJECTOR_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635594.490623,
-            "completed_at": 1787635597.8143854,
+            "started_at": 1787654202.219502,
+            "completed_at": 1787654205.2180035,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -3136,8 +3158,8 @@
             "capability_id": "PROJECTOR_SWITCH_HDMI1",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635597.814426,
-            "completed_at": 1787635601.1267316,
+            "started_at": 1787654205.2180362,
+            "completed_at": 1787654207.9943862,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -3153,8 +3175,8 @@
             "capability_id": "FIRE_TV_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635601.1267605,
-            "completed_at": 1787635604.365535,
+            "started_at": 1787654207.99442,
+            "completed_at": 1787654210.919451,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -3170,8 +3192,8 @@
             "capability_id": "FIRE_TV_APP_LAUNCH_YOUTUBE",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635604.3655636,
-            "completed_at": 1787635613.0547893,
+            "started_at": 1787654210.9194896,
+            "completed_at": 1787654218.7998111,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -3180,7 +3202,7 @@
             "readback_result": {
               "matched": true,
               "observed": "INSTANTANEOUS_ACTION_VERIFIED",
-              "verification_time": 3.283
+              "verification_time": 2.884
             },
             "verified": true,
             "error_code": null,
@@ -3192,8 +3214,8 @@
             "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635613.0548177,
-            "completed_at": 1787635616.4799037,
+            "started_at": 1787654218.7998435,
+            "completed_at": 1787654221.713667,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -3227,7 +3249,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3256,7 +3278,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3277,8 +3299,8 @@
       "session_id": "session_g",
       "session_name": "Entertainment",
       "turn_number": 33,
-      "timestamp": 1787635620.3607936,
-      "duration_ms": 13552.41,
+      "timestamp": 1787654224.7525976,
+      "duration_ms": 12942.29,
       "user_message": "Make it a little quieter.",
       "agent_response": "All set, buddy \u2014 I've prepared Fire TV volume.",
       "understood_intent": "ADJUST_ACTIVE_VOLUME",
@@ -3293,13 +3315,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "c0e90e66-88cc-498c-9be8-b0dae03d4a53",
-        "plan_id": "2e54005b-c762-439b-9c5e-02860a7a4f19",
+        "execution_id": "ce55fe80-ff27-40b9-a70e-e0d5446a3eec",
+        "plan_id": "ce2fad6d-443b-42e2-86a7-36b97fa10120",
         "user_request": "Make it a little quieter.",
         "intent": "VOLUME_DOWN",
-        "started_at": 1787635626.6172512,
-        "completed_at": 1787635633.9109833,
-        "duration_ms": 7293.73,
+        "started_at": 1787654230.7348528,
+        "completed_at": 1787654237.6927497,
+        "duration_ms": 6957.9,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 1,
@@ -3315,8 +3337,8 @@
             "capability_id": "FIRE_TV_VOLUME_DOWN",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635626.6172523,
-            "completed_at": 1787635633.9109464,
+            "started_at": 1787654230.7348554,
+            "completed_at": 1787654237.6927183,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -3325,7 +3347,7 @@
             "readback_result": {
               "matched": true,
               "observed": "INSTANTANEOUS_ACTION_VERIFIED",
-              "verification_time": 2.857
+              "verification_time": 2.657
             },
             "verified": true,
             "error_code": null,
@@ -3355,7 +3377,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3384,7 +3406,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3403,8 +3425,8 @@
       "session_id": "session_g",
       "session_name": "Entertainment",
       "turn_number": 34,
-      "timestamp": 1787635637.3183374,
-      "duration_ms": 6393.65,
+      "timestamp": 1787654240.9343007,
+      "duration_ms": 5995.57,
       "user_message": "Actually 25 is fine.",
       "agent_response": "25 what \u2014 volume, AC temperature, or something else, buddy?",
       "understood_intent": "BARE_NUMERIC_AMBIGUOUS",
@@ -3441,7 +3463,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3470,7 +3492,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3489,8 +3511,8 @@
       "session_id": "session_g",
       "session_name": "Entertainment",
       "turn_number": 35,
-      "timestamp": 1787635646.8182333,
-      "duration_ms": 13089.91,
+      "timestamp": 1787654250.016189,
+      "duration_ms": 12846.58,
       "user_message": "Pause that for a second.",
       "agent_response": "All set, buddy \u2014 I've prepared paused media on Fire TV.",
       "understood_intent": "PAUSE_MEDIA",
@@ -3505,13 +3527,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "fcf7b2bd-24c3-42c0-a2cc-447d65b87c7e",
-        "plan_id": "bca03dfa-12af-4ea0-96ac-d50d50141e52",
+        "execution_id": "10c47ac5-e376-4140-9c34-d04cc27ef983",
+        "plan_id": "024e30b7-2187-4915-8397-7fcd425e3032",
         "user_request": "Pause that for a second.",
         "intent": "PAUSE_MEDIA",
-        "started_at": 1787635652.8772666,
-        "completed_at": 1787635659.9059832,
-        "duration_ms": 7028.72,
+        "started_at": 1787654256.2195165,
+        "completed_at": 1787654262.8603852,
+        "duration_ms": 6640.87,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 1,
@@ -3527,8 +3549,8 @@
             "capability_id": "FIRE_TV_MEDIA_PAUSE",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635652.8772683,
-            "completed_at": 1787635659.9059563,
+            "started_at": 1787654256.2195184,
+            "completed_at": 1787654262.8603556,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -3537,7 +3559,7 @@
             "readback_result": {
               "matched": true,
               "observed": "INSTANTANEOUS_ACTION_VERIFIED",
-              "verification_time": 3.051
+              "verification_time": 2.74
             },
             "verified": true,
             "error_code": null,
@@ -3567,7 +3589,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3596,7 +3618,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3615,8 +3637,8 @@
       "session_id": "session_g",
       "session_name": "Entertainment",
       "turn_number": 36,
-      "timestamp": 1787635663.079331,
-      "duration_ms": 12914.02,
+      "timestamp": 1787654266.2028036,
+      "duration_ms": 12581.23,
       "user_message": "Resume it.",
       "agent_response": "All set, buddy \u2014 I've prepared resumed media on Fire TV.",
       "understood_intent": "RESUME_MEDIA",
@@ -3631,13 +3653,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "6790b00e-3ec1-4fcf-85b1-dc7f031d9ef1",
-        "plan_id": "4a4296d9-1541-4ef1-aa8a-1519d7c71c71",
+        "execution_id": "eec01116-768e-46fc-9548-657380578623",
+        "plan_id": "35d07df4-e98c-4d6d-8b01-dfa3ba742927",
         "user_request": "Resume it.",
         "intent": "RESUME_MEDIA",
-        "started_at": 1787635669.2447758,
-        "completed_at": 1787635675.9911547,
-        "duration_ms": 6746.38,
+        "started_at": 1787654272.1262016,
+        "completed_at": 1787654278.7816043,
+        "duration_ms": 6655.4,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 1,
@@ -3653,8 +3675,8 @@
             "capability_id": "FIRE_TV_MEDIA_PLAY",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635669.2447772,
-            "completed_at": 1787635675.9911244,
+            "started_at": 1787654272.1262035,
+            "completed_at": 1787654278.781575,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -3663,7 +3685,7 @@
             "readback_result": {
               "matched": true,
               "observed": "INSTANTANEOUS_ACTION_VERIFIED",
-              "verification_time": 2.861
+              "verification_time": 3.064
             },
             "verified": true,
             "error_code": null,
@@ -3693,7 +3715,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3722,7 +3744,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3741,8 +3763,8 @@
       "session_id": "session_g",
       "session_name": "Entertainment",
       "turn_number": 37,
-      "timestamp": 1787635679.1861005,
-      "duration_ms": 23777.67,
+      "timestamp": 1787654282.0732758,
+      "duration_ms": 21554.16,
       "user_message": "I'm done watching.",
       "agent_response": "I got Fire TV sleep ready, buddy, but putting projector to sleep didn't respond as expected.",
       "understood_intent": "GENERAL_ROOM_COMMAND",
@@ -3757,13 +3779,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "7399dce1-77d7-4b07-b747-1695b8b0f5e0",
-        "plan_id": "2fc12891-a5a1-46d4-a87a-8e9a39beb7b2",
+        "execution_id": "5a647419-9df6-4392-9f0b-7b0edf0ffe49",
+        "plan_id": "2597979d-b471-4d19-a55b-e134a64df231",
         "user_request": "I'm done watching.",
         "intent": "SLEEP_ALL",
-        "started_at": 1787635685.5475392,
-        "completed_at": 1787635702.9613466,
-        "duration_ms": 17413.81,
+        "started_at": 1787654288.1228297,
+        "completed_at": 1787654303.6251738,
+        "duration_ms": 15502.34,
         "success": false,
         "overall_status": "PARTIAL_SUCCESS",
         "total_steps": 2,
@@ -3779,8 +3801,8 @@
             "capability_id": "PROJECTOR_POWER_SLEEP",
             "requested_parameters": {},
             "status": "TIMEOUT",
-            "started_at": 1787635685.547541,
-            "completed_at": 1787635695.3984709,
+            "started_at": 1787654288.1228316,
+            "completed_at": 1787654297.278111,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -3803,8 +3825,8 @@
             "capability_id": "FIRE_TV_POWER_SLEEP",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635695.398651,
-            "completed_at": 1787635702.96132,
+            "started_at": 1787654297.2782884,
+            "completed_at": 1787654303.6251435,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -3813,7 +3835,7 @@
             "readback_result": {
               "matched": true,
               "observed": "INSTANTANEOUS_ACTION_VERIFIED",
-              "verification_time": 3.312
+              "verification_time": 2.692
             },
             "verified": true,
             "error_code": null,
@@ -3843,7 +3865,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3872,7 +3894,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -3891,8 +3913,8 @@
       "session_id": "session_h",
       "session_name": "Interruption & Audit",
       "turn_number": 38,
-      "timestamp": 1787635706.098252,
-      "duration_ms": 20919.01,
+      "timestamp": 1787654306.6907964,
+      "duration_ms": 19487.46,
       "user_message": "Let's watch something.",
       "agent_response": "All set, buddy \u2014 I've prepared the Fire TV HDMI display. (the projector, Fire TV, soundbar routed to Fire TV was already in place). Sure buddy \u2014 Netflix, Apple Tv, Prime Video, or YouTube?",
       "understood_intent": "START_CINEMA_ENTERTAINMENT",
@@ -3906,13 +3928,13 @@
       "action_taken": true,
       "deterministic_prep_done": true,
       "execution_summary": {
-        "execution_id": "5a674db2-a58f-42af-b993-cd4658fa4c57",
-        "plan_id": "6013db59-86cf-4a23-9168-8b03bba39fa6",
+        "execution_id": "563e3deb-ba88-4921-9d43-a1d37e3f0c90",
+        "plan_id": "2ef7d104-eeed-47f6-a1ef-2bb7060c1895",
         "user_request": "Let's watch something.",
         "intent": "MOVIE_MODE",
-        "started_at": 1787635712.0111475,
-        "completed_at": 1787635727.0171137,
-        "duration_ms": 15005.97,
+        "started_at": 1787654312.3735745,
+        "completed_at": 1787654326.1780813,
+        "duration_ms": 13804.51,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 4,
@@ -3928,8 +3950,8 @@
             "capability_id": "PROJECTOR_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635712.0111492,
-            "completed_at": 1787635714.7574801,
+            "started_at": 1787654312.3735766,
+            "completed_at": 1787654315.0105324,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -3945,8 +3967,8 @@
             "capability_id": "PROJECTOR_SWITCH_HDMI1",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635714.757508,
-            "completed_at": 1787635720.7008896,
+            "started_at": 1787654315.010564,
+            "completed_at": 1787654320.4597304,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -3955,7 +3977,7 @@
             "readback_result": {
               "matched": true,
               "observed": "HDMI_1",
-              "verification_time": 3.201
+              "verification_time": 2.808
             },
             "verified": true,
             "error_code": null,
@@ -3967,8 +3989,8 @@
             "capability_id": "FIRE_TV_POWER_WAKE",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635720.7009182,
-            "completed_at": 1787635724.089185,
+            "started_at": 1787654320.4597669,
+            "completed_at": 1787654323.1619508,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -3984,8 +4006,8 @@
             "capability_id": "SOUNDBAR_ROUTE_TO_FIRE_TV",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635724.0892162,
-            "completed_at": 1787635727.0170865,
+            "started_at": 1787654323.1619809,
+            "completed_at": 1787654326.1780508,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -4019,7 +4041,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4048,7 +4070,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4067,8 +4089,8 @@
       "session_id": "session_h",
       "session_name": "Interruption & Audit",
       "turn_number": 39,
-      "timestamp": 1787635730.4856179,
-      "duration_ms": 6358.69,
+      "timestamp": 1787654329.3655295,
+      "duration_ms": 6077.47,
       "user_message": "Actually remind me to check server logs tomorrow at 10.",
       "agent_response": "Got it, buddy \u2014 I'll remind you to 'Check server logs'.",
       "understood_intent": "BOOKKEEPING_REQUEST",
@@ -4104,7 +4126,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4133,7 +4155,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4152,8 +4174,8 @@
       "session_id": "session_h",
       "session_name": "Interruption & Audit",
       "turn_number": 40,
-      "timestamp": 1787635740.1014798,
-      "duration_ms": 6247.24,
+      "timestamp": 1787654338.5093212,
+      "duration_ms": 5953.79,
       "user_message": "What do you know about my preferences?",
       "agent_response": "Here is what I have saved about your preferences, buddy:\n\u2022 Preferred address: 'buddy'\n\u2022 Cinema devices: PROJECTOR, FIRE_TV, LG_SOUNDBAR\n\u2022 Streaming services: Netflix, Apple Tv, Prime Video, Youtube\n\u2022 Preferred volume: ~30%\n\u2022 AC setpoint: 24\u00b0C (COOL mode)\n\u2022 Quiet hours: 11:00 to 17:00",
       "understood_intent": "AUDIT_USER_PREFERENCES",
@@ -4189,7 +4211,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4218,7 +4240,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4237,10 +4259,10 @@
       "session_id": "session_h",
       "session_name": "Interruption & Audit",
       "turn_number": 41,
-      "timestamp": 1787635749.6550324,
-      "duration_ms": 6310.41,
+      "timestamp": 1787654347.5123622,
+      "duration_ms": 5927.92,
       "user_message": "What are you unsure about?",
-      "agent_response": "Here are the assumptions and open items I'm tracking, buddy:\n\u2022 User may play guitar after lunch (confidence: 60%)\n\u2022 User may play guitar after lunch (confidence: 60%)",
+      "agent_response": "Here are the assumptions and open items I'm tracking, buddy:\n\u2022 User may play guitar after lunch (confidence: 60%)",
       "understood_intent": "AUDIT_UNCERTAINTY",
       "expected_intents": [
         "AUDIT_UNCERTAINTY"
@@ -4274,7 +4296,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4303,7 +4325,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4322,10 +4344,10 @@
       "session_id": "session_i",
       "session_name": "Night Wrap-Up",
       "turn_number": 42,
-      "timestamp": 1787635759.2596984,
-      "duration_ms": 6686.18,
+      "timestamp": 1787654356.5480528,
+      "duration_ms": 5941.03,
       "user_message": "What did I accomplish today?",
-      "agent_response": "Here's what you've completed today, buddy:\n- Review window functions\n- Review window functions",
+      "agent_response": "Here's what you've completed today, buddy:\n- Review window functions",
       "understood_intent": "TASK_SCHEDULE_QUERY",
       "expected_intents": [
         "TASK_SCHEDULE_QUERY"
@@ -4359,7 +4381,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4388,7 +4410,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4407,8 +4429,8 @@
       "session_id": "session_i",
       "session_name": "Night Wrap-Up",
       "turn_number": 43,
-      "timestamp": 1787635769.152552,
-      "duration_ms": 16783.01,
+      "timestamp": 1787654365.5041707,
+      "duration_ms": 18236.31,
       "user_message": "Set AC to 24 for the night.",
       "agent_response": "All set, buddy \u2014 I've prepared the AC to 24\u00b0C. (AC power on was already in place).",
       "understood_intent": "GENERAL_ROOM_COMMAND",
@@ -4423,13 +4445,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "149d0e95-d274-44d9-9d99-7bce04183909",
-        "plan_id": "016f28cc-e2e8-441b-9fb0-e3ed2ac084ce",
+        "execution_id": "433745bc-0762-4378-b872-f9ddc42a6df3",
+        "plan_id": "f4df222c-a27f-47f0-8128-46c5559c0cee",
         "user_request": "Set AC to 24 for the night.",
         "intent": "SET_AC_TEMPERATURE",
-        "started_at": 1787635775.4689376,
-        "completed_at": 1787635785.933256,
-        "duration_ms": 10464.32,
+        "started_at": 1787654371.4643269,
+        "completed_at": 1787654383.7379105,
+        "duration_ms": 12273.58,
         "success": true,
         "overall_status": "SUCCESS",
         "total_steps": 2,
@@ -4445,8 +4467,8 @@
             "capability_id": "AC_POWER_ON",
             "requested_parameters": {},
             "status": "SKIPPED",
-            "started_at": 1787635775.468939,
-            "completed_at": 1787635778.4550598,
+            "started_at": 1787654371.4643288,
+            "completed_at": 1787654374.4592383,
             "precondition_result": null,
             "dispatch_result": null,
             "readback_result": {
@@ -4464,13 +4486,13 @@
               "temperature": 24
             },
             "status": "VERIFIED",
-            "started_at": 1787635778.455096,
-            "completed_at": 1787635785.9332297,
+            "started_at": 1787654374.4592774,
+            "completed_at": 1787654383.7378798,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
               "target_temperature": 24,
-              "ambient_temperature": 30,
+              "ambient_temperature": 25,
               "transport": "CLOUD",
               "verified": true,
               "message": "Target temperature set to 24\u00b0C (verified read-back)."
@@ -4478,7 +4500,7 @@
             "readback_result": {
               "matched": true,
               "observed": 24,
-              "verification_time": 3.043
+              "verification_time": 2.908
             },
             "verified": true,
             "error_code": null,
@@ -4508,7 +4530,7 @@
         "ac": {
           "power": true,
           "temperature": 25,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4537,7 +4559,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4558,8 +4580,8 @@
       "session_id": "session_i",
       "session_name": "Night Wrap-Up",
       "turn_number": 44,
-      "timestamp": 1787635789.2490716,
-      "duration_ms": 25203.11,
+      "timestamp": 1787654387.0482194,
+      "duration_ms": 21062.69,
       "user_message": "Turn everything off.",
       "agent_response": "I got Fire TV sleep ready, buddy, but putting projector to sleep didn't respond as expected.",
       "understood_intent": "GENERAL_ROOM_COMMAND",
@@ -4574,13 +4596,13 @@
       "action_taken": true,
       "deterministic_prep_done": false,
       "execution_summary": {
-        "execution_id": "f670a5fe-65d0-4356-94e5-2305a3d95f7b",
-        "plan_id": "ebad0ec0-429f-44f2-9571-314eaa68d0f7",
+        "execution_id": "2c1af0ba-0790-4c5c-8855-44ea3aa7b14c",
+        "plan_id": "129dcd97-f4e0-4cc3-8fa9-cf10695c2eaa",
         "user_request": "Turn everything off.",
         "intent": "SLEEP_ALL",
-        "started_at": 1787635795.2128518,
-        "completed_at": 1787635814.4498813,
-        "duration_ms": 19237.03,
+        "started_at": 1787654392.795007,
+        "completed_at": 1787654408.1085048,
+        "duration_ms": 15313.5,
         "success": false,
         "overall_status": "PARTIAL_SUCCESS",
         "total_steps": 2,
@@ -4596,8 +4618,8 @@
             "capability_id": "PROJECTOR_POWER_SLEEP",
             "requested_parameters": {},
             "status": "TIMEOUT",
-            "started_at": 1787635795.2128544,
-            "completed_at": 1787635806.2851,
+            "started_at": 1787654392.7950094,
+            "completed_at": 1787654401.713491,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -4620,8 +4642,8 @@
             "capability_id": "FIRE_TV_POWER_SLEEP",
             "requested_parameters": {},
             "status": "VERIFIED",
-            "started_at": 1787635806.2852788,
-            "completed_at": 1787635814.4498353,
+            "started_at": 1787654401.7136717,
+            "completed_at": 1787654408.108476,
             "precondition_result": null,
             "dispatch_result": {
               "success": true,
@@ -4630,7 +4652,7 @@
             "readback_result": {
               "matched": true,
               "observed": "INSTANTANEOUS_ACTION_VERIFIED",
-              "verification_time": 3.355
+              "verification_time": 2.664
             },
             "verified": true,
             "error_code": null,
@@ -4660,7 +4682,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4689,7 +4711,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4708,10 +4730,10 @@
       "session_id": "session_i",
       "session_name": "Night Wrap-Up",
       "turn_number": 45,
-      "timestamp": 1787635818.0633235,
-      "duration_ms": 6239.07,
+      "timestamp": 1787654411.1559324,
+      "duration_ms": 5023.12,
       "user_message": "Good night buddy.",
-      "agent_response": "Good night, buddy!\nYou have 6 pending items saved for tomorrow.\nSleep well, buddy.",
+      "agent_response": "Good night, buddy!\nYou have 5 pending items saved for tomorrow.\nSleep well, buddy.",
       "understood_intent": "NIGHT_ROUTINE_TRANSITION",
       "expected_intents": [
         "NIGHT_ROUTINE_TRANSITION"
@@ -4745,7 +4767,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",
@@ -4774,7 +4796,7 @@
         "ac": {
           "power": true,
           "temperature": 24,
-          "mode": "FAN"
+          "mode": "AUTO"
         },
         "audio_stream": {
           "active_producer": "FIRE_TV",

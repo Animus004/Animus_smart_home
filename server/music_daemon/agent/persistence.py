@@ -31,7 +31,11 @@ class AgentPersistence:
         self,
         user_model: UserModel,
         memory_store: AgentMemoryStore,
-        task_manager: TaskManager
+        task_manager: TaskManager,
+        behavioral_profile: Optional[Any] = None,
+        resumable_goals: Optional[List[Any]] = None,
+        scheduled_tasks: Optional[List[Any]] = None,
+        active_mode: Optional[str] = None
     ) -> bool:
         """Saves composite agent state to JSON."""
         try:
@@ -40,7 +44,11 @@ class AgentPersistence:
                 "profile": user_model.to_dict(),
                 "memory_items": [item.model_dump() for item in memory_store.get_all_active()],
                 "tasks": [t.model_dump() for t in task_manager.list_tasks(include_completed=True)],
-                "reminders": [r.model_dump() for r in task_manager.get_active_reminders()]
+                "reminders": [r.model_dump() for r in task_manager.get_active_reminders()],
+                "behavioral_profile": behavioral_profile.to_dict() if behavioral_profile and hasattr(behavioral_profile, "to_dict") else (behavioral_profile or {}),
+                "resumable_goals": [g.model_dump() for g in resumable_goals] if resumable_goals else [],
+                "scheduled_tasks": [s.model_dump() for s in scheduled_tasks] if scheduled_tasks else [],
+                "active_mode": active_mode or "IDLE"
             }
             with open(self.storage_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -50,11 +58,11 @@ class AgentPersistence:
             logger.error(f"[PERSISTENCE_SAVE_ERROR] Failed to save agent state: {e}")
             return False
 
-    def load_state(self) -> Tuple[UserModel, AgentMemoryStore, TaskManager]:
+    def load_state(self) -> Tuple[UserModel, AgentMemoryStore, TaskManager, Dict[str, Any]]:
         """Loads composite agent state or falls back to defaults."""
         if not self.storage_path.exists():
             logger.info("[PERSISTENCE_INIT] No existing state file found; initializing default models.")
-            return UserModel(), AgentMemoryStore(), TaskManager()
+            return UserModel(), AgentMemoryStore(), TaskManager(), {}
 
         try:
             with open(self.storage_path, "r", encoding="utf-8") as f:
@@ -70,8 +78,16 @@ class AgentPersistence:
             reminders = [Reminder(**r) for r in data.get("reminders", [])]
             task_manager = TaskManager(initial_tasks=tasks, initial_reminders=reminders)
 
+            extra_state = {
+                "behavioral_profile": data.get("behavioral_profile", {}),
+                "resumable_goals": data.get("resumable_goals", []),
+                "scheduled_tasks": data.get("scheduled_tasks", []),
+                "active_mode": data.get("active_mode", "IDLE")
+            }
+
             logger.info(f"[PERSISTENCE_LOADED] Loaded agent state ({len(tasks)} tasks, {len(memory_items)} memory items).")
-            return user_model, memory_store, task_manager
+            return user_model, memory_store, task_manager, extra_state
         except Exception as e:
             logger.warning(f"[PERSISTENCE_LOAD_ERROR] Failed to load agent state: {e}. Falling back to clean defaults.")
-            return UserModel(), AgentMemoryStore(), TaskManager()
+            return UserModel(), AgentMemoryStore(), TaskManager(), {}
+

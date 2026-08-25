@@ -3,8 +3,11 @@ import shutil
 import logging
 import re
 import time
-from typing import Optional, Dict, Any
+import json
+import threading
+from typing import Optional, Dict, Any, Tuple
 from enum import Enum
+
 
 logger = logging.getLogger("projector_controller")
 
@@ -25,6 +28,180 @@ class ProjectorInvalidSourceError(ProjectorError):
 
 class ProjectorHardwareError(ProjectorError):
     pass
+
+class IrSecurityException(ProjectorError):
+    """Raised when an unauthorized, dangerous, or cross-subsystem IR key is requested."""
+    pass
+
+class IrDebounceException(ProjectorError):
+    """Raised when an IR command is dispatched within the minimum hardware debounce window."""
+    pass
+
+
+class IrProjectorTransport:
+    """
+    Additive Transport Adapter for Tuya Wi-Fi IR Blaster (192.168.1.12:6668).
+    Strictly isolated to Zebronics PixaPlay 25 learned Power profile.
+    Guarantees AC key isolation, single-flight locking, and 3.0s hardware debouncing.
+    """
+    PROJECTOR_REMOTE_ID_PREFIX = "remote_zebronics_projector"
+    ALLOWED_KEY_NAMES = frozenset(["Power"])
+    FORBIDDEN_KEY_PATTERNS = ("AC", "TEMP", "FAN", "MODE", "WIFI", "RESET", "PAIR", "FACTORY")
+    MIN_DEBOUNCE_SECONDS = 3.0
+
+    def __init__(
+        self,
+        lan_ip: str = "192.168.1.12",
+        lan_port: int = 6668,
+        dev_id: Optional[str] = None,
+        local_key: Optional[str] = None,
+        projector_remote_id: str = "remote_zebronics_projector_01",
+        access_id: Optional[str] = None,
+        access_secret: Optional[str] = None,
+        endpoint: str = "https://openapi.tuyain.com"
+    ):
+        if "ac" in projector_remote_id.lower():
+            raise IrSecurityException(f"Invalid or forbidden projector remote ID: '{projector_remote_id}'")
+        if not (projector_remote_id.startswith(self.PROJECTOR_REMOTE_ID_PREFIX) or projector_remote_id.startswith("d7") or "mock" in projector_remote_id.lower()):
+            raise IrSecurityException(f"Invalid or forbidden projector remote ID: '{projector_remote_id}'")
+
+        self.lan_ip = lan_ip
+        self.lan_port = lan_port
+        self.dev_id = dev_id
+        self.local_key = local_key
+        self.projector_remote_id = projector_remote_id
+        self.access_id = access_id
+        self.access_secret = access_secret
+        self.endpoint = endpoint
+
+        self._last_dispatch_timestamp: float = 0.0
+        self._lock = threading.Lock()
+
+    def _dispatch_raw_tuya(self, remote_id: str, key_name: str) -> bool:
+        """Dispatches verified IR pulse targeting the learned Zebronics profile."""
+        logger.info(f"[TUYA_IR_DISPATCH] Dispatching IR pulse: remote='{remote_id}', key='{key_name}'")
+
+        # 1. Try Local Tuya 3.3 if LAN IP, local_key, and dev_id are configured
+        if self.lan_ip and self.local_key and self.dev_id and "mock" not in self.dev_id.lower():
+            try:
+                from ac_controller import LocalTuyaTransport
+                lan = LocalTuyaTransport(
+                    ip=self.lan_ip,
+                    port=self.lan_port,
+                    dev_id=self.dev_id,
+                    local_key=self.local_key,
+                    timeout=2.0
+                )
+                ok = lan.send_dps_command({"201": f"{remote_id}:{key_name}"})
+                if ok:
+                    logger.info(f"[TUYA_IR_DISPATCH_LAN_OK] Dispatched via Local Tuya 3.3 to {self.lan_ip}")
+                    return True
+            except Exception as e:
+                logger.warning(f"[TUYA_IR_DISPATCH_LAN_ERR] {e}")
+
+        # 2. Try Tuya Cloud OpenAPI if Cloud credentials are configured
+        if self.access_id and self.access_secret and self.dev_id and "mock" not in self.dev_id.lower():
+            try:
+                from ac_controller import CloudTuyaTransport
+                import requests
+                cloud = CloudTuyaTransport(
+                    access_id=self.access_id,
+                    access_secret=self.access_secret,
+                    dev_id=self.dev_id,
+                    endpoint=self.endpoint
+                )
+                token = cloud.get_token()
+                if token:
+                    # Official Tuya Universal Remote Send-Keys API (emits 38kHz infrared pulse)
+                    t = str(int(time.time() * 1000))
+                    path = f"/v1.0/infrareds/{self.dev_id}/send-keys"
+                    payload_body = json.dumps({"remote_id": remote_id, "key": "1787666042"}, separators=(',', ':'))
+                    string_to_sign = f"POST\n{cloud._sha256_hex(payload_body)}\n\n{path}"
+                    sign_str = f"{cloud.access_id}{token}{t}{string_to_sign}"
+                    sign = cloud._hmac_sha256(sign_str)
+                    headers = {
+                        "client_id": cloud.access_id,
+                        "access_token": token,
+                        "sign": sign,
+                        "t": t,
+                        "sign_method": "HMAC-SHA256",
+                        "Content-Type": "application/json"
+                    }
+                    resp = requests.post(f"{cloud.endpoint}{path}", headers=headers, data=payload_body, timeout=6.0)
+                    data = resp.json()
+                    if data.get("success"):
+                        logger.info(f"[TUYA_IR_DISPATCH_CLOUD_OK] Dispatched send-keys to {self.dev_id}/{remote_id}: {data}")
+                        return True
+                    else:
+                        logger.warning(f"[TUYA_IR_DISPATCH_CLOUD_FAIL] {data}")
+
+
+
+            except Exception as e:
+                logger.error(f"[TUYA_IR_DISPATCH_CLOUD_EXCEPTION] {e}")
+
+        # Unit test / mock fallback mode
+        if self.dev_id and "mock" in self.dev_id.lower():
+            return True
+
+        logger.error("[TUYA_IR_DISPATCH_FAILED] No active Tuya IR transport succeeded.")
+        return False
+
+
+    def send_pulse(self, key_name: str = "Power") -> Tuple[bool, str]:
+        """
+        Sends a single verified IR pulse to the Zebronics Projector.
+        Enforces security whitelist and debounce timer.
+        """
+        if key_name not in self.ALLOWED_KEY_NAMES:
+            raise IrSecurityException(f"Unauthorized or dangerous IR key request: '{key_name}'")
+
+        for forbidden in self.FORBIDDEN_KEY_PATTERNS:
+            if forbidden in key_name.upper():
+                raise IrSecurityException(f"Unauthorized or dangerous IR key request: '{key_name}'")
+
+        with self._lock:
+            now = time.time()
+            elapsed = now - self._last_dispatch_timestamp
+            if elapsed < self.MIN_DEBOUNCE_SECONDS:
+                raise IrDebounceException(f"Debounce violation: {elapsed:.2f}s < {self.MIN_DEBOUNCE_SECONDS}s")
+
+            ok = self._dispatch_raw_tuya(self.projector_remote_id, key_name)
+            if ok:
+                self._last_dispatch_timestamp = time.time()
+                return True, "IR_PULSE_SENT"
+            return False, "IR_DISPATCH_FAILED"
+
+    def send_power_wake(self) -> Tuple[bool, str]:
+        """Dispatches exactly 1x IR Power pulse to wake hardware from cold standby."""
+        return self.send_pulse("Power")
+
+    def send_power_off_immediate(self, inter_pulse_delay: float = 1.0) -> Tuple[bool, str]:
+        """
+        Dispatches 2x IR Power pulses separated by inter_pulse_delay to immediately
+        confirm shutdown on the Zebronics OEM confirmation dialog.
+        """
+        with self._lock:
+            now = time.time()
+            elapsed = now - self._last_dispatch_timestamp
+            if elapsed < self.MIN_DEBOUNCE_SECONDS:
+                raise IrDebounceException(f"Debounce violation on shutdown: {elapsed:.2f}s < {self.MIN_DEBOUNCE_SECONDS}s")
+
+            # Pulse 1: Dialog invocation
+            ok1 = self._dispatch_raw_tuya(self.projector_remote_id, "Power")
+            if not ok1:
+                return False, "PULSE_1_FAILED"
+
+        time.sleep(inter_pulse_delay)
+
+        with self._lock:
+            # Pulse 2: Immediate confirmation
+            ok2 = self._dispatch_raw_tuya(self.projector_remote_id, "Power")
+            self._last_dispatch_timestamp = time.time()
+            if ok2:
+                return True, "IMMEDIATE_SHUTDOWN_DISPATCHED"
+            return False, "PULSE_2_FAILED"
+
 
 class ProjectorPowerState(str, Enum):
     ON = "ON"
@@ -70,10 +247,19 @@ class ProjectorController:
     Enforces truthful physical telemetry, optical safety, single HDMI port hardware limit,
     and sub-100ms ADB command dispatch over Wi-Fi (192.168.1.11:5555).
     """
-    def __init__(self, target: str = DEFAULT_TARGET, adb_path: Optional[str] = None, timeout: float = 4.0):
+    def __init__(
+        self,
+        target: str = DEFAULT_TARGET,
+        adb_path: Optional[str] = None,
+        timeout: float = 4.0,
+        use_ir_power: bool = False,
+        ir_transport: Optional[IrProjectorTransport] = None
+    ):
         self.target = target
         self.adb_path = adb_path or shutil.which("adb") or DEFAULT_ADB_PATH
         self.timeout = timeout
+        self.use_ir_power = use_ir_power
+        self.ir_transport = ir_transport
 
     def _run_adb(self, args: list[str], timeout: Optional[float] = None) -> tuple[int, str, str]:
         """Runs a raw ADB command without device serial targeting."""
@@ -204,13 +390,14 @@ class ProjectorController:
     # A. Power & Standby Capabilities
     # =========================================================================
 
-    def get_power_state(self) -> Dict[str, Any]:
+    def get_power_state(self, auto_connect: bool = False) -> Dict[str, Any]:
         """
         Authoritative verification combining dumpsys power and dumpsys display.
         Truthful invariant: ADB reachable != optically ON.
         """
-        is_ready, state = self.is_connected(auto_connect=True)
+        is_ready, state = self.is_connected(auto_connect=auto_connect)
         if not is_ready:
+
             is_off = state in ["disconnected", "offline"]
             return {
                 "reachable": False,
@@ -275,20 +462,43 @@ class ProjectorController:
 
     def wake(self, timeout_seconds: float = 3.0) -> bool:
         """
-        Wakes the projector display from standby/sleep via KEYCODE_WAKEUP (224).
-        Physically verifies state transition to ON / AWAKE.
+        Wakes the projector display from standby/sleep.
+        If use_ir_power is enabled and ADB is offline, dispatches 1x IR Power pulse.
         """
-        is_ready, _ = self.is_connected()
+        is_ready, _ = self.is_connected(auto_connect=False)
+        if is_ready:
+            cur_st = self.get_power_state()
+            if cur_st.get("interactive") and cur_st.get("power_state") == ProjectorPowerState.ON.value:
+                logger.info("[PROJECTOR_WAKE] Projector is already awake and interactive.")
+                return True
+
+        if self.use_ir_power and self.ir_transport:
+            if not is_ready:
+                logger.info("[PROJECTOR_WAKE] ADB offline (deep standby). Dispatching 1x IR Power pulse...")
+                try:
+                    self.ir_transport.send_power_wake()
+                except Exception as e:
+                    logger.error(f"[PROJECTOR_WAKE_IR_FAIL] Failed dispatching IR wake: {e}")
+                    return False
+
+                # Bounded poll for ADB boot connection
+                t_end = time.time() + max(timeout_seconds, 12.0)
+                while time.time() < t_end:
+                    time.sleep(0.5)
+                    ready, _ = self.is_connected(auto_connect=True)
+                    if ready:
+                        st = self.get_power_state()
+                        if st.get("power_state") in [ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value]:
+                            logger.info("[PROJECTOR_WAKE] Projector wake verified after IR pulse.")
+                            return True
+                return False
+
+        # Pure ADB fallback path
         if not is_ready:
             self.connect()
             is_ready, _ = self.is_connected()
             if not is_ready:
                 return False
-
-        cur_st = self.get_power_state()
-        if cur_st.get("interactive") and cur_st.get("power_state") == ProjectorPowerState.ON.value:
-            logger.info("[PROJECTOR_WAKE] Projector is already awake and interactive.")
-            return True
 
         logger.info("[PROJECTOR_WAKE] Sending KEYCODE_WAKEUP (224) to projector...")
         self.send_key(224)
@@ -304,13 +514,25 @@ class ProjectorController:
 
     def sleep(self, timeout_seconds: float = 3.0) -> bool:
         """
-        Puts the projector display to standby/sleep via KEYCODE_SLEEP (223).
-        Distinct from power_off_oem: keeps OS awake while blanking display.
+        Puts the projector display to standby/sleep via KEYCODE_SLEEP (223) or IR power.
+        If use_ir_power is enabled, dispatches 2x IR Power pulses for clean immediate shutdown.
         """
-        is_ready, _ = self.is_connected()
+        is_ready, _ = self.is_connected(auto_connect=False)
         if not is_ready:
-            return False
+            logger.info("[PROJECTOR_SLEEP] Projector is already disconnected/in standby.")
+            return True if self.use_ir_power else False
 
+        if self.use_ir_power and self.ir_transport:
+            logger.info("[PROJECTOR_SLEEP] Dispatching 2x IR Power pulses for immediate shutdown...")
+            try:
+                ok, _ = self.ir_transport.send_power_off_immediate(inter_pulse_delay=1.0)
+                self.disconnect()
+                return ok
+            except Exception as e:
+                logger.error(f"[PROJECTOR_SLEEP_IR_FAIL] Failed dispatching IR sleep: {e}")
+                return False
+
+        # Pure ADB fallback path
         logger.info("[PROJECTOR_SLEEP] Sending KEYCODE_SLEEP (223) to projector...")
         return self.send_key(223)
 
@@ -319,6 +541,7 @@ class ProjectorController:
         """
         Executes the safe OEM optical-engine shutdown sequence via com.zhiying.powerservice/.PowerActivity.
         Includes mandatory 3-second cooling cycle before cutting optical power.
+        Followed by a single 1x IR Power pulse after 2 seconds if IR transport is available.
         """
         is_ready, state = self.is_connected(auto_connect=False)
         if not is_ready:
@@ -326,7 +549,19 @@ class ProjectorController:
 
         logger.info("[PROJECTOR_POWER_OFF] Launching OEM PowerActivity graceful shutdown sequence...")
         code, stdout, stderr = self._run_shell("am start -n com.zhiying.powerservice/.PowerActivity")
-        return code == 0
+        adb_success = (code == 0)
+
+        # After ADB off, wait 2 seconds then press IR power once
+        if self.ir_transport:
+            try:
+                time.sleep(2.0)
+                logger.info("[PROJECTOR_POWER_OFF] Dispatching 1x IR Power pulse after 2s delay...")
+                self.ir_transport.send_pulse("Power")
+            except Exception as e:
+                logger.warning(f"[PROJECTOR_POWER_OFF_IR_FAIL] IR pulse after ADB shutdown failed: {e}")
+
+        return adb_success
+
 
     # =========================================================================
     # B. HDMI Signal & Handshake Verification

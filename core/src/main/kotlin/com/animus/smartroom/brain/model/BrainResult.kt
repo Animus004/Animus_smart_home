@@ -18,6 +18,15 @@ sealed interface BrainResult {
             get() = commands.firstOrNull() ?: AnimusCommand.UnknownCommand("")
     }
 
+    data class RemoteAgentSuccess(
+        val agentMessage: String,
+        val understoodIntent: String,
+        val actionTaken: Boolean,
+        val followupRequired: Boolean = false,
+        val followupQuestion: String? = null,
+        val rawResponse: String? = null
+    ) : BrainResult
+
     data class InvalidResponse(
         val reason: String,
         val rawResponse: String? = null
@@ -30,3 +39,4 @@ sealed interface BrainResult {
 
     data object Unavailable : BrainResult
 }
+

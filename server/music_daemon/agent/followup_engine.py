@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 from agent.models import ResolvedIntent, UserProfile, IntentCategory
+from agent.context_buffer import ConversationContextBuffer
 
 logger = logging.getLogger("music_daemon.agent.followup_engine")
 
@@ -18,8 +19,13 @@ class FollowUpEngine:
     Manages interactive uncertainty-reduction follow-up sessions.
     """
 
-    def __init__(self, user_profile: UserProfile):
+    def __init__(
+        self,
+        user_profile: UserProfile,
+        context_buffer: Optional[ConversationContextBuffer] = None
+    ):
         self.user_profile = user_profile
+        self.context_buffer = context_buffer
         self._pending_context: Optional[Dict[str, Any]] = None
 
     @property
@@ -32,13 +38,16 @@ class FollowUpEngine:
         """
         addr = self.user_profile.identity.preferred_address
 
-        if intent.primary_intent == "RELAXATION_INTENT":
+        if intent.primary_intent in ("RELAXATION_INTENT", "USER_MOOD_STATEMENT"):
             question = f"Want some music, a movie, or just a quiet room, {addr}?"
             self._pending_context = {
                 "type": "RELAXATION_DISAMBIGUATION",
                 "original_intent": intent.model_dump()
             }
+            if self.context_buffer:
+                self.context_buffer.start_thread("RELAXATION_FLOW", original_intent=intent)
             return question
+
 
         if intent.primary_intent == "START_CINEMA_ENTERTAINMENT":
             # Preferred streaming providers from user profile
@@ -48,7 +57,10 @@ class FollowUpEngine:
                 "type": "STREAMING_PROVIDER_SELECTION",
                 "original_intent": intent.model_dump()
             }
+            if self.context_buffer:
+                self.context_buffer.start_thread("CINEMA_SETUP", original_intent=intent, missing_parameters=["streaming_provider"])
             return question
+
 
         if intent.primary_intent == "ADJUST_VOLUME_AMBIGUOUS":
             question = f"Sure {addr} — are you listening on the Fire TV or the PC?"

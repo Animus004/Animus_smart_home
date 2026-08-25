@@ -5,6 +5,7 @@ import com.animus.smartroom.brain.model.BrainProviderType
 import com.animus.smartroom.brain.model.BrainResult
 import com.animus.smartroom.brain.provider.CloudAnimusBrain
 import com.animus.smartroom.brain.provider.LocalAnimusBrain
+import com.animus.smartroom.brain.provider.RemotePhaseFBrain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,7 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 class AnimusBrainManager(
     private val localBrain: AnimusBrain = LocalAnimusBrain(),
     private val cloudBrain: AnimusBrain = CloudAnimusBrain(),
-    initialProvider: BrainProviderType = BrainProviderType.LOCAL,
+    private val remotePhaseFBrain: AnimusBrain = RemotePhaseFBrain(),
+    initialProvider: BrainProviderType = BrainProviderType.REMOTE_PHASE_F,
     private val onProviderChanged: ((BrainProviderType) -> Unit)? = null
 ) : AnimusBrain {
 
@@ -35,19 +37,21 @@ class AnimusBrainManager(
     override suspend fun interpret(input: String): BrainResult {
         val currentProvider = _activeProvider.value
         val reason = when (currentProvider) {
+            BrainProviderType.REMOTE_PHASE_F -> "Authoritative Phase F remote backend is active"
             BrainProviderType.GEMINI -> "Gemini Cloud provider is active"
             BrainProviderType.LOCAL -> "Local offline provider is active"
         }
         Log.i(TAG, "[brain-selection] Selected brain: $currentProvider, Reason: $reason for input '$input'")
 
         val targetBrain = when (currentProvider) {
+            BrainProviderType.REMOTE_PHASE_F -> remotePhaseFBrain
             BrainProviderType.LOCAL -> localBrain
             BrainProviderType.GEMINI -> cloudBrain
         }
 
         val result = targetBrain.interpret(input)
 
-        // If cloud brain is unavailable or failed due to network/key, gracefully fall back to local brain
+        // If cloud brain is unavailable, fall back to local brain
         return if (currentProvider == BrainProviderType.GEMINI && (result is BrainResult.Unavailable || result is BrainResult.Failure)) {
             Log.w(TAG, "[brain-selection] Cloud brain unavailable ($result). Falling back to Local Brain.")
             localBrain.interpret(input)
@@ -56,3 +60,4 @@ class AnimusBrainManager(
         }
     }
 }
+

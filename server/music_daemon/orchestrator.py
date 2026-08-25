@@ -541,11 +541,12 @@ class SmartRoomOrchestrator:
             "duration": resolved.duration,
             "video_id": resolved.video_id,
             "thumbnail_url": resolved.thumbnail_url,
-            "audio_output_status": st.get("audio_output_status"),
-            "audio_device_id": st.get("audio_device_id"),
-            "audio_device_name": st.get("audio_device_name"),
+            "audio_output_status": st.get("audio_output_status") or (status_code if status_code else "CONNECTED"),
+            "audio_device_id": st.get("audio_device_id") or (lg_dev.get("id") if isinstance(lg_dev, dict) else None),
+            "audio_device_name": st.get("audio_device_name") or (lg_dev.get("name") if isinstance(lg_dev, dict) else None),
             "is_authenticated": resolved.is_authenticated
         }, None
+
 
     def safe_pause(self) -> bool:
         success = self.player.pause()

@@ -184,6 +184,17 @@ def test_power_off_oem(controller):
         assert controller.power_off() is True
         mock_shell.assert_called_with("am start -n com.zhiying.powerservice/.PowerActivity")
 
+def test_power_off_oem_with_ir_pulse(controller):
+    mock_ir = MagicMock()
+    controller.ir_transport = mock_ir
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", return_value=(0, "", "")), \
+         patch("time.sleep") as mock_sleep:
+        assert controller.power_off() is True
+        mock_sleep.assert_called_with(2.0)
+        mock_ir.send_pulse.assert_called_once_with("Power")
+
+
 # =========================================================================
 # 4. HDMI Signal State & Handshake Parsing
 # =========================================================================

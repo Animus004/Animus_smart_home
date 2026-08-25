@@ -830,7 +830,7 @@ class PlanExecutor:
         last_observed: Dict[str, Any] = {}
 
         while time.time() <= deadline:
-            fresh_state = self._get_fresh_room_state(time.time())
+            fresh_state = self._get_fresh_room_state(time.time(), force_refresh=True)
             matched, obs_val = self._match_expected_state(cid, parameters, fresh_state)
             last_observed = {"observed": obs_val}
 
@@ -928,8 +928,12 @@ class PlanExecutor:
         # For instantaneous commands (navigation, keypresses, transport)
         return True, "INSTANTANEOUS_ACTION_VERIFIED"
 
-    def _get_fresh_room_state(self, current_time: Optional[float] = None) -> RoomState:
+    def _get_fresh_room_state(self, current_time: Optional[float] = None, force_refresh: bool = False) -> RoomState:
         """Helper to obtain a fresh snapshot of RoomState from aggregator or fallback default."""
         if self.room_state_aggregator:
-            return self.room_state_aggregator.get_room_state(current_time=current_time)
+            try:
+                return self.room_state_aggregator.get_room_state(current_time=current_time, force_refresh=force_refresh)
+            except TypeError:
+                return self.room_state_aggregator.get_room_state(current_time=current_time)
         return RoomState(timestamp=current_time or time.time())
+

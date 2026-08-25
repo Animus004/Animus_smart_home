@@ -105,9 +105,13 @@ class AnimusApplication : Application() {
     lateinit var localInferencePort: com.animus.smartroom.brain.provider.AndroidLocalInferencePort
         private set
 
+    var voiceLifecycleCoordinator: com.animus.smartroom.voice.VoiceLifecycleCoordinator? = null
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
+
         Log.i(TAG, "[init] Initializing AnimusApplication singletons")
 
         com.animus.smartroom.diagnostics.DiagnosticBus.logSink = { tag, stage, message ->
@@ -226,9 +230,13 @@ class AnimusApplication : Application() {
             apiKeyProvider = { apiKeyStorage.getApiKey() },
             apiClient = geminiApiClient
         )
+        val remotePhaseFBrain = com.animus.smartroom.brain.provider.RemotePhaseFBrain(
+            client = com.animus.smartroom.brain.client.AgentApiRemoteClient()
+        )
         brainManager = AnimusBrainManager(
             localBrain = localBrain,
             cloudBrain = cloudBrain,
+            remotePhaseFBrain = remotePhaseFBrain,
             initialProvider = apiKeyStorage.getSelectedProvider(),
             onProviderChanged = { apiKeyStorage.saveSelectedProvider(it) }
         )
@@ -251,18 +259,34 @@ class AnimusApplication : Application() {
         runtimeControlPort = RuntimeControlPortImpl(
             brainManager = brainManager,
             commandRouter = commandRouter,
-            deviceSchedulerEngine = deviceSchedulerEngine
+            deviceSchedulerEngine = deviceSchedulerEngine,
+            voiceOutputPort = this.voiceOutputAdapter
         )
 
         overlayPermissionPort = AndroidOverlayPermissionPort(this)
 
         animusRuntime = AnimusRuntimeImpl()
 
-        voiceInputPort = com.animus.smartroom.voice.SpeechRecognitionManager(this) { spokenText ->
+        val speechManager = com.animus.smartroom.voice.SpeechRecognitionManager(this) { spokenText ->
             Log.i(TAG, "[voice] Global voice input recognized: '$spokenText'")
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
                 runtimeControlPort.submitCommand(spokenText)
             }
+        }
+        voiceInputPort = speechManager
+
+        val wakeWordConfig = com.animus.smartroom.voice.VoiceWakeWordConfigStorage(this)
+        val wakeWordEngine = com.animus.smartroom.voice.LocalAudioWakeWordEngine()
+        val voiceCoordinator = com.animus.smartroom.voice.VoiceLifecycleCoordinator(
+            wakeWordEngine = wakeWordEngine,
+            speechRecognitionManager = speechManager,
+            runtimeControlPort = runtimeControlPort,
+            voiceOutputPort = this.voiceOutputAdapter,
+            configStorage = wakeWordConfig
+        )
+        this.voiceLifecycleCoordinator = voiceCoordinator
+        if (wakeWordConfig.isWakeWordEnabled()) {
+            voiceCoordinator.startCoordinator()
         }
 
         // Create notification channel early so service can use it immediately
@@ -272,6 +296,7 @@ class AnimusApplication : Application() {
         routineEngine.restorePersistedRoutines()
         deviceSchedulerEngine.restorePersistedActions()
     }
+
 
     /**
      * Start the AnimusRuntimeService foreground service on demand.

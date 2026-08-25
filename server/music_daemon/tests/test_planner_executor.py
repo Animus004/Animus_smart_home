@@ -467,7 +467,7 @@ def test_executor_continue_best_effort_policy(mock_controllers, mock_room_state)
 
 def test_fastapi_planner_execute_endpoint(mock_controllers, mock_room_state):
     from fastapi.testclient import TestClient
-    from main import app, planner_client, planner_executor
+    from main import app, planner_client, planner_executor, room_state_aggregator
 
     mock_plan = GeminiStructuredPlan(
         intent="CLIMATE",
@@ -475,14 +475,20 @@ def test_fastapi_planner_execute_endpoint(mock_controllers, mock_room_state):
         steps=[PlanStep(step_id=1, device="ac", capability="AC_POWER_ON")]
     )
 
+    mock_room_state.ac.power.value = True
+    mock_room_state.ac.power.observed_at = time.time()
+
     client = TestClient(app)
 
     with patch.object(planner_client, "generate_plan", return_value=mock_plan):
         with patch.object(planner_client, "api_key", "mock_key"):
-            with patch.object(planner_executor.ac, "set_power", return_value=(True, {"power": True})):
-                res = client.post("/api/planner/execute", json={"request": "Turn on AC"})
-                assert res.status_code == 200
-                data = res.json()
-                assert data["success"] is True
-                assert data["overall_status"] in ("SUCCESS", "SKIPPED")
-                assert len(data["steps"]) == 1
+            with patch.object(room_state_aggregator, "get_room_state", return_value=mock_room_state):
+                with patch.object(planner_executor.room_state_aggregator, "get_room_state", return_value=mock_room_state):
+                    with patch.object(planner_executor.ac, "set_power", return_value=(True, {"power": True})):
+                        res = client.post("/api/planner/execute", json={"request": "Turn on AC"})
+                        assert res.status_code == 200
+                        data = res.json()
+                        assert data["success"] is True
+                        assert data["overall_status"] in ("SUCCESS", "SKIPPED")
+                        assert len(data["steps"]) == 1
+

@@ -18,8 +18,18 @@ from agent.models import (
     UserProfile
 )
 from agent.memory import AgentMemoryStore
+from agent.context_buffer import ConversationContextBuffer
 
 logger = logging.getLogger("music_daemon.agent.intent_resolver")
+
+WORD_TO_NUM = {
+    "sixteen": "16", "seventeen": "17", "eighteen": "18", "nineteen": "19", "twenty": "20",
+    "twenty one": "21", "twenty-one": "21", "twenty two": "22", "twenty-two": "22",
+    "twenty three": "23", "twenty-three": "23", "twenty four": "24", "twenty-four": "24",
+    "twenty five": "25", "twenty-five": "25", "twenty six": "26", "twenty-six": "26",
+    "twenty seven": "27", "twenty-seven": "27", "twenty eight": "28", "twenty-eight": "28",
+    "twenty nine": "29", "twenty-nine": "29", "thirty": "30"
+}
 
 
 class IntentResolver:
@@ -32,11 +42,20 @@ class IntentResolver:
         self,
         user_profile: UserProfile,
         registry: UnifiedCapabilityRegistry,
-        memory: AgentMemoryStore
+        memory: AgentMemoryStore,
+        context_buffer: Optional[ConversationContextBuffer] = None
     ):
         self.user_profile = user_profile
         self.registry = registry
         self.memory = memory
+        self.context_buffer = context_buffer
+
+    def _normalize_utterance(self, text: str) -> str:
+        lower = text.strip().lower()
+        for word, num in sorted(WORD_TO_NUM.items(), key=lambda x: len(x[0]), reverse=True):
+            lower = re.sub(rf'\b{word}\b', num, lower)
+        return lower
+
 
     def resolve_intent(
         self,
@@ -47,7 +66,7 @@ class IntentResolver:
         Determines the true human intent from user natural language, context, and capabilities.
         """
         clean_text = utterance.strip()
-        lower = clean_text.lower()
+        lower = self._normalize_utterance(clean_text)
 
         # =====================================================================
         # 1. Unsafe / Out-of-Bounds Rejection
@@ -77,7 +96,665 @@ class IntentResolver:
                 )
 
         # =====================================================================
+        # 1a-1. Stage 5 Proactive Suggestion Responses (Accept / Reject / Defer)
+        # =====================================================================
+        if self.context_buffer and self.context_buffer.get_pending_suggestion():
+            stripped = lower.strip(" .?!,")
+            norm = re.sub(r'\s+', ' ', re.sub(r'[,—\-\.:!?]', ' ', lower)).strip()
+            if stripped in ["yes", "sure", "yeah", "yep", "please", "please do", "go ahead", "do that", "yes please", "ok", "okay", "yup"] or norm in ["yes please", "yes sure", "sure do that", "please do", "sure"]:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent="ACCEPT_SUGGESTION",
+                    explanation="User explicitly accepted the active proactive suggestion."
+                )
+            if stripped in ["no", "leave it", "no leave it", "no thanks", "don't", "dont", "nah", "nope", "leave it as it is", "keep it as is", "don't do that", "dont do that"] or norm in ["no leave it", "no thanks", "leave it as it is", "keep it as is", "dont do it", "no dont", "no", "leave it", "no leave it off"]:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.INFORMATIONAL_ONLY,
+                    primary_intent="REJECT_SUGGESTION",
+                    explanation="User rejected the active proactive suggestion."
+                )
+            if stripped in ["later", "not now", "maybe later", "defer"] or norm in ["not now", "maybe later", "later", "defer"]:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.INFORMATIONAL_ONLY,
+                    primary_intent="DEFER_SUGGESTION",
+                    explanation="User deferred the active proactive suggestion."
+                )
+
+
+
+        # =====================================================================
+        # Stage 6: Scheduled Actions, Timers, and Deferred Intent
+        # =====================================================================
+        if any(w in lower for w in [
+            "cancel scheduled action", "cancel scheduled task", "cancel the scheduled", "don't change the ac later",
+            "dont change the ac later", "cancel the timer", "cancel scheduled ac", "forget the scheduled timer",
+            "cancel the scheduled task", "cancel the scheduled action"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="CANCEL_SCHEDULED_ACTION",
+                explanation="User requested cancellation of scheduled action."
+            )
+
+        if any(w in lower for w in [
+            "what is scheduled", "show scheduled tasks", "list scheduled actions", "any timers pending",
+            "what timers are running", "what's scheduled", "whats scheduled", "show scheduled"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="LIST_SCHEDULED_ACTIONS",
+                explanation="User queried active scheduled tasks and timers."
+            )
+
+        sched_ac_match = re.search(r'(?:set\s+(?:the\s+)?ac\s+to|turn\s+(?:the\s+)?ac\s+to|make\s+it)\s+(\d+)(?:\s*(?:degrees|c|°c))?\s+in\s+(\d+)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)', lower)
+        if sched_ac_match:
+            temp = int(sched_ac_match.group(1))
+            val = int(sched_ac_match.group(2))
+            unit = sched_ac_match.group(3)
+            delay = val * 3600.0 if "hour" in unit or "hr" in unit else val * 60.0
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SCHEDULE_ACTION",
+                target_subsystems=["AC"],
+                extracted_parameters={"temperature": temp, "delay_seconds": delay, "action_type": "SET_AC_TEMPERATURE", "target_subsystem": "AC", "target_capability": "AC_SET_TEMPERATURE"},
+                explanation=f"User requested scheduling AC temperature {temp}°C in {val} {unit}."
+            )
+
+        sched_media_match = re.search(r'(?:remind\s+me\s+to\s+)?(?:stop\s+(?:the\s+)?movie|pause\s+(?:the\s+)?movie|turn\s+off\s+(?:the\s+)?movie)\s+in\s+(\d+)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)', lower)
+        if sched_media_match:
+            val = int(sched_media_match.group(1))
+            unit = sched_media_match.group(2)
+            delay = val * 3600.0 if "hour" in unit or "hr" in unit else val * 60.0
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SCHEDULE_ACTION",
+                target_subsystems=["MEDIA"],
+                extracted_parameters={"delay_seconds": delay, "action_type": "MEDIA_STOP", "target_subsystem": "FIRE_TV", "target_capability": "FIRE_TV_MEDIA_PAUSE"},
+                explanation=f"User requested scheduling media stop in {val} {unit}."
+            )
+
+        sched_proj_match = re.search(r'(?:turn\s+off\s+(?:the\s+)?projector|shutdown\s+(?:the\s+)?projector)\s+in\s+(\d+)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)', lower)
+        if sched_proj_match:
+            val = int(sched_proj_match.group(1))
+            unit = sched_proj_match.group(2)
+            delay = val * 3600.0 if "hour" in unit or "hr" in unit else val * 60.0
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SCHEDULE_ACTION",
+                target_subsystems=["PROJECTOR"],
+                extracted_parameters={"delay_seconds": delay, "action_type": "PROJECTOR_POWER_OFF", "target_subsystem": "PROJECTOR", "target_capability": "PROJECTOR_POWER_OFF"},
+                explanation=f"User requested scheduling projector shutdown in {val} {unit}."
+            )
+
+        if lower.strip(" .?!") in ("keep the room comfortable", "keep it comfortable", "maintain room comfort", "keep room comfortable"):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="OBSERVE_ROOM_COMFORT",
+                target_subsystems=["AC"],
+                explanation="User requested long-horizon room comfort observation."
+            )
+
+        # Stage 6 Goal Pause / Defer / Resume
+        if any(w in lower for w in ["pause the current goal", "pause goal", "pause the setup", "pause the routine", "hold on with the setup", "defer the goal"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="PAUSE_GOAL",
+                explanation="User requested to pause the active goal."
+            )
+
+        if any(w in lower for w in ["resume the goal", "resume goal", "continue the setup", "continue the routine", "resume setup"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="RESUME_GOAL",
+                explanation="User requested to resume the paused goal."
+            )
+
+        # Stage 6 Situations & Deep Introspection
+        if any(w in lower for w in ["what is happening now", "what is happening", "what's happening now", "whats happening now", "what's going on in the room", "what's going on", "whats going on", "what is the room doing"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="WHAT_IS_HAPPENING",
+                explanation="User queried current operational situation and room activity."
+            )
+
+        if any(w in lower for w in ["why did this change", "why did that change", "why did the ac change", "why did the temperature change", "why did the projector turn off"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="WHY_DID_THIS_CHANGE",
+                explanation="User asked why a specific state change occurred."
+            )
+
+        if any(w in lower for w in ["what changed externally", "what changed in the room", "what changed recently", "what's changed recently", "what changed"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="WHAT_CHANGED",
+                explanation="User queried recent room changes and external state diffs."
+            )
+
+        # Stage 6 Preferences
+        pref_movie_temp = re.search(r'(?:remember\s+that\s+i\s+prefer|prefer|set\s+preferred\s+movie\s+temperature\s+to)\s+(\d+)\s*(?:degrees|c|°c)?\s*(?:for\s+movies|in\s+movie\s+mode)?', lower)
+        if pref_movie_temp and any(k in lower for k in ["prefer", "movie", "remember"]):
+            t_val = int(pref_movie_temp.group(1))
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SET_ROOM_PREFERENCE",
+                extracted_parameters={"key": "preferred_movie_temperature", "value": t_val},
+                explanation=f"User set preferred movie temperature to {t_val}°C."
+            )
+
+        if any(w in lower for w in ["forget my movie temperature preference", "forget preferred movie temperature", "forget room preference", "forget my temperature preference"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="FORGET_ROOM_PREFERENCE",
+                extracted_parameters={"key": "preferred_movie_temperature"},
+                explanation="User requested to forget room temperature preference."
+            )
+
+
+        # =====================================================================
+        # 1a-2. Stage 5 Behavioral Introspection
+        # =====================================================================
+        if any(w in lower for w in [
+            "what mode are we in", "what mode is the room in", "what's the active mode",
+            "whats the active mode", "are we in movie mode", "are we still in movie mode",
+            "what mode are you in", "is movie mode active", "is sleep mode active"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_MODE",
+                explanation="User asked for the current behavioral mode of the room."
+            )
+
+        if any(w in lower for w in [
+            "what's playing", "whats playing", "what are we watching", "is the movie playing",
+            "what is playing", "what movie is on", "what track is playing", "is media playing"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_MEDIA",
+                explanation="User queried the active media playback session and content."
+            )
+
+        if any(w in lower for w in ["what changed recently", "what changed in the room", "what's changed recently"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_RECENT_CHANGE",
+                explanation="User queried recent room changes and external state diffs."
+            )
+
+
+        # =====================================================================
+        # 1a-3. Stage 5 Autonomous Recovery Queries
+        # =====================================================================
+        if any(w in lower for w in [
+            "recover audio", "fix the sound", "something is wrong with the sound",
+            "fix audio", "reconnect audio", "audio is not working", "sound is not working",
+            "reconnect soundbar", "fix soundbar"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="RECOVER_AUDIO",
+                target_subsystems=["SOUNDBAR"],
+                explanation="User requested autonomous audio recovery."
+            )
+
+        if any(w in lower for w in ["reconnect fire tv", "fix fire tv", "recover fire tv", "fire tv is disconnected"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="RECOVER_DEVICE",
+                target_subsystems=["FIRE_TV"],
+                explanation="User requested Fire TV connection recovery."
+            )
+
+        # =====================================================================
+        # 1a-4. Stage 5 Media Session Controls (Play, Pause, Resume, Stop, Skip, Replay)
+        # =====================================================================
+        if any(w in lower for w in ["pause it", "pause that for a second", "pause that", "pause the movie", "pause the video", "pause the music", "pause playback", "pause media"]) or lower.strip(" .?!") == "pause":
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="PAUSE_MEDIA",
+                target_subsystems=["FIRE_TV", "MEDIA"],
+                explanation="User requested to pause current media playback."
+            )
+
+        if any(w in lower for w in ["resume it", "resume that", "put the movie back on", "resume the movie", "resume the video", "resume playback", "continue the movie", "unpause", "resume media"]) or lower.strip(" .?!") == "resume":
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="RESUME_MEDIA",
+                target_subsystems=["FIRE_TV", "MEDIA"],
+                explanation="User requested to resume active media playback."
+            )
+
+        if any(w in lower for w in ["stop the movie", "stop the music", "stop playback", "stop media"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="MEDIA_STOP",
+                target_subsystems=["MEDIA"],
+                explanation="User requested to stop media playback."
+            )
+
+        if any(w in lower for w in ["skip this", "skip track", "next track", "skip song", "next song"]) or lower.strip(" .?!") == "skip":
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="MEDIA_SKIP",
+                target_subsystems=["MEDIA"],
+                explanation="User requested to skip to the next track."
+            )
+
+        if any(w in lower for w in ["play that again", "replay that", "replay the track", "replay song"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="MEDIA_REPLAY",
+                target_subsystems=["MEDIA"],
+                explanation="User requested to replay the media item."
+            )
+
+        # =====================================================================
+        # 1a-5. Stage 5 Behavioral Mode Entries & Exits
+        # =====================================================================
+        if any(w in lower for w in [
+            "let's watch a movie", "lets watch a movie", "get the room ready for a movie",
+            "prepare the room for a movie", "prepare room for a movie", "prepare movie mode",
+            "enter movie mode", "start movie mode", "movie mode", "put the room in movie mode"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="ENTER_MOVIE_MODE",
+                target_subsystems=["PROJECTOR", "FIRE_TV", "SOUNDBAR"],
+                explanation="User requested to enter Movie Mode."
+            )
+
+
+        if any(w in lower for w in [
+            "prepare sleep mode", "put the room to sleep", "ready the room for sleep",
+            "enter sleep mode", "start sleep mode", "sleep mode", "bedtime mode"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="ENTER_SLEEP_MODE",
+                target_subsystems=["AC", "PROJECTOR", "FIRE_TV", "SOUNDBAR"],
+                explanation="User requested to enter Sleep Mode."
+            )
+
+        if any(w in lower for w in ["wake up mode", "wake the room up", "morning mode"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="ENTER_WAKE_UP_MODE",
+                target_subsystems=["AC"],
+                explanation="User requested to enter Wake Up Mode."
+            )
+
+        if any(w in lower for w in ["work mode", "focus mode", "study mode"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="ENTER_WORK_MODE",
+                target_subsystems=["AC"],
+                explanation="User requested to enter Work Mode."
+            )
+
+        if any(w in lower for w in ["gaming mode", "game mode"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="ENTER_GAMING_MODE",
+                target_subsystems=["PROJECTOR", "SOUNDBAR"],
+                explanation="User requested to enter Gaming Mode."
+            )
+
+        if any(w in lower for w in [
+            "stop movie mode", "exit movie mode", "done with the movie",
+            "the movie ended", "i'm done here", "im done here", "exit mode", "turn off movie mode"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="EXIT_ACTIVE_MODE",
+                explanation="User requested to exit the active behavioral mode."
+            )
+
+        # =====================================================================
+        # 1a-6. Stage 5 Comfort Expressions ("Too hot", "Freezing", "Make it warmer")
+        # =====================================================================
+        if any(w in lower for w in ["make it warmer", "a little warmer", "slightly warmer", "raise the ac"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SET_AC_TEMPERATURE",
+                target_subsystems=["AC"],
+                extracted_parameters={"relative_delta": 1, "delta": 1, "temperature_relative": 1},
+                explanation="User requested relative warming comfort adjustment."
+            )
+
+        if any(w in lower for w in ["make it cooler", "a little cooler", "slightly cooler", "lower the ac"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SET_AC_TEMPERATURE",
+                target_subsystems=["AC"],
+                extracted_parameters={"relative_delta": -1, "delta": -1, "temperature_relative": -1},
+                explanation="User requested relative cooling comfort adjustment."
+            )
+
+        if any(w in lower for w in ["i'm comfortable now", "im comfortable now", "temperature is fine", "comfort status"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="COMFORT_STATUS",
+                target_subsystems=["AC"],
+                explanation="User stated comfort status / checked current comfort."
+            )
+
+
+        # =====================================================================
+        # 1b. Replay & Undo Actions ("Do that again", "Put it back")
+        # =====================================================================
+
+        if any(u in lower for u in ["put it back", "put the ac back", "change it back", "revert that", "revert it", "set it back", "undo that", "undo the last change", "undo last change", "go back", "undo"]):
+            target_sub = ["AC"] if "ac" in lower else []
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="UNDO_RECENT_ACTION",
+                target_subsystems=target_sub,
+                explanation="User requested to revert the most recent physical action to its prior state."
+            )
+
+        if any(r in lower for r in ["do that again", "repeat that", "do it again", "run that again", "replay that", "do the last thing again", "repeat the last thing"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="REPLAY_RECENT_ACTION",
+                explanation="User requested to repeat the most recent physical action."
+            )
+
+        # =====================================================================
+        # =====================================================================
+        # 1c-1. Stage 4 Goal Cancellation
+        # =====================================================================
+        if any(w in lower for w in ["cancel the rest", "cancel the remaining steps", "cancel remaining", "stop the rest", "don't do the rest", "dont do the rest", "wait, don't do the last step", "wait dont do the last step"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="CANCEL_REMAINING_GOAL_STEPS",
+                explanation="User cancelled remaining unexecuted goal steps."
+            )
+
+        # =====================================================================
+        # 1c-2. Cancellation & Conversational Flow Control (Turn Cancellation)
+        # =====================================================================
+        if any(c in lower for c in [
+            "never mind", "nevermind", "forget it", "cancel", "don't do that", "dont do that",
+            "actually leave it", "leave it", "stop that", "leave the ac alone", "actually leave the ac alone"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="CANCEL_CURRENT_REQUEST",
+                explanation="User explicitly requested cancellation of the pending command or active flow."
+            )
+
+
+        # =====================================================================
+        # 1d. Gratitude & Conversational Acknowledgment
+        # =====================================================================
+        if lower.strip(" .?!") in ["thanks", "thank you", "thanks buddy", "thank you buddy", "thx"]:
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="GRATITUDE_ACK",
+                explanation="User expressed gratitude / polite conversational closing."
+            )
+
+        # =====================================================================
+        # 1e. Action Introspection & Historical Queries
+        # =====================================================================
+        # Historical queries (Depth >= 2 or prior state query)
+        if any(w in lower for w in [
+            "what did you change before that", "what did you do before that",
+            "what was the ac at before", "what was it before", "what was the temperature before",
+            "what was it at before"
+        ]):
+            target_sub = ["AC"] if "ac" in lower or "temperature" in lower else []
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_HISTORICAL_ACTION",
+                target_subsystems=target_sub,
+                extracted_parameters={"depth": 2 if "before that" in lower else 1, "attribute": "target_temperature" if "temperature" in lower or "ac" in lower else None},
+                explanation="User asked for historical action / prior state."
+            )
+
+        if any(w in lower for w in ["what did you do to the ac", "what did you change on the ac"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_RECENT_ACTION",
+                target_subsystems=["AC"],
+                explanation="User asked for the recent action performed on the AC."
+            )
+
+        if any(w in lower for w in ["what did you just do", "what did you just change", "what was changed", "what did you change", "what did you do", "what did you switch", "what did you do last"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_RECENT_ACTION",
+                explanation="User asked for an explanation of the most recent physical action."
+            )
+
+        if any(w in lower for w in ["why did you do that", "why did you turn that off", "why did you change that", "why did you switch that off", "why did you adjust that", "why"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_ACTION_REASON",
+                explanation="User asked for the reasoning behind the most recent action."
+            )
+
+        # Telemetry / Status query ("Is it still on?", "What is the AC doing now?")
+        if any(st in lower for st in ["is it still on", "is the ac still on", "is the projector still on", "what is the ac doing now", "what is the ac at", "what's changed", "whats changed"]):
+            dev = "AC" if "ac" in lower else ("PROJECTOR" if "projector" in lower else None)
+            if not dev and self.context_buffer:
+                dev = self.context_buffer.resolve_reference(clean_text)
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_TELEMETRY_STATUS",
+                target_subsystems=[dev] if dev else [],
+                explanation="User queried the live physical status of the active device."
+            )
+
+        # =====================================================================
+        # 1e-2. Goal Introspection Queries (Stage 4)
+        # =====================================================================
+        if any(w in lower for w in [
+            "what are you doing", "what are you working on", "what's happening", "whats happening",
+            "did you finish", "are you done", "what did you already do", "what's the room doing now", "whats the room doing now"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_GOAL_STATUS",
+                explanation="User queried current deliberative goal / task progress status."
+            )
+
+        if any(w in lower for w in ["what's left", "whats left", "what is left", "what's remaining", "whats remaining", "what remains"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_GOAL_REMAINING",
+                explanation="User asked for remaining unexecuted steps in the active goal."
+            )
+
+        if any(w in lower for w in [
+            "what failed", "why haven't you done it", "why havent you done it",
+            "why did it fail", "why didn't you continue", "why didnt you continue", "why did it stop"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_GOAL_FAILURES",
+                explanation="User asked for explanation of failed/blocked goal steps."
+            )
+
+        if any(w in lower for w in ["cancel the rest", "cancel the remaining steps", "stop the rest", "don't do the rest", "dont do the rest", "wait, don't do the last step", "wait dont do the last step"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="CANCEL_REMAINING_GOAL_STEPS",
+                explanation="User cancelled remaining unexecuted goal steps."
+            )
+
+        if any(wa in lower for wa in ["what about the projector", "how about the projector"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="INTROSPECT_TELEMETRY_STATUS",
+                target_subsystems=["PROJECTOR"],
+                explanation="User switched conversational focus to the projector."
+            )
+
+        # =====================================================================
+        # 1e-3. Multi-Step Goals & Conditional Commands (Stage 4)
+        # =====================================================================
+        # Cinema / Movie Preparation Goal
+        if any(kw in lower for kw in [
+            "get the room ready for a movie", "prepare the room for a movie",
+            "ready for a movie", "movie mode", "prepare for movie", "cinema mode",
+            "get ready for movie", "set up for a movie", "set up movie"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="CINEMA_PREPARE",
+                target_subsystems=["PROJECTOR", "AC", "FIRE_TV"],
+                explanation="User requested multi-step cinema room preparation goal."
+            )
+
+        # Sleep / Bedtime Multi-Step Goal (Explicit room commands only)
+        if any(kw in lower for kw in [
+            "prepare the room for sleep", "get the room ready for sleep", "ready the room for sleep",
+            "sleep mode", "bedtime mode", "prepare for sleep", "ready for sleep",
+            "turn everything off when i'm done", "turn everything off when im done"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SLEEP_PREPARE",
+                target_subsystems=["PROJECTOR", "SOUNDBAR", "AC"],
+                explanation="User requested multi-step sleep room preparation goal."
+            )
+
+
+        # Compound Goals: "Cool the room to 23 and turn on the projector" or 3-step movie
+        if ("projector" in lower and ("ac" in lower or "cool" in lower or "temperature" in lower)) and ("and" in lower or "then" in lower or "," in lower):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="MULTI_STEP_GOAL",
+                target_subsystems=["PROJECTOR", "AC"],
+                explanation="User requested compound multi-device goal."
+            )
+
+        # Conditional Commands
+        if ("if" in lower or "don't change" in lower or "dont change" in lower or "only" in lower) and ("projector" in lower or "ac" in lower or "soundbar" in lower):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="CONDITIONAL_GOAL",
+                explanation="User requested conditional hardware action."
+            )
+
+
+
+
+        # =====================================================================
+        # 1f. Semantic Room Thermal & Comfort Reasoning
+        # =====================================================================
+        if any(f in lower for f in ["it's freezing in here", "it's freezing", "i'm freezing", "it's too cold", "it's very cold", "too cold in here"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SEMANTIC_ROOM_FREEZING",
+                target_subsystems=["AC"],
+                explanation="User reported uncomfortable coldness; requires thermal assessment of live room telemetry."
+            )
+
+        if any(h in lower for h in ["it's really hot", "it's too hot", "it's getting warm", "it's boiling in here", "too hot in here", "i'm burning up"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SEMANTIC_ROOM_TOO_HOT",
+                target_subsystems=["AC"],
+                explanation="User reported uncomfortable warmth; requires thermal cooling adjustment."
+            )
+
+        if any(c in lower for c in ["it's comfortable now", "it's already fine", "it's fine now", "feels good now", "comfortable now", "it's perfect now", "make it comfortable"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="SEMANTIC_ROOM_COMFORTABLE",
+                target_subsystems=["AC"],
+                explanation="User reported thermal satisfaction; no action necessary."
+            )
+
+        # =====================================================================
+        # 1g. Contextual Corrections (via ConversationContextBuffer)
+        # =====================================================================
+        if self.context_buffer:
+            ac_corr = self.context_buffer.is_ac_correction(clean_text)
+            if ac_corr is not None:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent="SET_AC_TEMPERATURE",
+                    target_subsystems=["AC"],
+                    extracted_parameters={"temperature": ac_corr},
+                    explanation=f"User corrected AC temperature to {ac_corr}°C."
+                )
+
+            prov_corr = self.context_buffer.is_provider_correction(clean_text)
+            if prov_corr is not None and "actually" in clean_text.lower():
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent=f"LAUNCH_{prov_corr.upper()}",
+                    target_subsystems=["PROJECTOR", "FIRE_TV", "SOUNDBAR"],
+                    extracted_parameters={"provider": prov_corr},
+                    explanation=f"User corrected streaming provider to {prov_corr}."
+                )
+
+        # =====================================================================
         # 2. Location Update (Turn 05: "I'm heading to my desk")
+
         # =====================================================================
         if any(loc_kw in lower for loc_kw in [
             "heading to my desk", "heading to desk", "going to my desk", "at my desk",
@@ -237,6 +914,7 @@ class IntentResolver:
         unsupported_keywords = ["fan", "microwave", "coffee", "blinds", "curtains", "door lock", "garage", "refrigerator"]
         for kw in unsupported_keywords:
             if kw in lower and not ("ac fan" in lower or "fan speed" in lower):
+
                 return ResolvedIntent(
                     raw_query=clean_text,
                     category=IntentCategory.UNSUPPORTED_CAPABILITY,
@@ -246,26 +924,153 @@ class IntentResolver:
                 )
 
         # =====================================================================
-        # 5. Media Control Commands (Pause / Resume - Turns 35 & 36)
+        # 5. Media Control Commands (Pause / Resume / Stop)
         # =====================================================================
-        if any(p_kw in lower for p_kw in ["pause that", "pause video", "pause media", "pause it", "pause for a second", "pause"]):
+        if any(p_kw in lower for p_kw in [
+            "pause that", "pause this", "pause video", "pause media", "pause it",
+            "pause for a second", "pause the movie", "pause movie", "pause",
+            "stop the video for a second", "stop the video"
+        ]):
             return ResolvedIntent(
                 raw_query=clean_text,
                 category=IntentCategory.CLEAR_EXECUTABLE,
                 primary_intent="PAUSE_MEDIA",
+                target_subsystems=["FIRE_TV"],
                 explanation="User requested media playback pause."
             )
 
-        if any(r_kw in lower for r_kw in ["resume it", "resume that", "resume video", "resume media", "resume playback", "unpause", "continue watching"]):
+        if any(r_kw in lower for r_kw in ["resume it", "resume that", "resume this", "resume video", "resume media", "resume playback", "unpause", "continue watching", "resume"]):
             return ResolvedIntent(
                 raw_query=clean_text,
                 category=IntentCategory.CLEAR_EXECUTABLE,
                 primary_intent="RESUME_MEDIA",
+                target_subsystems=["FIRE_TV"],
                 explanation="User requested media playback resume."
             )
 
         # =====================================================================
-        # 6. Music & Audio Playback (Turn 03: "Put on something to get me moving")
+        # 6. Direct Projector Power Commands
+        # =====================================================================
+        if any(p_on in lower for p_on in ["turn on the projector", "turn on projector", "power on projector", "wake projector", "projector on", "switch on the projector", "switch on projector"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="PROJECTOR_POWER_WAKE",
+                target_subsystems=["PROJECTOR"],
+                explanation="User requested direct projector display power wake."
+            )
+
+        if any(p_off in lower for p_off in ["turn off the projector", "turn off projector", "power off projector", "sleep projector", "projector off", "switch off the projector", "switch off projector"]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="PROJECTOR_POWER_SLEEP",
+                target_subsystems=["PROJECTOR"],
+                explanation="User requested direct projector display standby/sleep."
+            )
+
+        # =====================================================================
+        # 7. Direct AC Power & Relative Adjustments
+        # =====================================================================
+        # Direct AC Power On
+        if any(ac_on in lower for ac_on in [
+            "turn on the ac", "turn the ac on", "switch on the ac", "switch on ac",
+            "turn on ac", "it's hot, turn on the ac", "it's hot turn on the ac",
+            "can you cool the room", "cool the room", "start the ac", "start ac"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="AC_POWER_ON",
+                target_subsystems=["AC"],
+                explanation="User requested direct AC power on."
+            )
+
+        # Direct AC Power Off
+        if any(ac_off in lower for ac_off in [
+            "turn off the ac", "turn the ac off", "switch off the ac", "switch off ac",
+            "turn off ac", "stop the ac", "stop ac", "shut off the ac", "shut off ac"
+        ]):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="AC_POWER_OFF",
+                target_subsystems=["AC"],
+                explanation="User requested direct AC power off."
+            )
+
+        # Relative AC: Degree-specific (e.g. "two degrees cooler", "2 degrees warmer", "three degrees cooler")
+        rel_deg_match = re.search(r'(?:(?:make\s+(?:it\s+)?)?(?:actually\s+)?)?(\d+)\s*degrees?\s*(cooler|warmer|colder|lower|higher|down|up)', lower)
+        if rel_deg_match:
+            deg = int(rel_deg_match.group(1))
+            direction = rel_deg_match.group(2)
+            cur_temp = 24
+            if room_state and hasattr(room_state, "ac") and room_state.ac and room_state.ac.target_temperature:
+                cur_temp = room_state.ac.target_temperature.value or 24
+            elif self.context_buffer and self.context_buffer.last_state_delta and self.context_buffer.last_state_delta.attribute == "target_temperature":
+                cur_temp = self.context_buffer.last_state_delta.verified_value or self.context_buffer.last_state_delta.new_value or 24
+
+            delta = -deg if direction in ["cooler", "colder", "lower", "down"] else deg
+            target_t = max(16, min(30, cur_temp + delta))
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SET_AC_TEMPERATURE",
+                target_subsystems=["AC"],
+                extracted_parameters={"temperature": target_t},
+                explanation=f"Relative {direction} adjustment by {deg}°C: {cur_temp}°C -> {target_t}°C."
+            )
+
+        # Relative AC: Qualitative Cooler / Warmer
+        if any(c_kw in lower for c_kw in ["a little cooler", "make it cooler", "make room cooler", "lower the temperature", "lower the ac", "drop the temp", "cooler"]):
+            cur_temp = 24
+            if room_state and hasattr(room_state, "ac") and room_state.ac and room_state.ac.target_temperature:
+                cur_temp = room_state.ac.target_temperature.value or 24
+            elif self.context_buffer and self.context_buffer.last_state_delta and self.context_buffer.last_state_delta.attribute == "target_temperature":
+                cur_temp = self.context_buffer.last_state_delta.verified_value or self.context_buffer.last_state_delta.new_value or 24
+            target_t = max(16, cur_temp - 1)
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SET_AC_TEMPERATURE",
+                target_subsystems=["AC"],
+                extracted_parameters={"temperature": target_t},
+                explanation=f"Relative cooling adjustment: {cur_temp}°C -> {target_t}°C."
+            )
+
+        if any(w_kw in lower for w_kw in ["a little warmer", "make it warmer", "make room warmer", "raise the temperature", "raise the ac", "increase the temp", "warmer"]):
+            cur_temp = 24
+            if room_state and hasattr(room_state, "ac") and room_state.ac and room_state.ac.target_temperature:
+                cur_temp = room_state.ac.target_temperature.value or 24
+            elif self.context_buffer and self.context_buffer.last_state_delta and self.context_buffer.last_state_delta.attribute == "target_temperature":
+                cur_temp = self.context_buffer.last_state_delta.verified_value or self.context_buffer.last_state_delta.new_value or 24
+            target_t = min(30, cur_temp + 1)
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.CLEAR_EXECUTABLE,
+                primary_intent="SET_AC_TEMPERATURE",
+                target_subsystems=["AC"],
+                extracted_parameters={"temperature": target_t},
+                explanation=f"Relative warming adjustment: {cur_temp}°C -> {target_t}°C."
+            )
+
+        # Explicit AC Temperature ("Set AC to 24", "AC twenty four", "make it 24 degrees")
+        ac_num_match = re.search(r'(?:(?:ac|temperature|temp)\s+(?:to\s+)?(\d+)|(?:set\s+(?:the\s+)?ac\s+to\s+)(\d+)|(\d+)\s*(?:degrees?|°c|celsius))', lower)
+        if ac_num_match:
+            target_t = int(ac_num_match.group(1) or ac_num_match.group(2) or ac_num_match.group(3))
+            if 16 <= target_t <= 30:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent="SET_AC_TEMPERATURE",
+                    target_subsystems=["AC"],
+                    extracted_parameters={"temperature": target_t},
+                    explanation=f"Set AC target temperature to {target_t}°C."
+                )
+
+
+        # =====================================================================
+        # 8. Music & Audio Playback (Turn 03: "Put on something to get me moving")
         # =====================================================================
         if any(m_kw in lower for m_kw in ["put on something to get me moving", "put on music", "play music", "play something upbeat", "morning music", "motivation music"]):
             return ResolvedIntent(
@@ -277,7 +1082,7 @@ class IntentResolver:
             )
 
         # =====================================================================
-        # 7. Focus / SQL Learning Sessions (Turn 11 & Turn 18)
+        # 9. Focus / SQL Learning Sessions (Turn 11 & Turn 18)
         # =====================================================================
         # Semantic Unit-Aware Duration Check (e.g. "Let's do SQL for 30 minutes")
         dur_match = re.search(r'(?:for\s+)?(\d+)\s*(?:mins?|minutes?|hours?|hrs?)', lower)
@@ -325,10 +1130,11 @@ class IntentResolver:
             )
 
         # =====================================================================
-        # 8. Compound Entertainment Commands (Cinema, YouTube, Movie Mode)
+        # 10. Compound Entertainment Commands (Cinema, YouTube, Movie Mode)
         # =====================================================================
-        if any(e_w in lower for e_w in ["let's watch something", "put something on", "movie mode", "start a movie", "watch a movie", "chill with a movie"]):
+        if any(e_w in lower for e_w in ["let's watch something", "put something on", "movie mode", "start a movie", "watch a movie", "chill with a movie", "movie", "a movie", "cinema"]):
             return ResolvedIntent(
+
                 raw_query=clean_text,
                 category=IntentCategory.CLEAR_WITH_MISSING_NON_CRITICAL,
                 primary_intent="START_CINEMA_ENTERTAINMENT",
@@ -351,8 +1157,22 @@ class IntentResolver:
                 explanation="Launch YouTube application on cinema stack."
             )
 
+        # Direct Streaming Services (Turn 31: "Netflix", "Prime Video", "Hotstar")
+        for prov in ["netflix", "prime video", "prime", "hotstar", "apple tv", "disney"]:
+            if prov in lower or prov.replace("_", " ") in lower:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent=f"LAUNCH_{prov.upper().replace(' ', '_')}",
+                    mood_vibe=MoodVibe.MOVIE,
+                    target_subsystems=["PROJECTOR", "FIRE_TV", "SOUNDBAR"],
+                    extracted_parameters={"provider": prov},
+                    explanation=f"Direct command to launch {prov} on cinema stack."
+                )
+
         # =====================================================================
-        # 8b. Negative Constraint Relaxation (Turn 28: "No, not music")
+
+        # 10b. Negative Constraint Relaxation (Turn 28: "No, not music")
         # =====================================================================
         if any(neg in lower for neg in ["no, not music", "not music", "no music", "anything but music"]):
             return ResolvedIntent(
@@ -366,7 +1186,53 @@ class IntentResolver:
             )
 
         # =====================================================================
-        # 9. Volume & Bare Numeric Disambiguation (Turns 04, 08, 33, 34)
+        # 11. Anaphoric / Contextual Pronoun Reference ("Turn that off", "Turn it off", "Turn that off too")
+        # =====================================================================
+        if any(off_kw in lower for off_kw in [
+            "turn that off too", "turn it off too", "turn that off", "turn this off", "turn it off",
+            "switch that off", "switch this off", "switch it off",
+            "shut that off", "shut this off", "shut it off", "turn everything off", "done watching"
+        ]):
+            target_device = None
+            if self.context_buffer:
+                target_device = self.context_buffer.resolve_reference(clean_text)
+
+            if target_device == "PROJECTOR":
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent="PROJECTOR_POWER_SLEEP",
+                    target_subsystems=["PROJECTOR"],
+                    explanation="Anaphoric pronoun resolved to active Projector."
+                )
+            elif target_device == "AC":
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent="AC_POWER_OFF",
+                    target_subsystems=["AC"],
+                    explanation="Anaphoric pronoun resolved to active AC."
+                )
+            elif room_state and hasattr(room_state, "environment") and room_state.environment and room_state.environment.room_mode == "MOVIE":
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent="SLEEP_ALL",
+                    target_subsystems=["PROJECTOR", "FIRE_TV"],
+                    explanation="Anaphoric pronoun resolved to active Cinema / Movie stack."
+                )
+            else:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent="SLEEP_ALL",
+                    target_subsystems=["PROJECTOR", "FIRE_TV"],
+                    explanation="Resolved general sleep/turn off intent."
+                )
+
+
+        # =====================================================================
+        # 12. Volume & Bare Numeric Disambiguation (Turns 04, 08, 33, 34)
         # =====================================================================
         # Bare numeric statement (Turn 34: "Actually 25 is fine")
         clean_num_str = lower.strip(" .?!,")
@@ -383,7 +1249,12 @@ class IntentResolver:
                 explanation="A bare numeric statement cannot mutate hardware without validated target context."
             )
 
-        if any(v_w in lower for v_w in ["make it quieter", "turn it down", "turn it up", "louder", "softer", "quieter"]):
+        if any(v_w in lower for v_w in [
+            "make it quieter", "turn it down", "turn it down a bit", "lower the volume a little",
+            "lower the volume", "turn down the volume", "turn down", "softer", "quieter", "that's too loud",
+            "turn it up", "turn it up a bit", "make it louder", "louder", "volume up"
+        ]):
+            is_up = any(u in lower for u in ["up", "louder"])
             active_producer = "UNKNOWN"
             if room_state and hasattr(room_state, "audio_stream") and room_state.audio_stream:
                 active_producer = getattr(room_state.audio_stream, "active_producer", "UNKNOWN")
@@ -391,13 +1262,14 @@ class IntentResolver:
                     active_producer = active_producer.value
 
             if active_producer in ("FIRE_TV", "PC"):
+                intent_name = "VOLUME_UP" if is_up else "VOLUME_DOWN"
                 return ResolvedIntent(
                     raw_query=clean_text,
                     category=IntentCategory.CLEAR_EXECUTABLE,
-                    primary_intent="ADJUST_ACTIVE_VOLUME",
+                    primary_intent=intent_name,
                     target_subsystems=[active_producer],
-                    extracted_parameters={"target_producer": active_producer},
-                    explanation=f"Acoustic adjustment resolved to active producer: {active_producer}."
+                    extracted_parameters={"target_producer": active_producer, "direction": "UP" if is_up else "DOWN"},
+                    explanation=f"Acoustic adjustment ({intent_name}) resolved to active producer: {active_producer}."
                 )
             else:
                 return ResolvedIntent(
@@ -410,7 +1282,7 @@ class IntentResolver:
                 )
 
         # =====================================================================
-        # 10. Default Clear Executable Command
+        # 13. Default Clear Executable Command
         # =====================================================================
         return ResolvedIntent(
             raw_query=clean_text,
@@ -418,3 +1290,4 @@ class IntentResolver:
             primary_intent="GENERAL_ROOM_COMMAND",
             explanation="Standard room orchestration command passed to planner."
         )
+

@@ -48,13 +48,19 @@ class RoomStateAggregator:
             orchestrator=self.orchestrator,
             fire_tv_controller=self.fire_tv
         )
+        self._cached_state: Optional[RoomState] = None
+        self._cache_timestamp: float = 0.0
+        self._cache_ttl_seconds: float = 3.0
 
-    def get_room_state(self, current_time: Optional[float] = None) -> RoomState:
+    def get_room_state(self, current_time: Optional[float] = None, force_refresh: bool = False) -> RoomState:
         """
         Polls all available physical controllers and compiles the canonical RoomState.
         Faults in individual subsystems are isolated and marked UNKNOWN without crashing the aggregation.
         """
         now = current_time if current_time is not None else time.time()
+        if not force_refresh and self._cached_state is not None and (now - self._cache_timestamp) < self._cache_ttl_seconds:
+            return self._cached_state
+
         is_consistent = True
 
         # ---------------------------------------------------------------------
@@ -63,6 +69,7 @@ class RoomStateAggregator:
         p_state, raw_signal = self._aggregate_projector(now)
         if p_state.power.provenance == Provenance.UNKNOWN:
             is_consistent = False
+
 
         # ---------------------------------------------------------------------
         # 2. Air Conditioner Subsystem Aggregation
@@ -120,7 +127,7 @@ class RoomStateAggregator:
             observed_at=now
         )
 
-        return RoomState(
+        state = RoomState(
             timestamp=now,
             is_consistent=is_consistent,
             projector=p_state,
@@ -131,6 +138,10 @@ class RoomStateAggregator:
             environment=env_state,
             audio_stream=audio_stream_state
         )
+        self._cached_state = state
+        self._cache_timestamp = now
+        return state
+
 
     # =========================================================================
     # Internal Subsystem Aggregators

@@ -4,6 +4,9 @@ Exposes REST endpoints on port 8095 for track resolution, playback control,
 authenticated status, Device Portal Bluetooth auto-reconnection, and Smart Room Orchestration.
 """
 
+import os
+import asyncio
+import json
 from contextlib import asynccontextmanager
 import logging
 import threading
@@ -11,15 +14,20 @@ import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-from fastapi import FastAPI, HTTPException, status
+
+from fastapi import FastAPI, HTTPException, status, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 import uvicorn
+
 
 from resolver import YouTubeMusicResolver
 from player import MpvPlayer
 from orchestrator import SmartRoomOrchestrator, RoomAudioState
-from projector_controller import ProjectorController
+from projector_controller import ProjectorController, IrProjectorTransport
 from fire_tv_controller import FireTvController
+
+
+
 from fire_tv_capabilities import FireTVCapabilityRegistry, FireTVState
 from firetv_service import FireTvService
 from automation_registry import AutomationRegistry
@@ -50,7 +58,22 @@ logger = logging.getLogger("music_daemon.main")
 SECRETS_DIR = Path(__file__).parent / "secrets"
 resolver = YouTubeMusicResolver(secrets_dir=SECRETS_DIR)
 player = MpvPlayer(preferred_device_keyword="LG SNC4R")
-projector = ProjectorController()
+
+from ac_controller import _read_local_properties
+_props = _read_local_properties()
+ir_transport = IrProjectorTransport(
+    lan_ip="192.168.1.12",
+    lan_port=6668,
+    dev_id=_props.get("tuya.ir_blaster.device_id", _props.get("tuya.device.id", "")),
+    local_key=_props.get("tuya.ir_blaster.local_key", _props.get("tuya.device.local_key", "")),
+    projector_remote_id=_props.get("tuya.ir_blaster.remote_id", "d718f75c8f82c9145954hl"),
+    access_id=_props.get("tuya.access.id", ""),
+    access_secret=_props.get("tuya.access.secret", ""),
+    endpoint=_props.get("tuya.region.endpoint", "https://openapi.tuyain.com")
+)
+projector = ProjectorController(use_ir_power=True, ir_transport=ir_transport)
+
+
 fire_tv = FireTvController()
 ac_controller = AcController()
 ac_router = AcCommandRouter(controller=ac_controller)
@@ -111,6 +134,28 @@ animus_personal_agent = AnimusPersonalAgent(
     planner_executor=planner_executor
 )
 
+from tts_service import RoomTtsService
+room_tts_service = RoomTtsService(
+    orchestrator=orchestrator,
+    room_state_aggregator=room_state_aggregator,
+    enabled=os.getenv("ANIMUS_TTS_ENABLED", "true").lower() in ("true", "1", "yes")
+)
+
+
+
+from event_bus import AgentEventBus, AgentEvent, AgentEventType, AgentEventPriority
+from reminder_scheduler import ReminderScheduler
+
+agent_event_bus = AgentEventBus()
+animus_personal_agent.event_bus = agent_event_bus
+reminder_scheduler = ReminderScheduler(
+    task_manager=animus_personal_agent.task_manager,
+    event_bus=agent_event_bus,
+    tts_service=room_tts_service,
+    poll_interval_seconds=1.0
+)
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -120,14 +165,21 @@ async def lifespan(app: FastAPI):
     init_status = orchestrator.get_room_status()
     logger.info(f"[PC_MUSIC_DAEMON_AUDIO] Initial Room Audio State: {init_status['room_audio_state']} (Soundbar: {init_status.get('soundbar_name')})")
 
+    # Start proactive reminder background scheduler
+    reminder_scheduler.start()
+
     # Pre-warm local Qwen LLM in dedicated GPU VRAM (keep_alive: 24h)
     threading.Thread(target=ollama_mgr.ensure_model_ready, name="OllamaPrewarm", daemon=True).start()
 
     yield
 
     logger.info("[PC_MUSIC_DAEMON_STOP] Shutting down orchestrator and releasing resources...")
+    reminder_scheduler.stop()
+    room_tts_service.shutdown()
     player.shutdown()
     ollama_mgr.shutdown()
+
+
 
 
 app = FastAPI(
@@ -168,7 +220,14 @@ class AcFanRequest(BaseModel):
 class AcNaturalCommandRequest(BaseModel):
     query: str = Field(..., description="Natural language AC command string")
 
+class AcSetRequest(BaseModel):
+    power: Optional[bool] = Field(default=None, description="Optional power state")
+    temperature: Optional[int] = Field(default=None, ge=16, le=30, description="Optional temperature in Celsius (16-30)")
+    mode: Optional[str] = Field(default=None, description="Optional HVAC mode: COOL, AUTO, DRY, FAN")
+    fan_speed: Optional[str] = Field(default=None, description="Optional fan speed: LOW, MEDIUM, HIGH, AUTO")
+
 class PcVolumeRequest(BaseModel):
+
     volume: int = Field(..., ge=0, le=100, description="Target master volume percentage (0-100)")
 
 class PcMuteRequest(BaseModel):
@@ -1034,6 +1093,38 @@ def ac_natural_command_endpoint(req: AcNaturalCommandRequest) -> Dict[str, Any]:
     return res
 
 
+@app.post("/api/ac/set")
+def ac_set_composite_endpoint(req: AcSetRequest) -> Dict[str, Any]:
+    """Composite endpoint setting multiple AC parameters with readback verification."""
+    results = {}
+    if req.power is not None:
+        ok, res = ac_controller.set_power(req.power)
+        results["power"] = res
+        if not ok:
+            raise HTTPException(status_code=500, detail=res)
+    if req.temperature is not None:
+        ok, res = ac_controller.set_temperature(req.temperature)
+        results["temperature"] = res
+        if not ok:
+            raise HTTPException(status_code=500, detail=res)
+    if req.mode is not None:
+        ok, res = ac_controller.set_mode(req.mode)
+        results["mode"] = res
+        if not ok:
+            raise HTTPException(status_code=500, detail=res)
+    if req.fan_speed is not None:
+        ok, res = ac_controller.set_fan_speed(req.fan_speed)
+        results["fan_speed"] = res
+        if not ok:
+            raise HTTPException(status_code=500, detail=res)
+    return {
+        "status": "SUCCESS",
+        "results": results,
+        "actual_state": ac_controller.get_status()
+    }
+
+
+
 # =========================================================================
 # PC HOST AUTHORITATIVE REST ENDPOINTS
 # =========================================================================
@@ -1291,7 +1382,122 @@ def agent_interact_endpoint(req: AgentInteractRequest) -> Dict[str, Any]:
     Processes intent, checks routines/memory, executes orchestration if clear, and provides feedback.
     """
     resp = animus_personal_agent.interact(req.utterance)
+    # Additive Room TTS output (if enabled and user-facing agent message exists)
+    if room_tts_service and room_tts_service.is_enabled() and resp.agent_message:
+        try:
+            room_tts_service.speak_async(resp.agent_message)
+        except Exception as e:
+            logger.error(f"[ROOM_TTS_DISPATCH_FAIL] Failed to dispatch TTS: {e}")
+
+    # Additive Proactive Follow-up Event Dispatch (if follow-up question is active)
+    if resp.followup_required and resp.followup_question:
+        try:
+            agent_event_bus.publish(AgentEvent(
+                event_type=AgentEventType.FOLLOWUP_REQUIRED,
+                priority=AgentEventPriority.NORMAL,
+                message=resp.followup_question,
+                payload={"followup_question": resp.followup_question}
+            ))
+        except Exception as e:
+            logger.error(f"[EVENT_BUS_FOLLOWUP_FAIL] Failed to publish follow-up event: {e}")
+
     return resp.model_dump()
+
+
+@app.get("/api/agent/tts/status")
+def get_room_tts_status() -> Dict[str, Any]:
+    """Returns the current state and enable status of the Room TTS Service."""
+    return {
+        "enabled": room_tts_service.is_enabled(),
+        "state": room_tts_service.state.value,
+        "is_speaking": room_tts_service.is_speaking()
+    }
+
+
+@app.post("/api/agent/tts/config")
+def configure_room_tts(enabled: bool) -> Dict[str, Any]:
+    """Enables or disables Room-Level TTS output."""
+    room_tts_service.set_enabled(enabled)
+    return {
+        "status": "SUCCESS",
+        "enabled": room_tts_service.is_enabled()
+    }
+
+
+@app.get("/api/agent/events/unacked")
+def get_unacknowledged_events() -> List[Dict[str, Any]]:
+    """Returns all unacknowledged events currently in the EventBus buffer."""
+    return [e.model_dump() for e in agent_event_bus.get_unacknowledged_events()]
+
+
+@app.post("/api/agent/events/ack/{event_id}")
+def acknowledge_event_endpoint(event_id: str) -> Dict[str, Any]:
+    """Records client acknowledgement for an event."""
+    agent_event_bus.acknowledge(event_id)
+    return {"status": "SUCCESS", "event_id": event_id}
+
+
+@app.websocket("/ws/events")
+async def websocket_events_endpoint(websocket: WebSocket):
+    """
+    FastAPI WebSocket endpoint for proactive real-time event streaming to Android clients.
+    Handles unacknowledged event replay, real-time push, client ACKs, and ping-pong heartbeats.
+    """
+    await websocket.accept()
+    sub_queue: asyncio.Queue[AgentEvent] = asyncio.Queue(maxsize=50)
+    agent_event_bus.subscribe(sub_queue)
+    logger.info("[WS_EVENTS] Android client connected to /ws/events")
+
+    # 1. Deliver unacknowledged events from history on connect
+    unacked = agent_event_bus.get_unacknowledged_events()
+    for evt in unacked:
+        try:
+            await websocket.send_text(evt.model_dump_json())
+        except Exception:
+            break
+
+    # 2. Worker for outbound real-time events
+    async def send_worker():
+        while True:
+            event = await sub_queue.get()
+            try:
+                await websocket.send_text(event.model_dump_json())
+            except Exception:
+                break
+
+    # 3. Worker for inbound ACKs and heartbeats
+    async def receive_worker():
+        while True:
+            data_text = await websocket.receive_text()
+            try:
+                data = json.loads(data_text)
+                msg_type = data.get("type")
+                if msg_type == "ack":
+                    evt_id = data.get("event_id")
+                    if evt_id:
+                        agent_event_bus.acknowledge(evt_id)
+                elif msg_type == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong", "timestamp": time.time()}))
+            except Exception as e:
+                logger.debug(f"[WS_EVENTS_RECV] Parse error: {e}")
+
+    send_task = asyncio.create_task(send_worker())
+    recv_task = asyncio.create_task(receive_worker())
+
+    try:
+        done, pending = await asyncio.wait(
+            [send_task, recv_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        for t in pending:
+            t.cancel()
+    except Exception as e:
+        logger.debug(f"[WS_EVENTS] Connection closed: {e}")
+    finally:
+        agent_event_bus.unsubscribe(sub_queue)
+        logger.info("[WS_EVENTS] Android client disconnected from /ws/events")
+
+
 
 
 @app.get("/api/agent/brief")

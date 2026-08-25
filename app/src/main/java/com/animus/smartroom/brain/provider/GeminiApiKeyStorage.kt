@@ -22,14 +22,13 @@ class GeminiApiKeyStorage(context: Context) {
             try {
                 com.animus.smartroom.brain.model.BrainProviderType.valueOf(stored)
             } catch (e: Exception) {
-                com.animus.smartroom.brain.model.BrainProviderType.LOCAL
+                com.animus.smartroom.brain.model.BrainProviderType.REMOTE_PHASE_F
             }
-        } else if (hasApiKey()) {
-            com.animus.smartroom.brain.model.BrainProviderType.GEMINI
         } else {
-            com.animus.smartroom.brain.model.BrainProviderType.LOCAL
+            com.animus.smartroom.brain.model.BrainProviderType.REMOTE_PHASE_F
         }
     }
+
 
     fun saveSelectedProvider(type: com.animus.smartroom.brain.model.BrainProviderType) {
         prefs.edit().putString(KEY_SELECTED_PROVIDER, type.name).apply()

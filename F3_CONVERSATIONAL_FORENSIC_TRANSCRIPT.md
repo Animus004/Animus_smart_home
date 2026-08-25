@@ -1,11 +1,11 @@
 # PHASE F.3 — CONVERSATIONAL FORENSIC TRANSCRIPT (INDEPENDENT AUDIT)
 
 **Target Hardware:** Physical Zebronics Projector, Amazon Fire TV, LG Soundbar, PC Audio, Tuya AC  
-**Execution Timestamp:** 2026-08-25 11:00:30  
+**Execution Timestamp:** 2026-08-25 16:10:21  
 **Total Conversational Turns:** 45  
-**Summary Results:** 45 PASS / 0 FAIL / 0 CRITICAL  
-**Unauthorized Mutations:** 0  
-**Overall Quality Verdict:** PASS (100.0%)  
+**Summary Results:** 40 PASS / 0 FAIL / 5 CRITICAL  
+**Unauthorized Mutations:** 6  
+**Overall Quality Verdict:** CRITICAL_FAILURE (88.89%)  
 
 > [!NOTE]
 > Evaluator Independence: Every turn verdict is calculated directly from empirical before/after physical snapshots, authorized intent taxonomy, and response truthfulness. Zero hardcoded PASS labels.
@@ -22,17 +22,14 @@ Today's Priorities:
   2. Daily focus: learn SQL
   3. Guitar practice session planned for ~17:00
 
-Pending Tasks (5 items):
+Pending Tasks (4 items):
   - Learn and practice SQL [HIGH]
   - Work deliverables & development [HIGH]
-  - Check server logs [HIGH]
   - Guitar practice session [MEDIUM]
-  ... and 1 more
+  - Practice guitar [MEDIUM]
 
 Scheduled Reminders:
-  - Review window functions at 12:50
-  - Practice guitar at 11:50
-  - Check server logs at 10:50
+  - Practice guitar at 16:57
 
 Would you like me to put on some morning motivation music to start the day?"  
 
@@ -52,8 +49,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -63,9 +60,8 @@ Would you like me to put on some morning motivation music to start the day?"
 **ANIMUS:** "Here is what's on your agenda, buddy:
 1. Learn and practice SQL (HIGH priority)
 2. Work deliverables & development (HIGH priority)
-3. Check server logs (HIGH priority)
-4. Guitar practice session (MEDIUM priority)
-5. Practice guitar (MEDIUM priority)"  
+3. Guitar practice session (MEDIUM priority)
+4. Practice guitar (MEDIUM priority)"  
 
 | Field | Evaluator Determination |
 | :--- | :--- |
@@ -83,8 +79,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -109,8 +105,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -135,8 +131,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -161,8 +157,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -187,8 +183,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -213,8 +209,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -239,8 +235,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -265,8 +261,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -291,8 +287,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -317,8 +313,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -343,8 +339,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -369,8 +365,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -387,16 +383,16 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Interpretation correct?** | `YES` |
 | **Follow-up required?** | `NO` |
 | **Follow-up appropriate?** | `YES` |
-| **Physical action expected?** | `NO` |
-| **Physical mutation occurred?** | `None (idempotent / conversational)` |
-| **Mutation authorized?** | `YES` |
+| **Physical action expected?** | `YES` |
+| **Physical mutation occurred?** | `Projector Power: False -> True, Projector Source: UNKNOWN -> HDMI_1` |
+| **Mutation authorized?** | `NO (UNAUTHORIZED: Projector Power: False -> True, Projector Source: UNKNOWN -> HDMI_1)` |
 | **Readback verified?** | `YES` |
 | **Response truthful?** | `YES` |
-| **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
+| **Final independent verdict** | **`CRITICAL`** (Unauthorized physical mutations observed: Projector Power: False -> True, Projector Source: UNKNOWN -> HDMI_1) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=False (Src: UNKNOWN), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=True (Src: HDMI_1), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -421,8 +417,8 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=True (Src: HDMI_1), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- After:  Proj=True (Src: HDMI_1), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
 
@@ -439,15 +435,15 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Interpretation correct?** | `YES` |
 | **Follow-up required?** | `NO` |
 | **Follow-up appropriate?** | `YES` |
-| **Physical action expected?** | `NO` |
-| **Physical mutation occurred?** | `None (idempotent / conversational)` |
-| **Mutation authorized?** | `YES` |
+| **Physical action expected?** | `YES` |
+| **Physical mutation occurred?** | `Projector Source: HDMI_1 -> ANDROID_HOME` |
+| **Mutation authorized?** | `NO (UNAUTHORIZED: Projector Source: HDMI_1 -> ANDROID_HOME)` |
 | **Readback verified?** | `YES` |
 | **Response truthful?** | `YES` |
-| **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
+| **Final independent verdict** | **`CRITICAL`** (Unauthorized physical mutations observed: Projector Source: HDMI_1 -> ANDROID_HOME) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
+- Before: Proj=True (Src: HDMI_1), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 - After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=24°C  
 
 ---
@@ -559,7 +555,7 @@ Would you like me to put on some morning motivation music to start the day?"
 ### TURN 21 — AFTERNOON GUITAR
 
 **USER:** "Remind me to practice guitar at 5."  
-**ANIMUS:** "Got it, buddy — you already have a reminder scheduled for 'Practice guitar' at 11:50."  
+**ANIMUS:** "Got it, buddy — you already have a reminder scheduled for 'Practice guitar' at 16:57."  
 
 | Field | Evaluator Determination |
 | :--- | :--- |
@@ -585,7 +581,7 @@ Would you like me to put on some morning motivation music to start the day?"
 ### TURN 22 — AFTERNOON GUITAR
 
 **USER:** "Remind me about guitar."  
-**ANIMUS:** "Got it, buddy — you already have a reminder scheduled for 'Practice guitar' at 11:50."  
+**ANIMUS:** "Got it, buddy — you already have a reminder scheduled for 'Practice guitar' at 16:57."  
 
 | Field | Evaluator Determination |
 | :--- | :--- |
@@ -699,15 +695,15 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Interpretation correct?** | `YES` |
 | **Follow-up required?** | `YES` (*Want some music, a movie, or just a quiet room, buddy?*) |
 | **Follow-up appropriate?** | `YES` |
-| **Physical action expected?** | `NO` |
-| **Physical mutation occurred?** | `None (idempotent / conversational)` |
-| **Mutation authorized?** | `YES` |
+| **Physical action expected?** | `YES` |
+| **Physical mutation occurred?** | `Soundbar Owner: PC -> NONE` |
+| **Mutation authorized?** | `NO (UNAUTHORIZED: Soundbar Owner: PC -> NONE)` |
 | **Readback verified?** | `YES` |
 | **Response truthful?** | `YES` |
-| **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
+| **Final independent verdict** | **`CRITICAL`** (Unauthorized physical mutations observed: Soundbar Owner: PC -> NONE) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=25°C  
+- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=PC, PC Vol=20%, AC=25°C  
 - After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=25°C  
 
 ---
@@ -725,16 +721,16 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Interpretation correct?** | `YES` |
 | **Follow-up required?** | `YES` (*Want some music, a movie, or just a quiet room, buddy?*) |
 | **Follow-up appropriate?** | `YES` |
-| **Physical action expected?** | `NO` |
-| **Physical mutation occurred?** | `None (idempotent / conversational)` |
-| **Mutation authorized?** | `YES` |
+| **Physical action expected?** | `YES` |
+| **Physical mutation occurred?** | `Soundbar Owner: NONE -> PC` |
+| **Mutation authorized?** | `NO (UNAUTHORIZED: Soundbar Owner: NONE -> PC)` |
 | **Readback verified?** | `YES` |
 | **Response truthful?** | `YES` |
-| **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
+| **Final independent verdict** | **`CRITICAL`** (Unauthorized physical mutations observed: Soundbar Owner: NONE -> PC) |
 
 **PHYSICAL EVIDENCE:**  
 - Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=25°C  
-- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=25°C  
+- After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=PC, PC Vol=20%, AC=25°C  
 
 ---
 
@@ -751,15 +747,15 @@ Would you like me to put on some morning motivation music to start the day?"
 | **Interpretation correct?** | `YES` |
 | **Follow-up required?** | `YES` (*Understood, no music. Would you like a movie, or just a quiet room, buddy?*) |
 | **Follow-up appropriate?** | `YES` |
-| **Physical action expected?** | `NO` |
-| **Physical mutation occurred?** | `None (idempotent / conversational)` |
-| **Mutation authorized?** | `YES` |
+| **Physical action expected?** | `YES` |
+| **Physical mutation occurred?** | `Soundbar Owner: PC -> NONE` |
+| **Mutation authorized?** | `NO (UNAUTHORIZED: Soundbar Owner: PC -> NONE)` |
 | **Readback verified?** | `YES` |
 | **Response truthful?** | `YES` |
-| **Final independent verdict** | **`PASS`** (Empirical physical evidence, intent, follow-up, and response verified) |
+| **Final independent verdict** | **`CRITICAL`** (Unauthorized physical mutations observed: Soundbar Owner: PC -> NONE) |
 
 **PHYSICAL EVIDENCE:**  
-- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=25°C  
+- Before: Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=PC, PC Vol=20%, AC=25°C  
 - After:  Proj=True (Src: ANDROID_HOME), FireTV=AWAKE (App: com.amazon.tv.launcher), Soundbar=NONE, PC Vol=20%, AC=25°C  
 
 ---
@@ -1086,7 +1082,6 @@ Would you like me to put on some morning motivation music to start the day?"
 
 **USER:** "What are you unsure about?"  
 **ANIMUS:** "Here are the assumptions and open items I'm tracking, buddy:
-• User may play guitar after lunch (confidence: 60%)
 • User may play guitar after lunch (confidence: 60%)"  
 
 | Field | Evaluator Determination |
@@ -1114,7 +1109,6 @@ Would you like me to put on some morning motivation music to start the day?"
 
 **USER:** "What did I accomplish today?"  
 **ANIMUS:** "Here's what you've completed today, buddy:
-- Review window functions
 - Review window functions"  
 
 | Field | Evaluator Determination |
@@ -1194,7 +1188,7 @@ Would you like me to put on some morning motivation music to start the day?"
 
 **USER:** "Good night buddy."  
 **ANIMUS:** "Good night, buddy!
-You have 6 pending items saved for tomorrow.
+You have 5 pending items saved for tomorrow.
 Sleep well, buddy."  
 
 | Field | Evaluator Determination |
