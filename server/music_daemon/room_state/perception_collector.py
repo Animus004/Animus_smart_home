@@ -509,3 +509,37 @@ class PerceptionCollector:
                 room_mode=StateField.unknown("ENV_ERROR", now),
                 active_audio_route=StateField.unknown("ENV_ERROR", now),
             )
+
+    def get_live_telemetry(self) -> Dict[str, Any]:
+        """Returns flattened dictionary of latest physical sensor telemetry for fast cognitive evaluation."""
+        st = self.get_room_state()
+        ac_pwr = st.ac.power.value if st.ac and st.ac.power and st.ac.power.value is not None else False
+        ac_amb = st.ac.ambient_temperature.value if st.ac and st.ac.ambient_temperature and st.ac.ambient_temperature.value is not None else 24
+        ac_tgt = st.ac.target_temperature.value if st.ac and st.ac.target_temperature and st.ac.target_temperature.value is not None else 24
+        proj_pwr = bool(st.projector.power.value) if st.projector and st.projector.power and st.projector.power.value is not None else False
+        ftv_on = bool(st.fire_tv.online.value) if st.fire_tv and st.fire_tv.online and st.fire_tv.online.value is not None else False
+        pc_on = bool(st.pc.online.value) if st.pc and st.pc.online and st.pc.online.value is not None else True
+        media_playing = (st.audio_stream.playback_state.value == "PLAYING") if st.audio_stream and st.audio_stream.playback_state and st.audio_stream.playback_state.value is not None else False
+
+        return {
+            "ac_power": bool(ac_pwr),
+            "ac_ambient_temp": int(ac_amb) if ac_amb is not None else 24,
+            "ac_target_temp": int(ac_tgt) if ac_tgt is not None else 24,
+            "projector_power": bool(proj_pwr),
+            "fire_tv_online": bool(ftv_on),
+            "pc_online": bool(pc_on),
+            "media_playing": bool(media_playing)
+        }
+
+
+# Global singleton instance
+_global_perception_collector: Optional[PerceptionCollector] = None
+
+
+def get_perception_collector() -> PerceptionCollector:
+    """Returns or initializes the global PerceptionCollector singleton."""
+    global _global_perception_collector
+    if _global_perception_collector is None:
+        _global_perception_collector = PerceptionCollector()
+    return _global_perception_collector
+

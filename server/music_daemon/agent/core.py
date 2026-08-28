@@ -331,9 +331,9 @@ class AnimusPersonalAgent:
             return self._handle_informational_intent(intent, utterance, current_state)
 
         # ---------------------------------------------------------------------
-        # Category D: AMBIGUOUS OR MISSING PARAMS — REQUIRES FOLLOW-UP
+        # Category D: AMBIGUOUS — REQUIRES FOLLOW-UP
         # ---------------------------------------------------------------------
-        if intent.category == IntentCategory.AMBIGUOUS_REQUIRES_FOLLOW_UP or (intent.category == IntentCategory.CLEAR_WITH_MISSING_NON_CRITICAL and intent.requires_followup):
+        if intent.category == IntentCategory.AMBIGUOUS_REQUIRES_FOLLOW_UP:
             q = self.followup_engine.create_followup_for_intent(intent)
             return AgentInteractionResponse(
                 understood_intent=intent.primary_intent,
@@ -481,7 +481,7 @@ class AnimusPersonalAgent:
             if intent.primary_intent == "START_CINEMA_ENTERTAINMENT":
                 return self._handle_cinema_preparation_intent(intent, current_state)
             else:
-                q = intent.followup_question or self.followup_engine.create_followup_for_intent(intent)
+                q = self.followup_engine.create_followup_for_intent(intent)
                 return AgentInteractionResponse(
                     understood_intent=intent.primary_intent,
                     agent_message=q,
