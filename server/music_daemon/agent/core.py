@@ -352,29 +352,31 @@ class AnimusPersonalAgent:
             
             # 1. AC Action
             ac_act = params.get("ac_action")
-            if ac_act and self.planner_executor and self.planner_executor.ac_controller:
+            ac_ctrl = getattr(self.planner_executor, "ac", None) or getattr(self.planner_executor, "ac_controller", None)
+            if ac_act and ac_ctrl:
                 try:
                     if not ac_act.get("power", True):
-                        self.planner_executor.ac_controller.set_power(False)
+                        ac_ctrl.set_power(False)
                     else:
-                        self.planner_executor.ac_controller.set_power(True)
+                        ac_ctrl.set_power(True)
                         if "mode" in ac_act:
-                            self.planner_executor.ac_controller.set_mode(ac_act["mode"])
+                            ac_ctrl.set_mode(ac_act["mode"])
                         if "temp" in ac_act:
-                            self.planner_executor.ac_controller.set_temperature(ac_act["temp"])
+                            ac_ctrl.set_temperature(ac_act["temp"])
                         if "fan" in ac_act:
-                            self.planner_executor.ac_controller.set_fan_speed(ac_act["fan"])
+                            ac_ctrl.set_fan_speed(ac_act["fan"])
                 except Exception as e:
                     logger.error(f"[EMPATHIC_AC_EXEC_ERR] {e}")
 
             # 2. Projector Action
             proj_act = params.get("projector_action")
-            if proj_act and self.planner_executor and self.planner_executor.projector_controller:
+            proj_ctrl = getattr(self.planner_executor, "projector", None) or getattr(self.planner_executor, "projector_controller", None)
+            if proj_act and proj_ctrl:
                 try:
                     if proj_act.get("action") == "power_off":
-                        self.planner_executor.projector_controller.power_off(use_oem=True)
+                        proj_ctrl.power_off(use_oem=True)
                     elif proj_act.get("action") == "sleep":
-                        self.planner_executor.projector_controller.sleep()
+                        proj_ctrl.sleep()
                 except Exception as e:
                     logger.error(f"[EMPATHIC_PROJ_EXEC_ERR] {e}")
 
@@ -392,10 +394,11 @@ class AnimusPersonalAgent:
 
             # 4. PC Action
             pc_act = params.get("pc_action")
-            if pc_act and self.planner_executor and self.planner_executor.pc_controller:
+            pc_ctrl = getattr(self.planner_executor, "pc", None) or getattr(self.planner_executor, "pc_controller", None)
+            if pc_act and pc_ctrl:
                 try:
                     if pc_act.get("action") == "lock":
-                        self.planner_executor.pc_controller.lock()
+                        pc_ctrl.lock()
                 except Exception as e:
                     logger.error(f"[EMPATHIC_PC_EXEC_ERR] {e}")
 

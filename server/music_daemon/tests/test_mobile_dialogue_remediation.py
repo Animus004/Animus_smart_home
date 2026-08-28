@@ -57,3 +57,18 @@ def test_conversational_affirmation_follows_suggestion(agent):
     assert resp.action_taken is True
     assert "ROOM_TOO_COLD" in resp.understood_intent
     assert "25 degrees" in resp.agent_message
+
+    # Test hot room statement
+    r_hot = agent.interact("the room is getting hot")
+    assert r_hot.action_taken is True
+    assert "ROOM_TOO_HOT" in r_hot.understood_intent
+    assert "22 degrees" in r_hot.agent_message
+
+    # Simulate Sonia having suggested activating the air conditioning
+    agent.context_buffer.record_animus_turn(
+        utterance="Should I activate the air conditioning? buddy."
+    )
+    r_yes = agent.interact("yes please")
+    assert r_yes.action_taken is True
+    assert "ROOM_TOO_HOT" in r_yes.understood_intent
+    assert "22 degrees" in r_yes.agent_message

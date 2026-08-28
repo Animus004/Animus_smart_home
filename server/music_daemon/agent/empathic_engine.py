@@ -100,7 +100,7 @@ class EmpathicReasoningEngine:
             )
 
         # 6. Room Too Cold / Chilly / Freezing
-        if re.search(r'\b(?:too cold|chilly|chillig|chilling|freezing|cold in here|feel cold|shivering|really cold|adjust the thermostat a little warmer)\b', lower):
+        if re.search(r'\b(?:too cold|chilly|chillig|chilling|freezing|cold in here|feel cold|feeling cold|shivering|really cold|getting cold|room is cold|cold room|so cold)\b', lower) and not re.search(r'\b(?:play|song|music|listen)\b', lower):
             return EmpathicActionPlan(
                 scenario="ROOM_TOO_COLD",
                 empathy_speech=f"I've got you, {user_name}. Raising the AC temperature to a cozy 25 degrees so you stay comfortable.",
@@ -108,10 +108,10 @@ class EmpathicReasoningEngine:
             )
 
         # 7. Room Too Hot / Sweating / Stuffy
-        if re.search(r'\b(?:too hot|sweating|burning up|hot in here|feel hot|stuffy|boiling|too warm in my room)\b', lower):
+        if re.search(r'\b(?:too hot|sweating|burning up|hot in here|feel hot|feeling hot|stuffy|boiling|too warm|getting hot|room is hot|hot room|getting warm|so hot)\b', lower) and not re.search(r'\b(?:play|song|music|listen)\b', lower):
             return EmpathicActionPlan(
                 scenario="ROOM_TOO_HOT",
-                empathy_speech=f"Cooling things down for you, {user_name}. Setting AC to 22 degrees with high airflow.",
+                empathy_speech=f"Cooling things down for you, {user_name}. Turning on the AC to 22 degrees with high airflow.",
                 ac_action={"power": True, "mode": "COOL", "temp": 22, "fan": "HIGH"}
             )
 

@@ -237,14 +237,31 @@ class IntentResolver:
                 explanation=f"User requested scheduling media stop in {val} {unit}."
             )
 
-        # Contextual Affirmative Resolution ("yes please do that", "yes do that", "please do", "do that", "yes please", "sure do that")
-        if re.search(r'^(?:yes\s+(?:please\s+)?(?:do\s+that|do\s+it)?|please\s+do(?:\s+that)?|do\s+that|sure\s+do\s+that|yeah\s+please|yeah\s+do\s+that|go\s+ahead)$', lower):
+        # Contextual Affirmative Resolution ("yes please", "yes please do that", "yes do that", "please do", "do that", "sure", "yeah please")
+        if re.search(r'^(?:yes(?:\s+please)?(?:\s+(?:do\s+that|do\s+it|turn\s+it\s+on|activate\s+it|adjust\s+it))?|please\s+do(?:\s+that)?|do\s+that|do\s+it|sure(?:\s+do\s+that)?|yeah(?:\s+please)?(?:\s+do\s+that)?|go\s+ahead|turn\s+it\s+on)$', lower):
             if self.context_buffer:
                 last_agent = self.context_buffer.get_last_agent_turn()
                 if last_agent and last_agent.utterance:
                     last_msg = last_agent.utterance.lower()
+                    # If Sonia suggested cooling/lowering temp/activating air conditioning
+                    if any(c in last_msg for c in [
+                        "cooling", "cooler", "cool", "turn the ac down", "lower the temperature",
+                        "turn on the ac", "activate the air conditioning", "air conditioning", "air condition"
+                    ]):
+                        return ResolvedIntent(
+                            raw_query=clean_text,
+                            category=IntentCategory.CLEAR_EXECUTABLE,
+                            primary_intent="EMPATHIC_ROOM_TOO_HOT",
+                            target_subsystems=["AC"],
+                            extracted_parameters={
+                                "scenario": "ROOM_TOO_HOT",
+                                "empathy_speech": "Got it! Turning on the air conditioning and cooling the room to 22 degrees for you, buddy.",
+                                "ac_action": {"power": True, "mode": "COOL", "temp": 22, "fan": "HIGH"}
+                            },
+                            explanation="User confirmed agent proposal to activate air conditioning and cool down the room."
+                        )
                     # If Sonia suggested warming/raising temp
-                    if any(w in last_msg for w in ["warmer", "warm", "turn the ac up", "raise the temperature", "thermostat a little warmer", "a bit chilly"]):
+                    elif any(w in last_msg for w in ["warmer", "warm", "turn the ac up", "raise the temperature", "thermostat a little warmer", "a bit chilly"]):
                         return ResolvedIntent(
                             raw_query=clean_text,
                             category=IntentCategory.CLEAR_EXECUTABLE,
@@ -256,20 +273,6 @@ class IntentResolver:
                                 "ac_action": {"power": True, "mode": "COOL", "temp": 25, "fan": "LOW"}
                             },
                             explanation="User confirmed agent proposal to warm up the room."
-                        )
-                    # If Sonia suggested cooling/lowering temp
-                    elif any(c in last_msg for c in ["cooler", "cool", "turn the ac down", "lower the temperature", "turn on the ac"]):
-                        return ResolvedIntent(
-                            raw_query=clean_text,
-                            category=IntentCategory.CLEAR_EXECUTABLE,
-                            primary_intent="EMPATHIC_ROOM_TOO_HOT",
-                            target_subsystems=["AC"],
-                            extracted_parameters={
-                                "scenario": "ROOM_TOO_HOT",
-                                "empathy_speech": "Got it! Cooling the room down to 22 degrees for you, buddy.",
-                                "ac_action": {"power": True, "mode": "COOL", "temp": 22, "fan": "HIGH"}
-                            },
-                            explanation="User confirmed agent proposal to cool down the room."
                         )
 
         # Multi-Domain Empathic Reasoning Check (Headache, Going to Work, Chill Vibe, Focus Mode, Party Mode, Too Cold, Too Hot)
