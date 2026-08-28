@@ -388,8 +388,41 @@ class AcController:
     def get_status(self) -> Dict[str, Any]:
         """
         Queries authoritative physical status.
-        Reads live status from Cloud OpenAPI (or LAN if active), returning verified physical telemetry.
+        Reads live status from Local LAN TCP (Local Key) first with Cloud OpenAPI fallback.
         """
+        # 1. Attempt Local LAN Read First (Zero Cloud Quota)
+        if time.time() >= self._lan_degraded_until:
+            try:
+                from tuya_local_read_adapter import TuyaLocalAcReadAdapter, ReadDiagnosticStatus
+                local_adapter = TuyaLocalAcReadAdapter(
+                    ip=self.lan_ip,
+                    port=self.lan_port,
+                    dev_id=self.dev_id,
+                    local_key=self.local_key,
+                    timeout=1.5
+                )
+                local_res = local_adapter.read_ac_state()
+                if local_res.status == ReadDiagnosticStatus.LOCAL_READ_SUCCESS and local_res.state:
+                    st = local_res.state
+                    status_result = {
+                        "power": st.power,
+                        "target_temperature": st.target_temperature,
+                        "ambient_temperature": st.current_temperature,
+                        "mode": st.mode,
+                        "fan_speed": st.fan_speed,
+                        "raw_mode": str(st.raw_dps.get("mode", "cold")),
+                        "raw_fan": str(st.raw_dps.get("fan_speed_enum", "low")),
+                        "connectivity": "ONLINE",
+                        "transport_used": TransportType.LAN.value,
+                        "timestamp": time.time(),
+                        "verified": True
+                    }
+                    self._last_known_status = status_result
+                    return status_result
+            except Exception as e:
+                logger.debug(f"[LOCAL_LAN_STATUS_FALLBACK] {e}")
+
+        # 2. Fallback to Cloud OpenAPI
         status_items = self.cloud_transport.fetch_status()
         if not status_items:
             # If offline or failed
