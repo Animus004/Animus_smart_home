@@ -510,6 +510,19 @@ class AnimusPersonalAgent:
         with a strict informational system prompt.
         Strict Safety Invariant: Hardware mutations are impossible; returns text only.
         """
+        # Context Injection: Fetch live room physical telemetry
+        room_telemetry_prefix = ""
+        try:
+            from room_state.perception_collector import get_perception_collector
+            collector = get_perception_collector()
+            tel = collector.get_live_telemetry()
+            ac_desc = f"AC is {'ON' if tel.get('ac_power') else 'OFF'} (Setpoint: {tel.get('ac_target_temp')}°C, Current Room Ambient: {tel.get('ac_ambient_temp')}°C)"
+            proj_desc = f"Projector is {'ON' if tel.get('projector_power') else 'OFF'}"
+            music_desc = f"Music/Soundbar is {'PLAYING' if tel.get('media_playing') else 'IDLE'}"
+            room_telemetry_prefix = f"Live Smart Room Physical Telemetry: {ac_desc} | {proj_desc} | {music_desc}.\n"
+        except Exception:
+            pass
+
         # Context Injection: Fetch live weather telemetry if weather/forecast is requested
         weather_prefix = ""
         live_weather_val = None
@@ -521,11 +534,11 @@ class AnimusPersonalAgent:
                     cleaned_w = w_resp.text.strip()
                     if cleaned_w and not cleaned_w.startswith("<"):
                         live_weather_val = cleaned_w
-                        weather_prefix = f"Live Telemetry Context: Real-time outdoor weather is currently: {cleaned_w}.\n"
+                        weather_prefix = f"Live Weather Telemetry: Real-time outdoor weather is currently: {cleaned_w}.\n"
             except Exception:
                 pass
 
-        prompt_text = f"{weather_prefix}You are Animus, a helpful smart room assistant speaking to {user_addr}. Answer this query concisely and naturally in 1-3 sentences without mentioning system internals:\n\n{query}"
+        prompt_text = f"{room_telemetry_prefix}{weather_prefix}You are Animus (Sonia), a helpful smart room assistant speaking to {user_addr}. Answer this query concisely and naturally in 1-2 sentences using the live telemetry context above when relevant without mentioning system internals:\n\n{query}"
 
         # 1. Try Google GenAI SDK if initialized
         if self.planner_client and getattr(self.planner_client, "_sdk_client", None):

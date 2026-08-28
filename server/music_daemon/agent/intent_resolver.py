@@ -1833,6 +1833,24 @@ class IntentResolver:
                 )
 
         # =====================================================================
+        # 12b. Room Status & Telemetry Queries (e.g. "What is the room temperature", "Is the AC on", "Room status")
+        # =====================================================================
+        status_query_patterns = [
+            r'\b(?:what(?:\'?s|\s+is)\s+(?:the\s+)?(?:current\s+)?(?:status|state|temperature|temp|condition|weather))\b',
+            r'\b(?:how\s+(?:is|warm|cool|cold|hot)\s+(?:is\s+)?(?:the\s+)?(?:room|temperature|temp))\b',
+            r'\b(?:is\s+the\s+(?:ac|projector|tv|firetv|soundbar)\s+(?:on|off|running|playing))\b',
+            r'\b(?:tell\s+me\s+(?:the\s+)?(?:room\s+)?(?:status|temperature|temp))\b',
+            r'\b(?:room\s+status|room\s+state|status\s+of\s+the\s+room)\b'
+        ]
+        if any(re.search(pat, lower) for pat in status_query_patterns):
+            return ResolvedIntent(
+                raw_query=clean_text,
+                category=IntentCategory.INFORMATIONAL_ONLY,
+                primary_intent="NON_ROOM_QUERY",
+                explanation="Informational room telemetry status query."
+            )
+
+        # =====================================================================
         # 13. Default Fallback Classification
         # =====================================================================
         # Check if the query mentions room devices, media, thermal, or power actions
