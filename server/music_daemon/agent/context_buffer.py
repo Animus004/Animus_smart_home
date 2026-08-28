@@ -133,6 +133,13 @@ class ConversationContextBuffer:
                     ReferenceType.MEDIA, parameters["provider"], parameters["provider"], self.turn_counter
                 )
 
+    def get_last_agent_turn(self) -> Optional[ConversationTurn]:
+        """Returns the most recent utterance and context spoken by the agent."""
+        for turn in reversed(self.history):
+            if turn.speaker == "animus":
+                return turn
+        return None
+
     def start_thread(
         self,
         thread_type: str,

@@ -99,6 +99,30 @@ class EmpathicReasoningEngine:
                 audio_action={"action": "play_music", "query": "upbeat party dance hits", "volume": 50}
             )
 
+        # 6. Room Too Cold / Chilly / Freezing
+        if re.search(r'\b(?:too cold|chilly|chillig|chilling|freezing|cold in here|feel cold|shivering|really cold|adjust the thermostat a little warmer)\b', lower):
+            return EmpathicActionPlan(
+                scenario="ROOM_TOO_COLD",
+                empathy_speech=f"I've got you, {user_name}. Raising the AC temperature to a cozy 25 degrees so you stay comfortable.",
+                ac_action={"power": True, "mode": "COOL", "temp": 25, "fan": "LOW"}
+            )
+
+        # 7. Room Too Hot / Sweating / Stuffy
+        if re.search(r'\b(?:too hot|sweating|burning up|hot in here|feel hot|stuffy|boiling|too warm in my room)\b', lower):
+            return EmpathicActionPlan(
+                scenario="ROOM_TOO_HOT",
+                empathy_speech=f"Cooling things down for you, {user_name}. Setting AC to 22 degrees with high airflow.",
+                ac_action={"power": True, "mode": "COOL", "temp": 22, "fan": "HIGH"}
+            )
+
+        # 8. Optimal / Comfortable AC Temperature
+        if re.search(r'\b(?:optimal temp|optimal temprature|optimal temperature|comfortable temp|comfortable temperature|best temp|ideal temp|default ac temp|set optimal)\b', lower):
+            return EmpathicActionPlan(
+                scenario="OPTIMAL_TEMPERATURE",
+                empathy_speech=f"Setting the AC to your optimal comfort baseline of 24 degrees, {user_name}.",
+                ac_action={"power": True, "mode": "COOL", "temp": 24, "fan": "AUTO"}
+            )
+
         return None
 
 

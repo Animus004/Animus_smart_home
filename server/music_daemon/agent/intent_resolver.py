@@ -237,7 +237,42 @@ class IntentResolver:
                 explanation=f"User requested scheduling media stop in {val} {unit}."
             )
 
-        # Multi-Domain Empathic Reasoning Check (Headache, Going to Work, Chill Vibe, Focus Mode, Party Mode)
+        # Contextual Affirmative Resolution ("yes please do that", "yes do that", "please do", "do that", "yes please", "sure do that")
+        if re.search(r'^(?:yes\s+(?:please\s+)?(?:do\s+that|do\s+it)?|please\s+do(?:\s+that)?|do\s+that|sure\s+do\s+that|yeah\s+please|yeah\s+do\s+that|go\s+ahead)$', lower):
+            if self.context_buffer:
+                last_agent = self.context_buffer.get_last_agent_turn()
+                if last_agent and last_agent.utterance:
+                    last_msg = last_agent.utterance.lower()
+                    # If Sonia suggested warming/raising temp
+                    if any(w in last_msg for w in ["warmer", "warm", "turn the ac up", "raise the temperature", "thermostat a little warmer", "a bit chilly"]):
+                        return ResolvedIntent(
+                            raw_query=clean_text,
+                            category=IntentCategory.CLEAR_EXECUTABLE,
+                            primary_intent="EMPATHIC_ROOM_TOO_COLD",
+                            target_subsystems=["AC"],
+                            extracted_parameters={
+                                "scenario": "ROOM_TOO_COLD",
+                                "empathy_speech": "Got it! Adjusting the thermostat to a warmer 25 degrees for you, buddy.",
+                                "ac_action": {"power": True, "mode": "COOL", "temp": 25, "fan": "LOW"}
+                            },
+                            explanation="User confirmed agent proposal to warm up the room."
+                        )
+                    # If Sonia suggested cooling/lowering temp
+                    elif any(c in last_msg for c in ["cooler", "cool", "turn the ac down", "lower the temperature", "turn on the ac"]):
+                        return ResolvedIntent(
+                            raw_query=clean_text,
+                            category=IntentCategory.CLEAR_EXECUTABLE,
+                            primary_intent="EMPATHIC_ROOM_TOO_HOT",
+                            target_subsystems=["AC"],
+                            extracted_parameters={
+                                "scenario": "ROOM_TOO_HOT",
+                                "empathy_speech": "Got it! Cooling the room down to 22 degrees for you, buddy.",
+                                "ac_action": {"power": True, "mode": "COOL", "temp": 22, "fan": "HIGH"}
+                            },
+                            explanation="User confirmed agent proposal to cool down the room."
+                        )
+
+        # Multi-Domain Empathic Reasoning Check (Headache, Going to Work, Chill Vibe, Focus Mode, Party Mode, Too Cold, Too Hot)
         try:
             from agent.empathic_engine import get_empathic_engine
             user_addr = getattr(getattr(self.user_profile, 'identity', None), 'preferred_address', 'buddy')
