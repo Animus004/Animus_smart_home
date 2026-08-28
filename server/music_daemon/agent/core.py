@@ -331,9 +331,9 @@ class AnimusPersonalAgent:
             return self._handle_informational_intent(intent, utterance, current_state)
 
         # ---------------------------------------------------------------------
-        # Category D: AMBIGUOUS — REQUIRES FOLLOW-UP
+        # Category D: AMBIGUOUS OR MISSING PARAMS — REQUIRES FOLLOW-UP
         # ---------------------------------------------------------------------
-        if intent.category == IntentCategory.AMBIGUOUS_REQUIRES_FOLLOW_UP:
+        if intent.category == IntentCategory.AMBIGUOUS_REQUIRES_FOLLOW_UP or (intent.category == IntentCategory.CLEAR_WITH_MISSING_NON_CRITICAL and intent.requires_followup):
             q = self.followup_engine.create_followup_for_intent(intent)
             return AgentInteractionResponse(
                 understood_intent=intent.primary_intent,

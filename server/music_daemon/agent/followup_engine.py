@@ -208,6 +208,25 @@ class FollowUpEngine:
                 logger.info(f"[AUDIO_FOLLOWUP_SUPERSEDED] Input '{user_response}' does not specify an audio producer; clearing follow-up.")
                 return {"resolved": False, "request": user_response}
 
+        # 4. Music Track Selection Follow-up ("What would you like me to play?")
+        orig_intent = self._pending_context.get("original_intent") or {}
+        if (
+            orig_intent.get("primary_intent") == "PLAY_TRACK"
+            or "play" in self._pending_context.get("type", "").lower()
+            or "play" in str(orig_intent.get("followup_question", "")).lower()
+            or "title" in orig_intent.get("missing_parameters", [])
+        ):
+            self._pending_context = None
+            clean_title = user_response.strip(" .?!\"'")
+            if clean_title:
+                logger.info(f"[PLAY_TRACK_FOLLOWUP_RESOLVED] Bound user response '{clean_title}' to 'play {clean_title}'")
+                return {
+                    "resolved": True,
+                    "request": f"play {clean_title}",
+                    "intent": "PLAY_TRACK",
+                    "extracted_parameters": {"title": clean_title}
+                }
+
         # Default clearing
         self._pending_context = None
         return {"resolved": False, "request": user_response}

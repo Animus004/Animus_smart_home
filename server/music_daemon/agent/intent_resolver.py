@@ -1612,7 +1612,11 @@ class IntentResolver:
         # =====================================================================
         # 10c-0. Media Resume & Bare "Play" Handling ("play", "resume", "unpause", "continue")
         # =====================================================================
-        clean_music_cmd = re.sub(r'^(?:first|just|please|can\s+you|could\s+you|would\s+you|animus|hey\s+animus|okay|ok)\s+', '', lower).strip()
+        clean_music_cmd = re.sub(
+            r'^(?:(?:first|just|please|can\s+you|could\s+you|would\s+you|animus|hey\s+animus|sonia|hey\s+sonia|'
+            r'i\s+said|i\s+meant|i\s+wanted\s+you\s+to|i\s+want\s+you\s+to|i\s+asked\s+you\s+to|i\s+told\s+you\s+to|'
+            r'i\s+wanted\s+to|i\s+want\s+to|okay|ok)\s+)+', '', lower
+        ).strip()
         bare_media_cmd = clean_music_cmd.strip(" .?!,")
         if bare_media_cmd in ["play", "resume", "unpause", "continue", "resume playing", "resume music", "resume playback", "resume it", "continue playing", "continue watching"]:
             is_paused = False
@@ -1658,7 +1662,7 @@ class IntentResolver:
         # =====================================================================
         # 10c. Specific Track Playback (e.g. "play Kal Ho Naa Ho", "play alak niranjan on volume 25", "play sunday suspense on volume 30")
         # =====================================================================
-        play_track_match = re.search(r'^(?:play|put\s+on|listen\s+to|start\s+playing)\s+(.+)$', clean_music_cmd)
+        play_track_match = re.search(r'^(?:play|put\s+on|listen\s+to|start\s+playing|stream)\s+(.+)$', clean_music_cmd, re.IGNORECASE)
         if play_track_match:
             candidate = play_track_match.group(1).strip()
             # Check for compound volume modifier e.g. "alak niranjan on volume 25", "kal ho naa ho at volume 30"
