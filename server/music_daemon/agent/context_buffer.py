@@ -594,4 +594,16 @@ class ConversationContextBuffer:
             f"  - Active Mode      : {self.active_mode or 'IDLE'}"
         )
 
+    def get_long_term_memory_summary(self, query: str = "") -> str:
+        """
+        Retrieves long-term episodic memory & confirmed facts prompt block.
+        """
+        try:
+            from agent.long_term_memory import get_long_term_memory
+            lt_mem = get_long_term_memory()
+            return lt_mem.build_memory_context_prompt(query)
+        except Exception as e:
+            logger.debug(f"[CONTEXT_BUFFER_LT_MEM_ERR] {e}")
+            return ""
+
 

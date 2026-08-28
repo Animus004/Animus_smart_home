@@ -158,6 +158,12 @@ reminder_scheduler = ReminderScheduler(
 
 
 
+from agent.proactive_orchestrator import ProactiveOrchestrator
+proactive_orchestrator = ProactiveOrchestrator(
+    tts_service=room_tts_service,
+    enable_speech=os.getenv("ANIMUS_PROACTIVE_ENABLED", "true").lower() in ("true", "1", "yes")
+)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[PC_MUSIC_DAEMON_START] Animus PC Smart Room Daemon v1.6.0 starting on port 8095...")
@@ -169,6 +175,9 @@ async def lifespan(app: FastAPI):
     # Start proactive reminder background scheduler
     reminder_scheduler.start()
 
+    # Start autonomous ambient proactive orchestrator
+    proactive_orchestrator.start()
+
     # Pre-warm local Qwen LLM in dedicated GPU VRAM (keep_alive: 24h)
     threading.Thread(target=ollama_mgr.ensure_model_ready, name="OllamaPrewarm", daemon=True).start()
 
@@ -178,26 +187,25 @@ async def lifespan(app: FastAPI):
         while True:
             try:
                 # 1. Fire TV connection check & reconnect
-                if hasattr(fire_tv, "is_connected"):
-                    conn_val = fire_tv.is_connected(auto_connect=False)
-                    is_ftv_ready = conn_val[0] if isinstance(conn_val, tuple) else bool(conn_val)
-                    if not is_ftv_ready:
-                        fire_tv.connect()
-
-                # 2. Projector connection check & reconnect
-                if hasattr(projector, "is_connected"):
-                    is_p_ready, _ = projector.is_connected(auto_connect=False)
-                    if not is_p_ready:
-                        projector.connect()
+                ftv_c = fire_tv.is_connected(auto_connect=False)
+                if not (ftv_c[0] if isinstance(ftv_c, tuple) else bool(ftv_c)):
+                    logger.debug("[HARDWARE_WATCHDOG] Fire TV offline; attempting background reconnect...")
+                    fire_tv.connect()
+                # 2. Projector connection check
+                p_c = projector.is_connected(auto_connect=False)
+                if not (p_c[0] if isinstance(p_c, tuple) else bool(p_c)):
+                    logger.debug("[HARDWARE_WATCHDOG] Projector offline; attempting background probe...")
+                    projector.connect()
             except Exception as e:
                 logger.debug(f"[HARDWARE_WATCHDOG_ERR] {e}")
-            time.sleep(15.0)
+            time.sleep(15)
 
-    threading.Thread(target=_hardware_watchdog_loop, name="HardwareReconnectionWatchdog", daemon=True).start()
+    threading.Thread(target=_hardware_watchdog_loop, name="AdbWatchdog", daemon=True).start()
 
     yield
 
     logger.info("[PC_MUSIC_DAEMON_STOP] Shutting down orchestrator and releasing resources...")
+    proactive_orchestrator.stop()
     animus_personal_agent.stop_scheduler_loop()
     reminder_scheduler.stop()
     room_tts_service.shutdown()

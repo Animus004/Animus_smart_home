@@ -344,6 +344,81 @@ class AnimusPersonalAgent:
             )
 
         # ---------------------------------------------------------------------
+        # Category: EMPATHIC MULTI-DOMAIN PROBLEM SOLVING
+        # ---------------------------------------------------------------------
+        if intent.primary_intent.startswith("EMPATHIC_"):
+            params = intent.extracted_parameters
+            speech = params.get("empathy_speech", f"I've adjusted the room for you, {addr}.")
+            
+            # 1. AC Action
+            ac_act = params.get("ac_action")
+            if ac_act and self.planner_executor and self.planner_executor.ac_controller:
+                try:
+                    if not ac_act.get("power", True):
+                        self.planner_executor.ac_controller.set_power(False)
+                    else:
+                        self.planner_executor.ac_controller.set_power(True)
+                        if "mode" in ac_act:
+                            self.planner_executor.ac_controller.set_mode(ac_act["mode"])
+                        if "temp" in ac_act:
+                            self.planner_executor.ac_controller.set_temperature(ac_act["temp"])
+                        if "fan" in ac_act:
+                            self.planner_executor.ac_controller.set_fan_speed(ac_act["fan"])
+                except Exception as e:
+                    logger.error(f"[EMPATHIC_AC_EXEC_ERR] {e}")
+
+            # 2. Projector Action
+            proj_act = params.get("projector_action")
+            if proj_act and self.planner_executor and self.planner_executor.projector_controller:
+                try:
+                    if proj_act.get("action") == "power_off":
+                        self.planner_executor.projector_controller.power_off(use_oem=True)
+                    elif proj_act.get("action") == "sleep":
+                        self.planner_executor.projector_controller.sleep()
+                except Exception as e:
+                    logger.error(f"[EMPATHIC_PROJ_EXEC_ERR] {e}")
+
+            # 3. Audio Action
+            aud_act = params.get("audio_action")
+            if aud_act and self.orchestrator:
+                try:
+                    if aud_act.get("action") == "stop":
+                        self.orchestrator.stop()
+                    elif aud_act.get("action") in ("play_ambient", "play_music"):
+                        q = aud_act.get("query", "lofi")
+                        self.orchestrator.play_music(q)
+                except Exception as e:
+                    logger.error(f"[EMPATHIC_AUDIO_EXEC_ERR] {e}")
+
+            # 4. PC Action
+            pc_act = params.get("pc_action")
+            if pc_act and self.planner_executor and self.planner_executor.pc_controller:
+                try:
+                    if pc_act.get("action") == "lock":
+                        self.planner_executor.pc_controller.lock()
+                except Exception as e:
+                    logger.error(f"[EMPATHIC_PC_EXEC_ERR] {e}")
+
+            # Record turn in persistent Long-Term Memory
+            try:
+                from agent.long_term_memory import get_long_term_memory
+                get_long_term_memory().record_conversation_turn(
+                    user_utterance=utterance,
+                    agent_response=speech,
+                    intent_category="EMPATHIC"
+                )
+            except Exception as e:
+                logger.debug(f"[EMPATHIC_LT_MEM_RECORD_ERR] {e}")
+
+            resp = AgentInteractionResponse(
+                understood_intent=intent.primary_intent,
+                agent_message=speech,
+                action_taken=True
+            )
+            self.context_buffer.record_animus_turn(utterance=speech, intent=intent.primary_intent, action_taken=True)
+            return resp
+
+        # ---------------------------------------------------------------------
         # Stage 4 Deliberative Task Planning & Multi-Step Goals
         # ---------------------------------------------------------------------
         goal = self.task_planner.decompose_intent_to_goal(intent, utterance, room_state=current_state)

@@ -237,6 +237,33 @@ class IntentResolver:
                 explanation=f"User requested scheduling media stop in {val} {unit}."
             )
 
+        # Multi-Domain Empathic Reasoning Check (Headache, Going to Work, Chill Vibe, Focus Mode, Party Mode)
+        try:
+            from agent.empathic_engine import get_empathic_engine
+            user_addr = getattr(getattr(self.user_profile, 'identity', None), 'preferred_address', 'buddy')
+            empathic_plan = get_empathic_engine().evaluate_empathic_intent(clean_text, user_addr)
+            if empathic_plan:
+                return ResolvedIntent(
+                    raw_query=clean_text,
+                    category=IntentCategory.CLEAR_EXECUTABLE,
+                    primary_intent=f"EMPATHIC_{empathic_plan.scenario}",
+                    target_subsystems=["AC", "PROJECTOR", "SOUNDBAR", "PC"],
+                    extracted_parameters={
+                        "scenario": empathic_plan.scenario,
+                        "empathy_speech": empathic_plan.empathy_speech,
+                        "ac_action": empathic_plan.ac_action,
+                        "projector_action": empathic_plan.projector_action,
+                        "fire_tv_action": empathic_plan.fire_tv_action,
+                        "audio_action": empathic_plan.audio_action,
+                        "pc_action": empathic_plan.pc_action,
+                        "scheduled_followup_minutes": empathic_plan.scheduled_followup_minutes,
+                        "followup_question": empathic_plan.followup_question
+                    },
+                    explanation=f"Empathic multi-device plan generated for scenario {empathic_plan.scenario}."
+                )
+        except Exception as e:
+            logger.debug(f"[EMPATHIC_RESOLVE_ERR] {e}")
+
         sched_proj_match = re.search(r'(?:turn\s+off\s+(?:the\s+)?projector|shutdown\s+(?:the\s+)?projector)\s+in\s+(\d+)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)', lower)
         if sched_proj_match:
             val = int(sched_proj_match.group(1))
