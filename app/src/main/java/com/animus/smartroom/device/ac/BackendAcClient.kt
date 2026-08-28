@@ -15,10 +15,10 @@ import kotlinx.coroutines.withContext
  * Dispatches mutations and queries to Python Phase F backend AcController.
  * Android never opens TCP 6668 or stores Tuya local_key.
  */
-class BackendAcClient(
+open class BackendAcClient(
     private val hostProvider: () -> String = { "192.168.1.9" },
     private val port: Int = 8095,
-    private val timeoutMs: Int = 5000
+    private val timeoutMs: Int = 10000
 ) {
     companion object {
         private const val TAG = "BackendAcClient"
@@ -32,7 +32,7 @@ class BackendAcClient(
     val baseUrl: String
         get() = "http://${hostProvider()}:$port"
 
-    suspend fun getStatus(): Result<JSONObject> = withContext(Dispatchers.IO) {
+    open suspend fun getStatus(): Result<JSONObject> = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
             val url = URL("$baseUrl$AC_STATUS_PATH")
@@ -59,19 +59,19 @@ class BackendAcClient(
         }
     }
 
-    suspend fun setPower(on: Boolean): Result<JSONObject> = withContext(Dispatchers.IO) {
+    open suspend fun setPower(on: Boolean): Result<JSONObject> = withContext(Dispatchers.IO) {
         postJson(AC_POWER_PATH, JSONObject().apply { put("on", on) })
     }
 
-    suspend fun setTemperature(celsius: Int): Result<JSONObject> = withContext(Dispatchers.IO) {
+    open suspend fun setTemperature(celsius: Int): Result<JSONObject> = withContext(Dispatchers.IO) {
         postJson(AC_TEMP_PATH, JSONObject().apply { put("temperature", celsius) })
     }
 
-    suspend fun setMode(modeStr: String): Result<JSONObject> = withContext(Dispatchers.IO) {
+    open suspend fun setMode(modeStr: String): Result<JSONObject> = withContext(Dispatchers.IO) {
         postJson(AC_MODE_PATH, JSONObject().apply { put("mode", modeStr.uppercase()) })
     }
 
-    suspend fun setFanSpeed(fanStr: String): Result<JSONObject> = withContext(Dispatchers.IO) {
+    open suspend fun setFanSpeed(fanStr: String): Result<JSONObject> = withContext(Dispatchers.IO) {
         postJson(AC_FAN_PATH, JSONObject().apply { put("speed", fanStr.uppercase()) })
     }
 

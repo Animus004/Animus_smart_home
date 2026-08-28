@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Tech Ring Segment -->
+    <path
+        android:pathData="M 54, 30 A 24,24 0 0,1 78, 54"
+        android:strokeWidth="2.5"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M 54, 78 A 24,24 0 0,1 30, 54"
+        android:strokeWidth="2.5"
+        android:strokeColor="#00B0FF"
+        android:strokeLineCap="round" />
+
+    <!-- Stylized Geometric "A" Nexus Core -->
+    <!-- Left Leg -->
+    <path
+        android:pathData="M 54,34 L 38,70"
+        android:strokeWidth="4"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round" />
+    <!-- Right Leg -->
+    <path
+        android:pathData="M 54,34 L 70,70"
+        android:strokeWidth="4"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round" />
+    <!-- Crossbar -->
+    <path
+        android:pathData="M 43,58 L 65,58"
+        android:strokeWidth="3.5"
+        android:strokeColor="#7C4DFF"
+        android:strokeLineCap="round" />
+
+    <!-- Central Glowing Core Node -->
+    <path
+        android:pathData="M 54,48 m -3.5, 0 a 3.5,3.5 0 1,0 7,0 a 3.5,3.5 0 1,0 -7,0"
+        android:fillColor="#00E5FF" />
+    <path
+        android:pathData="M 54,48 m -1.5, 0 a 1.5,1.5 0 1,0 3,0 a 1.5,1.5 0 1,0 -3,0"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Top Apex Halo Dot -->
+    <path
+        android:pathData="M 54,26 m -2, 0 a 2,2 0 1,0 4,0 a 2,2 0 1,0 -4,0"
+        android:fillColor="#00E5FF" />
+
+    <!-- Bottom Anchor Dots -->
+    <path
+        android:pathData="M 38,74 m -1.5, 0 a 1.5,1.5 0 1,0 3,0 a 1.5,1.5 0 1,0 -3,0"
+        android:fillColor="#7C4DFF" />
+    <path
+        android:pathData="M 70,74 m -1.5, 0 a 1.5,1.5 0 1,0 3,0 a 1.5,1.5 0 1,0 -3,0"
+        android:fillColor="#7C4DFF" />
+</vector>

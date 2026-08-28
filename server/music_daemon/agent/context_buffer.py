@@ -206,11 +206,17 @@ class ConversationContextBuffer:
         if latest_goal and hasattr(latest_goal, "steps"):
             has_ac_in_goal = any(s.target_subsystem == "AC" for s in latest_goal.steps)
 
+        has_ac_in_history = any(
+            t.target_device == "AC" or (t.intent and ("AC_" in t.intent or "SET_AC_" in t.intent))
+            for t in self.history[-4:]
+        )
+
         has_ac_context = (
             self.last_target_device == "AC" or
             (self.active_thread and self.active_thread.thread_type == "AC_CONTROL") or
             (self.session_memory.get_latest_action(target_subsystem="AC") is not None) or
-            has_ac_in_goal
+            has_ac_in_goal or
+            has_ac_in_history
         )
         if not has_ac_context:
             return None
@@ -567,5 +573,25 @@ class ConversationContextBuffer:
 
     def clear_pending_suggestion(self) -> None:
         self.pending_suggestion = None
+
+    def get_user_context_summary(self, user_profile: Any) -> str:
+        """
+        Formats a concise, high-value user context summary for Brain reasoning prompts.
+        """
+        if not user_profile:
+            return ""
+        addr = getattr(getattr(user_profile, "identity", None), "preferred_address", "buddy")
+        thermal = getattr(user_profile, "thermal", None)
+        ac_str = f"Default Setpoint: {getattr(thermal, 'preferred_temp_set', 24)}°C, Mode: {getattr(thermal, 'preferred_mode', 'AUTO')}" if thermal else "24°C AUTO"
+        ent = getattr(user_profile, "entertainment", None)
+        stream_str = ", ".join([str(s).title() for s in getattr(ent, "preferred_streaming_services", [])[:3]]) if ent else "Netflix, YouTube"
+
+        return (
+            f"USER CONTEXT:\n"
+            f"  - Preferred Address: {addr}\n"
+            f"  - AC Preferences   : {ac_str}\n"
+            f"  - Preferred Streams: {stream_str}\n"
+            f"  - Active Mode      : {self.active_mode or 'IDLE'}"
+        )
 
 

@@ -108,6 +108,12 @@ class AnimusApplication : Application() {
     var voiceLifecycleCoordinator: com.animus.smartroom.voice.VoiceLifecycleCoordinator? = null
         private set
 
+    lateinit var agentEventClient: com.animus.smartroom.event.client.AgentWebSocketClient
+        private set
+
+    lateinit var roomStateSyncClient: com.animus.smartroom.context.client.RoomStateSyncClient
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -120,6 +126,8 @@ class AnimusApplication : Application() {
                 else -> Log.i(tag, "[${stage.name}] $message")
             }
         }
+
+        val localBrainConfigStorage = com.animus.smartroom.brain.provider.LocalBrainConfigStorage(this)
 
         bluetoothController = BluetoothAudioDeviceManager(this)
         musicController = MusicController(this).apply {
@@ -134,7 +142,8 @@ class AnimusApplication : Application() {
 
         tuyaAcAdapter = TuyaAirConditionerAdapter(
             apiClient = tuyaApiClient,
-            allowWriteCommands = true
+            allowWriteCommands = true,
+            hostProvider = { localBrainConfigStorage.getConfig().host }
         )
 
         deviceRegistry = DeviceRegistry().apply {
@@ -213,7 +222,6 @@ class AnimusApplication : Application() {
         )
 
         val apiKeyStorage = GeminiApiKeyStorage(this)
-        val localBrainConfigStorage = com.animus.smartroom.brain.provider.LocalBrainConfigStorage(this)
         val localInferenceClient = com.animus.smartroom.brain.provider.LocalInferenceClient { localBrainConfigStorage.getConfig() }
         localInferencePort = com.animus.smartroom.brain.provider.AndroidLocalInferencePort(localInferenceClient)
         this.localInferencePort = localInferencePort
@@ -231,7 +239,9 @@ class AnimusApplication : Application() {
             apiClient = geminiApiClient
         )
         val remotePhaseFBrain = com.animus.smartroom.brain.provider.RemotePhaseFBrain(
-            client = com.animus.smartroom.brain.client.AgentApiRemoteClient()
+            client = com.animus.smartroom.brain.client.AgentApiRemoteClient(
+                hostProvider = { localBrainConfigStorage.getConfig().host }
+            )
         )
         brainManager = AnimusBrainManager(
             localBrain = localBrain,
@@ -295,6 +305,19 @@ class AnimusApplication : Application() {
         // Restore any pending alarms across process startup
         routineEngine.restorePersistedRoutines()
         deviceSchedulerEngine.restorePersistedActions()
+
+        // Start proactive agent event and RoomState background synchronization
+        agentEventClient = com.animus.smartroom.event.client.AgentWebSocketClient(
+            hostProvider = { localBrainConfigStorage.getConfig().host },
+            port = 8095
+        )
+        agentEventClient.start()
+
+        roomStateSyncClient = com.animus.smartroom.context.client.RoomStateSyncClient(
+            hostProvider = { localBrainConfigStorage.getConfig().host },
+            port = 8095
+        )
+        roomStateSyncClient.start()
     }
 
 

@@ -37,6 +37,9 @@ def mock_orchestrator():
     mock_ftv.get_status.return_value = {"reachable": True, "power_state": "AWAKE", "bluetooth": {"required_device_connected": True}, "healthy": True}
     mock_ftv._run_shell.return_value = (0, "mCurrentFocus=in.startv.hotstar/com.hotstar.MainActivity\nmCurrentFocus=com.amazon.firetv.youtube\nmCurrentFocus=com.netflix.ninja\nmCurrentFocus=com.amazon.cloud9\nmWakefulness=Awake\nstate=PlaybackState {state=3", "")
     mock_ftv.is_app_foreground.return_value = True
+    mock_ftv.launch_streaming_provider.return_value = True
+    mock_ftv.play_video.return_value = True
+    mock_ftv.search_or_launch_content.return_value = True
 
     mock_projector = MagicMock(spec=ProjectorController)
     mock_projector.get_power_state.return_value = {"power_state": "ON"}

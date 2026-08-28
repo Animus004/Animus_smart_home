@@ -214,10 +214,20 @@ class SpeechRecognitionManager(
                 _state.value = VoicePortState.Success(recognized)
                 publishVoiceDiagnostic(ActionStage.COMPLETED, ActionStatus.SUCCESS, "Recognized: '$recognized'")
                 onResultDispatched?.invoke(recognized)
+                mainHandler.postDelayed({
+                    if (_state.value is VoicePortState.Success) {
+                        _state.value = VoicePortState.Idle
+                    }
+                }, 300L)
             } else {
                 Log.w(TAG, "Speech results were empty.")
                 _state.value = VoicePortState.Error("I couldn't hear anything. Try again.")
                 publishVoiceDiagnostic(ActionStage.FAILED, ActionStatus.FAILED, "Empty speech results")
+                mainHandler.postDelayed({
+                    if (_state.value is VoicePortState.Error) {
+                        _state.value = VoicePortState.Idle
+                    }
+                }, 2000L)
             }
             cleanupRecognizer()
         }

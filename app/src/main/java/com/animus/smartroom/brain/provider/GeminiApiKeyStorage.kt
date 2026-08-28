@@ -17,21 +17,11 @@ class GeminiApiKeyStorage(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     fun getSelectedProvider(): com.animus.smartroom.brain.model.BrainProviderType {
-        val stored = prefs.getString(KEY_SELECTED_PROVIDER, null)
-        return if (stored != null) {
-            try {
-                com.animus.smartroom.brain.model.BrainProviderType.valueOf(stored)
-            } catch (e: Exception) {
-                com.animus.smartroom.brain.model.BrainProviderType.REMOTE_PHASE_F
-            }
-        } else {
-            com.animus.smartroom.brain.model.BrainProviderType.REMOTE_PHASE_F
-        }
+        return com.animus.smartroom.brain.model.BrainProviderType.REMOTE_PHASE_F
     }
 
-
     fun saveSelectedProvider(type: com.animus.smartroom.brain.model.BrainProviderType) {
-        prefs.edit().putString(KEY_SELECTED_PROVIDER, type.name).apply()
+        prefs.edit().putString(KEY_SELECTED_PROVIDER, com.animus.smartroom.brain.model.BrainProviderType.REMOTE_PHASE_F.name).apply()
     }
 
     fun getApiKey(): String? {

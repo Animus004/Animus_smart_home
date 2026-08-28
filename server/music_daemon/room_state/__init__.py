@@ -34,6 +34,7 @@ from room_state.models import (
     StateField,
     ProjectorState,
     AcState,
+    IrHubState,
     FireTvState,
     PcState,
     SoundbarState,
@@ -45,6 +46,7 @@ from room_state.derivations import (
     derive_soundbar_state
 )
 from room_state.aggregator import RoomStateAggregator
+from room_state.perception_collector import PerceptionCollector
 
 __all__ = [
     "Provenance",
@@ -53,6 +55,7 @@ __all__ = [
     "StateField",
     "ProjectorState",
     "AcState",
+    "IrHubState",
     "FireTvState",
     "PcState",
     "SoundbarState",
@@ -60,5 +63,6 @@ __all__ = [
     "RoomState",
     "derive_projector_signal_active",
     "derive_soundbar_state",
-    "RoomStateAggregator"
+    "RoomStateAggregator",
+    "PerceptionCollector",
 ]

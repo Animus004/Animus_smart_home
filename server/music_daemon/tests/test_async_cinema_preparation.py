@@ -59,6 +59,13 @@ class TestAsyncCinemaPreparation:
         assert r1.json()["followup_required"] is True
 
         # Turn 2: User answers 'Netflix'
-        r2 = self.client.post("/api/agent/interact", json={"utterance": "Netflix"})
-        assert r2.status_code == 200
-        assert r2.json()["action_taken"] is True
+        with patch.object(animus_personal_agent.planner_executor, "execute_plan") as mock_exec:
+            mock_res = MagicMock()
+            mock_res.success = True
+            mock_res.to_dict.return_value = {"success": True, "status": "SUCCESS"}
+            mock_res.steps = []
+            mock_exec.return_value = mock_res
+            r2 = self.client.post("/api/agent/interact", json={"utterance": "Netflix"})
+            assert r2.status_code == 200
+            assert r2.json()["action_taken"] is True
+            assert r2.json()["understood_intent"] == "LAUNCH_NETFLIX"

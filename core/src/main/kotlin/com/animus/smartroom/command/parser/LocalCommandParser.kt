@@ -118,8 +118,20 @@ class LocalCommandParser : CommandParser {
             Pattern.CASE_INSENSITIVE
         )
 
+        private val KNOWN_STREAMING_PROVIDERS = setOf(
+            "netflix", "prime video", "prime", "amazon prime", "hotstar", "disney hotstar", "disney", "disney+",
+            "youtube", "yt", "apple tv", "appletv", "apple tv+", "zee5", "sonyliv", "jiocinema"
+        )
+
+        private val TEMPORAL_SUFFIX_REGEX = Regex("""\s+(?:right\s+now|now|at\s+the\s+moment|tonight|today)$""", RegexOption.IGNORE_CASE)
+
         private val WATCH_CONTENT_REGEX = Pattern.compile(
-            """^(?:buddy,?\s+)?(?:(?:i\s+(?:want|would\s+like)\s+to\s+)?watch|let's\s+watch)\s+(?:the\s+movie\s+|movie\s+|the\s+film\s+|film\s+|the\s+)?(.+)$""",
+            """^(?:buddy,?\s+)?(?:(?:i\s+(?:want|would\s+like|feel\s+like|am\s+in\s+the\s+mood)\s+(?:to\s+)?|let['’]s\s+)?(?:watch|watching|see|put\s+on))\s+(?:the\s+movie\s+|movie\s+|the\s+film\s+|film\s+|the\s+)?(.+)$""",
+            Pattern.CASE_INSENSITIVE
+        )
+
+        private val DIRECT_PROVIDER_LAUNCH_REGEX = Pattern.compile(
+            """^(?:buddy,?\s+)?(?:(?:open|launch|start|put\s+on|switch\s+to)\s+)(netflix|prime\s+video|prime|amazon\s+prime|hotstar|disney|apple\s+tv|zee5|sonyliv|jiocinema)(?:\s+(?:on\s+(?:the\s+)?(?:projector|tv|fire\s*tv)|right\s+now|now))?$""",
             Pattern.CASE_INSENSITIVE
         )
 
@@ -242,7 +254,12 @@ class LocalCommandParser : CommandParser {
                 "enable movie mode",
                 "start movie",
                 "movie mode",
-                "cinema mode"
+                "cinema mode",
+                "watch something",
+                "let's watch something",
+                "lets watch something",
+                "feel like watching something",
+                "feel like watching a movie"
             )
         ) {
             return AnimusCommand.StartMovieMode()
@@ -371,24 +388,78 @@ class LocalCommandParser : CommandParser {
             )
         }
 
+        val directProvMatcher = DIRECT_PROVIDER_LAUNCH_REGEX.matcher(trimmed)
+        if (directProvMatcher.find()) {
+            val rawProv = directProvMatcher.group(1)?.trim()?.lowercase(Locale.ROOT)
+            if (rawProv != null) {
+                val normalizedProv = when {
+                    rawProv.startsWith("prime") -> "prime"
+                    rawProv.contains("hotstar") -> "hotstar"
+                    rawProv.contains("apple") -> "apple_tv"
+                    else -> rawProv
+                }
+                return AnimusCommand.StartMovieMode(contentTitle = null, provider = normalizedProv)
+            }
+        }
+
         val playMovieMatcher = PLAY_MOVIE_REGEX.matcher(trimmed)
         if (playMovieMatcher.find()) {
-            val content = playMovieMatcher.group(1)?.trim()
+            var content = playMovieMatcher.group(1)?.trim()
             if (!content.isNullOrBlank()) {
-                return AnimusCommand.WatchContent(title = content)
+                content = content.replace(TEMPORAL_SUFFIX_REGEX, "").trim()
+                val lowerContent = content.lowercase(Locale.ROOT)
+                if (lowerContent in KNOWN_STREAMING_PROVIDERS) {
+                    val normalizedProv = when {
+                        lowerContent.startsWith("prime") -> "prime"
+                        lowerContent.contains("hotstar") -> "hotstar"
+                        lowerContent.contains("apple") -> "apple_tv"
+                        else -> lowerContent
+                    }
+                    return AnimusCommand.StartMovieMode(contentTitle = null, provider = normalizedProv)
+                }
+                return AnimusCommand.WatchContent(title = content, provider = null)
             }
         }
 
         val watchMatcher = WATCH_CONTENT_REGEX.matcher(trimmed)
         if (watchMatcher.find()) {
-            val content = watchMatcher.group(1)?.trim()
-            if (!content.isNullOrBlank()) {
-                val lowerContent = content.lowercase(Locale.ROOT)
-                return if (lowerContent in setOf("movie", "a movie", "the movie", "something", "tv")) {
-                    AnimusCommand.StartMovieMode()
-                } else {
-                    AnimusCommand.WatchContent(title = content)
+            var rawContent = watchMatcher.group(1)?.trim()
+            if (!rawContent.isNullOrBlank()) {
+                rawContent = rawContent.replace(TEMPORAL_SUFFIX_REGEX, "").trim()
+                val lowerContent = rawContent.lowercase(Locale.ROOT)
+                
+                // 1. Generic placeholder (unspecified content/provider) -> StartMovieMode(contentTitle = null, provider = null)
+                if (lowerContent.isBlank() || lowerContent in setOf("movie", "a movie", "the movie", "something", "tv", "a show", "shows", "cinema")) {
+                    return AnimusCommand.StartMovieMode()
                 }
+                
+                // 2. Direct provider mention only (e.g. "netflix", "prime video", "hotstar") -> StartMovieMode(contentTitle = null, provider = provider)
+                if (lowerContent in KNOWN_STREAMING_PROVIDERS) {
+                    val normalizedProv = when {
+                        lowerContent.startsWith("prime") -> "prime"
+                        lowerContent.contains("hotstar") -> "hotstar"
+                        lowerContent.contains("apple") -> "apple_tv"
+                        else -> lowerContent
+                    }
+                    return AnimusCommand.StartMovieMode(contentTitle = null, provider = normalizedProv)
+                }
+
+                // 3. Provider deep-link: "<title> on <provider>" (e.g. "Stranger Things on Netflix", "Article 15 on Hotstar")
+                val onProviderMatch = Regex("""^(.+?)\s+on\s+(netflix|prime\s+video|prime|amazon\s+prime|hotstar|disney|apple\s+tv|zee5|sonyliv|jiocinema|youtube)$""", RegexOption.IGNORE_CASE).find(rawContent)
+                if (onProviderMatch != null) {
+                    val title = onProviderMatch.groupValues[1].trim()
+                    val rawProv = onProviderMatch.groupValues[2].trim().lowercase(Locale.ROOT)
+                    val normalizedProv = when {
+                        rawProv.startsWith("prime") -> "prime"
+                        rawProv.contains("hotstar") -> "hotstar"
+                        rawProv.contains("apple") -> "apple_tv"
+                        else -> rawProv
+                    }
+                    return AnimusCommand.WatchContent(title = title, provider = normalizedProv)
+                }
+
+                // 4. Specific title without explicit provider
+                return AnimusCommand.WatchContent(title = rawContent, provider = null)
             }
         }
 

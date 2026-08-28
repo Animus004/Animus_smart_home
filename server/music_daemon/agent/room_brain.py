@@ -84,7 +84,15 @@ class RoomBrain:
         """
         telemetry = self._get_telemetry()
         mode_val = self.behavior_mode_manager.active_mode.value if self.behavior_mode_manager else BehaviorMode.IDLE.value
-        sit_val = self.situation_engine.evaluate_situation().situation.value if self.situation_engine else "IDLE_ROOM"
+        sit_val = "IDLE_ROOM"
+        if self.situation_engine:
+            if hasattr(self.situation_engine, "assess_situation"):
+                mode_obj = self.behavior_mode_manager.active_mode if self.behavior_mode_manager else BehaviorMode.IDLE
+                sit_res = self.situation_engine.assess_situation(live_telemetry=telemetry, active_mode=mode_obj)
+                sit_val = getattr(getattr(sit_res, "situation", None), "value", "IDLE_ROOM")
+            elif hasattr(self.situation_engine, "evaluate_situation"):
+                sit_val = self.situation_engine.evaluate_situation().situation.value
+
 
 
         active_goal = None

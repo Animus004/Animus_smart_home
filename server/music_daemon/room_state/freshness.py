@@ -18,13 +18,15 @@ PROJECTOR_BRIGHTNESS_TTL = 30.0   # Settings DB / UI
 PROJECTOR_SIGNAL_TTL = 5.0       # HDMI HAL signal derivation
 PROJECTOR_HEALTH_TTL = 10.0      # Socket latency & error rate
 
-# Air Conditioner
+# Air Conditioner & IR Hub
 AC_POWER_TTL = 15.0              # Tuya DP 1
 AC_TARGET_TEMP_TTL = 15.0        # Tuya DP 2
 AC_AMBIENT_TEMP_TTL = 30.0       # Tuya DP 3 (Physical indoor temperature sensor)
 AC_MODE_TTL = 15.0               # Tuya DP 4
 AC_FAN_SPEED_TTL = 15.0          # Tuya DP 5
 AC_TRANSPORT_TTL = 30.0          # Transport flag
+IR_HUB_ONLINE_TTL = 15.0         # Tuya LAN Socket / Heartbeat
+IR_HUB_TRANSPORT_TTL = 30.0      # Transport flag
 
 # Fire TV
 FIRE_TV_ONLINE_TTL = 5.0         # ADB TCP socket

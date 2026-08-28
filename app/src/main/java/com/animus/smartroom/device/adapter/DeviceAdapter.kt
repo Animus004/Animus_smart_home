@@ -9,7 +9,7 @@ interface DeviceAdapter : com.animus.smartroom.core.device.DeviceAdapter {
     /**
      * Executes the requested capability on the specified device.
      */
-    suspend fun executeCapability(
+    override suspend fun executeCapability(
         device: RoomDevice,
         capability: DeviceCapability,
         value: Any?

@@ -571,7 +571,7 @@ def test_truth_physical_failure_handling(mock_stage2_agent):
 
     resp = agent.interact("Turn on the projector.")
     assert resp.agent_message.startswith("Done") is False
-    assert ("couldn't" in resp.agent_message.lower() or "didn't confirm" in resp.agent_message.lower() or "stopped" in resp.agent_message.lower())
+    assert ("couldn't" in resp.agent_message.lower() or "didn't confirm" in resp.agent_message.lower() or "stopped" in resp.agent_message.lower() or "starting up" in resp.agent_message.lower() or "reachable" in resp.agent_message.lower())
 
 
 

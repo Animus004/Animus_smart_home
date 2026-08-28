@@ -171,6 +171,15 @@ class RoomStateAggregator:
             else:
                 f_pwr = StateField.unknown(source=source_tag, observed_at=now)
 
+            if not f_pwr.value:
+                return ProjectorState(
+                    power=f_pwr,
+                    input_source=StateField.observed("UNKNOWN", source_tag, now),
+                    brightness=StateField.observed(50, source_tag, now),
+                    health=StateField.observed("STANDBY", source_tag, now),
+                    content_title=StateField.observed(None, source_tag, now)
+                ), False
+
             # Input Source
             raw_src = getattr(self.projector, "get_current_source", None)
             if callable(raw_src):
@@ -202,12 +211,36 @@ class RoomStateAggregator:
             if callable(raw_sig_fn):
                 raw_signal = bool(raw_sig_fn())
 
+            # Content Title Resolution (Dual-Source Layer)
+            f_content_title: StateField[Optional[str]]
+            if f_src.value == "HDMI_1":
+                # Derive from Fire TV active media context if available
+                ftv_title = None
+                if hasattr(self, "fire_tv") and self.fire_tv and hasattr(self.fire_tv, "get_content_title"):
+                    ftv_title = self.fire_tv.get_content_title()
+                if not ftv_title and hasattr(self, "orchestrator") and self.orchestrator and hasattr(self.orchestrator, "media_session_manager"):
+                    active_sess = self.orchestrator.media_session_manager.get_active_session()
+                    if active_sess and active_sess.source == "FIRE_TV":
+                        ftv_title = active_sess.content_title or active_sess.application
+                f_content_title = StateField.derived(ftv_title or "HDMI 1 (Fire TV)", "FIRE_TV_PASSTHROUGH", now)
+            elif f_src.value in ("ANDROID", "ANDROID_HOME", "USB"):
+                proj_title_fn = getattr(self.projector, "get_content_title", None)
+                if callable(proj_title_fn):
+                    proj_title = proj_title_fn()
+                    f_content_title = StateField.observed(proj_title, "PROJECTOR_ANDROID_MEDIA", now)
+                else:
+                    f_content_title = StateField.observed(None, source_tag, now)
+            else:
+                f_content_title = StateField.unknown(source=source_tag, observed_at=now)
+
             return ProjectorState(
                 power=f_pwr,
                 input_source=f_src,
                 brightness=f_bri,
-                health=f_hlth
+                health=f_hlth,
+                content_title=f_content_title
             ), raw_signal
+
 
         except Exception as e:
             logger.warning(f"[ROOM_STATE_AGGREGATOR] Projector query failed: {e}")
@@ -215,7 +248,9 @@ class RoomStateAggregator:
                 power=StateField.unknown(source="PROJECTOR_POLL_ERROR", observed_at=now),
                 input_source=StateField.unknown(source="PROJECTOR_POLL_ERROR", observed_at=now),
                 brightness=StateField.unknown(source="PROJECTOR_POLL_ERROR", observed_at=now),
-                health=StateField.unknown(source="PROJECTOR_POLL_ERROR", observed_at=now)
+                signal_active=StateField.unknown(source="PROJECTOR_POLL_ERROR", observed_at=now),
+                health=StateField.unknown(source="PROJECTOR_POLL_ERROR", observed_at=now),
+                content_title=StateField.unknown(source="PROJECTOR_POLL_ERROR", observed_at=now)
             ), None
 
     def _aggregate_ac(self, now: float) -> AcState:
@@ -227,7 +262,7 @@ class RoomStateAggregator:
             status_fn = getattr(self.ac, "get_status", None)
             if callable(status_fn):
                 st = status_fn()
-                if st.get("verified"):
+                if isinstance(st, dict):
                     return AcState(
                         power=StateField.observed(bool(st.get("power")), source_tag, now),
                         target_temperature=StateField.observed(int(st.get("target_temperature", 24)), source_tag, now),
@@ -274,7 +309,8 @@ class RoomStateAggregator:
                     online=f_online,
                     power_state=StateField.observed("OFFLINE", source_tag, now),
                     foreground_app=StateField.observed(None, source_tag, now),
-                    soundbar_connected=StateField.observed(False, source_tag, now)
+                    soundbar_connected=StateField.observed(False, source_tag, now),
+                    content_title=StateField.observed(None, source_tag, now)
                 )
 
             # Power state
@@ -318,11 +354,20 @@ class RoomStateAggregator:
                 bt_val = False
             f_bt = StateField.observed(bt_val, source_tag, now)
 
+            # Content Title
+            title_fn = getattr(self.fire_tv, "get_content_title", None)
+            if callable(title_fn):
+                ftv_title_val = title_fn()
+                f_title = StateField.observed(ftv_title_val, source_tag, now) if ftv_title_val is not None else StateField.observed(None, source_tag, now)
+            else:
+                f_title = StateField.unknown(source=source_tag, observed_at=now)
+
             return FireTvState(
                 online=f_online,
                 power_state=f_pwr,
                 foreground_app=f_app,
-                soundbar_connected=f_bt
+                soundbar_connected=f_bt,
+                content_title=f_title
             )
         except Exception as e:
             logger.warning(f"[ROOM_STATE_AGGREGATOR] Fire TV query failed: {e}")
@@ -330,7 +375,8 @@ class RoomStateAggregator:
                 online=StateField.unknown("FIRE_TV_POLL_ERROR", now),
                 power_state=StateField.unknown("FIRE_TV_POLL_ERROR", now),
                 foreground_app=StateField.unknown("FIRE_TV_POLL_ERROR", now),
-                soundbar_connected=StateField.unknown("FIRE_TV_POLL_ERROR", now)
+                soundbar_connected=StateField.unknown("FIRE_TV_POLL_ERROR", now),
+                content_title=StateField.unknown("FIRE_TV_POLL_ERROR", now)
             )
 
     def _aggregate_pc(self, now: float) -> tuple[PcState, bool]:

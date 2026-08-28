@@ -224,9 +224,26 @@ class LocalBrainProvider(
                                     actions.add(BrainAction.TaskAction(actEnum, Task(title = title)))
                                 }
                                 "movie_mode", "watch_movie", "movie", "start_movie_mode" -> {
-                                    val title = actObj.optString("title").takeIf { it.isNotBlank() }
+                                    var title = actObj.optString("title").takeIf { it.isNotBlank() }
                                         ?: actObj.optString("contentTitle").takeIf { it.isNotBlank() }
-                                    actions.add(BrainAction.MovieMode(contentTitle = title))
+                                    var provider = actObj.optString("provider").takeIf { it.isNotBlank() }
+                                    if (title in listOf("something", "a movie", "movie", "a show", "show", "netflix", "prime", "hotstar", "apple tv", "youtube")) {
+                                        if (provider == null && title in listOf("netflix", "prime", "hotstar", "apple tv", "youtube")) {
+                                            provider = title
+                                        }
+                                        title = null
+                                    }
+                                    if (provider == null) {
+                                        val parsedFallback = localParser.parse(originalInput)
+                                        if (parsedFallback is AnimusCommand.StartMovieMode) {
+                                            provider = parsedFallback.provider
+                                            if (title == null) title = parsedFallback.contentTitle
+                                        } else if (parsedFallback is AnimusCommand.WatchContent) {
+                                            provider = parsedFallback.provider
+                                            if (title == null) title = parsedFallback.title
+                                        }
+                                    }
+                                    actions.add(BrainAction.MovieMode(contentTitle = title, provider = provider))
                                 }
                                 "stop_movie_mode" -> {
                                     actions.add(BrainAction.StopMovieMode)
@@ -281,8 +298,8 @@ class LocalBrainProvider(
             is AnimusCommand.ConnectBluetoothDevice -> BrainAction.ConnectBluetooth(command.deviceName)
             is AnimusCommand.SwitchBluetoothDevice -> BrainAction.ConnectBluetooth(command.deviceName)
             is AnimusCommand.DisconnectBluetoothDevice -> BrainAction.DisconnectBluetooth
-            is AnimusCommand.StartMovieMode -> BrainAction.MovieMode(command.contentTitle)
-            is AnimusCommand.WatchContent -> BrainAction.MovieMode(command.title)
+            is AnimusCommand.StartMovieMode -> BrainAction.MovieMode(command.contentTitle, command.provider)
+            is AnimusCommand.WatchContent -> BrainAction.MovieMode(command.title, command.provider)
             is AnimusCommand.StopMovieMode -> BrainAction.StopMovieMode
             is AnimusCommand.SetDeviceCapability -> BrainAction.DeviceCommand(
                 target = command.target,

@@ -153,6 +153,7 @@ class LocalCommandParserTest {
         val article15 = parser.parse("I want to watch Article 15")
         assertTrue(article15 is AnimusCommand.WatchContent)
         assertEquals("Article 15", (article15 as AnimusCommand.WatchContent).title)
+        assertEquals(null, (article15 as AnimusCommand.WatchContent).provider)
 
         val watchArticle15 = parser.parse("watch Article 15")
         assertTrue(watchArticle15 is AnimusCommand.WatchContent)
@@ -165,6 +166,33 @@ class LocalCommandParserTest {
         val inception = parser.parse("play movie Inception")
         assertTrue(inception is AnimusCommand.WatchContent)
         assertEquals("Inception", (inception as AnimusCommand.WatchContent).title)
+
+        // Natural Language Provider and Watching Tests
+        val netflixNatural = parser.parse("I feel like watching Netflix right now")
+        assertTrue(netflixNatural is AnimusCommand.StartMovieMode)
+        val netflixCmd = netflixNatural as AnimusCommand.StartMovieMode
+        assertEquals(null, netflixCmd.contentTitle)
+        assertEquals("netflix", netflixCmd.provider)
+
+        val watchNetflix = parser.parse("watch netflix")
+        assertTrue(watchNetflix is AnimusCommand.StartMovieMode)
+        assertEquals("netflix", (watchNetflix as AnimusCommand.StartMovieMode).provider)
+        assertEquals(null, (watchNetflix as AnimusCommand.StartMovieMode).contentTitle)
+
+        val openNetflix = parser.parse("open netflix")
+        assertTrue(openNetflix is AnimusCommand.StartMovieMode)
+        assertEquals("netflix", (openNetflix as AnimusCommand.StartMovieMode).provider)
+
+        val watchSomething = parser.parse("I feel like watching something right now")
+        assertTrue(watchSomething is AnimusCommand.StartMovieMode)
+        assertEquals(null, (watchSomething as AnimusCommand.StartMovieMode).provider)
+        assertEquals(null, (watchSomething as AnimusCommand.StartMovieMode).contentTitle)
+
+        val strangerThingsNetflix = parser.parse("I feel like watching Stranger Things on Netflix right now")
+        assertTrue(strangerThingsNetflix is AnimusCommand.WatchContent)
+        val stCmd = strangerThingsNetflix as AnimusCommand.WatchContent
+        assertEquals("Stranger Things", stCmd.title)
+        assertEquals("netflix", stCmd.provider)
 
         assertEquals(AnimusCommand.StopMovieMode, parser.parse("turn movie mode off"))
         assertEquals(AnimusCommand.StopMovieMode, parser.parse("stop movie mode"))

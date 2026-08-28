@@ -150,8 +150,8 @@ def test_wake_dispatches_ir_when_adb_offline():
     mock_ir.send_power_wake.return_value = (True, "IR_PULSE_SENT")
     controller.ir_transport = mock_ir
 
-    # 1st call to is_connected -> False, after IR -> becomes True
-    connection_sequence = [(False, "disconnected"), (True, "device")]
+    # 1st call (check) -> False, 2nd call (probe) -> False, after IR -> becomes True
+    connection_sequence = [(False, "disconnected"), (False, "disconnected"), (True, "device")]
 
     with patch.object(controller, "is_connected", side_effect=lambda *args, **kwargs: connection_sequence.pop(0) if connection_sequence else (True, "device")):
         with patch.object(controller, "get_power_state", return_value={"interactive": True, "power_state": ProjectorPowerState.ON.value}):

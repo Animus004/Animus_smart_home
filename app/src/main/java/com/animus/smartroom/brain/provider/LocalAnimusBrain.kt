@@ -88,7 +88,7 @@ class LocalAnimusBrain(
                                     )
                                 }
                                 is com.animus.smartroom.core.brain.model.BrainAction.MovieMode -> {
-                                    AnimusCommand.StartMovieMode(contentTitle = action.contentTitle)
+                                    AnimusCommand.StartMovieMode(contentTitle = action.contentTitle, provider = action.provider)
                                 }
                                 is com.animus.smartroom.core.brain.model.BrainAction.StopMovieMode -> {
                                     AnimusCommand.StopMovieMode

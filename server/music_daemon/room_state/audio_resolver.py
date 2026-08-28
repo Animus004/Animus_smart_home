@@ -66,7 +66,7 @@ class AudioContextResolver:
         if self.orchestrator and hasattr(self.orchestrator, "player") and self.orchestrator.player:
             try:
                 p_status = self.orchestrator.player.get_status()
-                st = str(p_status.get("playback_status", "STOPPED")).upper()
+                st = str(p_status.get("status") or p_status.get("playback_status", "STOPPED")).upper()
                 if st == "PLAYING":
                     pc_playing = True
                     pc_app = "mpv_music_daemon"

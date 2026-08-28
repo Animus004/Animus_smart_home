@@ -18,7 +18,8 @@ open class PcLocalMusicProvider(
     private val host: String = "192.168.1.9",
     private val port: Int = 8095,
     private val connectTimeoutMs: Int = 2000,
-    private val readTimeoutMs: Int = 30000
+    private val readTimeoutMs: Int = 30000,
+    private val hostProvider: (() -> String)? = null
 ) : MusicProvider {
 
     companion object {
@@ -26,7 +27,8 @@ open class PcLocalMusicProvider(
         const val PROVIDER_ID = "pc_local_music"
     }
 
-    val baseUrl: String = "http://$host:$port"
+    val baseUrl: String
+        get() = "http://${hostProvider?.invoke() ?: host}:$port"
 
     override val providerId: String = PROVIDER_ID
     override val displayName: String = "PC Local Music (Home)"
@@ -108,12 +110,15 @@ open class PcLocalMusicProvider(
         val spokenResponse: String? = null
     )
 
-    fun startMovieModeWithFeedback(contentTitle: String? = null): MovieModeResult = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+    fun startMovieModeWithFeedback(contentTitle: String? = null, provider: String? = null): MovieModeResult = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
         val url = "$baseUrl/api/room/movie-mode/start"
-        Log.i(TAG, "[PC_ROOM_CONTROL] Sending start movie mode request to $url (content='$contentTitle')")
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending start movie mode request to $url (content='$contentTitle', provider='$provider')")
         val json = JSONObject().apply {
             if (!contentTitle.isNullOrBlank()) {
                 put("content", contentTitle)
+            }
+            if (!provider.isNullOrBlank()) {
+                put("provider", provider)
             }
         }
         var connection: HttpURLConnection? = null
@@ -121,7 +126,7 @@ open class PcLocalMusicProvider(
             connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = connectTimeoutMs
-                readTimeout = 40000
+                readTimeout = 130000
                 doOutput = true
                 doInput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -173,8 +178,8 @@ open class PcLocalMusicProvider(
         }
     }
 
-    fun startMovieMode(contentTitle: String? = null): Boolean {
-        return startMovieModeWithFeedback(contentTitle).success
+    fun startMovieMode(contentTitle: String? = null, provider: String? = null): Boolean {
+        return startMovieModeWithFeedback(contentTitle, provider).success
     }
 
     open fun stopMovieModeWithFeedback(): MovieModeResult = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
@@ -185,7 +190,7 @@ open class PcLocalMusicProvider(
             connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = connectTimeoutMs
-                readTimeout = 20000
+                readTimeout = 30000
                 doOutput = true
                 doInput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -253,7 +258,7 @@ open class PcLocalMusicProvider(
             connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = connectTimeoutMs
-                readTimeout = 15000
+                readTimeout = 125000
                 doOutput = true
                 doInput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -300,7 +305,7 @@ open class PcLocalMusicProvider(
             connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = connectTimeoutMs
-                readTimeout = 15000
+                readTimeout = 30000
                 doOutput = true
                 doInput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")

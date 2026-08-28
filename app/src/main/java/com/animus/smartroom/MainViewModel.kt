@@ -72,6 +72,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val acState: StateFlow<TuyaAcState> = app.tuyaAcAdapter.acState
     val tuyaAcState: StateFlow<TuyaAcState> = app.tuyaAcAdapter.acState
 
+    /** Authoritative continuous RoomState synchronized from Animus Python daemon. */
+    val roomState: StateFlow<com.animus.smartroom.context.model.RoomStateDto?> =
+        app.roomStateSyncClient.roomStateFlow
+    val isBackendConnected: StateFlow<Boolean> =
+        app.roomStateSyncClient.isConnectedFlow
+
     /** Device registry — application-scoped, survives Activity recreation. */
     val deviceRegistry = app.deviceRegistry
 
@@ -187,7 +193,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _maskedApiKey = MutableStateFlow(apiKeyStorage.getMaskedApiKey())
     val maskedApiKey: StateFlow<String?> = _maskedApiKey.asStateFlow()
 
-    private val pcAlarmClient = com.animus.smartroom.routine.alarm.PcAlarmClient()
+    private val pcAlarmClient = com.animus.smartroom.routine.alarm.PcAlarmClient(
+        hostProvider = { com.animus.smartroom.brain.provider.LocalBrainConfigStorage(application.applicationContext).getConfig().host }
+    )
 
     private val _activeRequestId = MutableStateFlow<String?>(null)
     val activeRequestId: StateFlow<String?> = _activeRequestId.asStateFlow()
@@ -249,29 +257,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             app.tuyaAcAdapter.refreshState(realAcId)
         }
 
-        // Sync Visual Brain State from LocalInferencePort when idle (do not overwrite active command execution or physical error states)
+        // Sync Visual Brain State from backend connectivity when idle (do not overwrite active command execution or physical error states)
         viewModelScope.launch {
-            app.localInferencePort.status.collectLatest { portStatus ->
+            app.roomStateSyncClient.isConnectedFlow.collectLatest { isConnected ->
                 val hasActiveExecutionError = _actionFeedbackState.value?.state == com.animus.smartroom.ui.glass.ActionExecutionState.ERROR_BLOCKED
                 val isPersistentError = _visualBrainState.value == com.animus.smartroom.ui.brain.VisualBrainState.ERROR && hasActiveExecutionError
-                val isExecutingOrCompleted = _visualBrainState.value == com.animus.smartroom.ui.brain.VisualBrainState.EXECUTING ||
-                        _visualBrainState.value == com.animus.smartroom.ui.brain.VisualBrainState.COMPLETED
-                if (!_aiCommandState.value.isProcessing &&
-                    !isExecutingOrCompleted &&
-                    !isPersistentError) {
-                    _visualBrainState.value = when (portStatus) {
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.STARTING,
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.WARMING_UP,
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.CONNECTING -> com.animus.smartroom.ui.brain.VisualBrainState.WARMING
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.READY,
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.AVAILABLE -> com.animus.smartroom.ui.brain.VisualBrainState.READY
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.BUSY -> com.animus.smartroom.ui.brain.VisualBrainState.EXECUTING
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.ERROR,
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.OFFLINE,
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.DISCONNECTED,
-                        com.animus.smartroom.brain.provider.LocalBrainStatus.FAILED -> com.animus.smartroom.ui.brain.VisualBrainState.ERROR
-                    }
+                if (!_aiCommandState.value.isProcessing && !isPersistentError) {
+                    _visualBrainState.value = if (isConnected) com.animus.smartroom.ui.brain.VisualBrainState.READY else com.animus.smartroom.ui.brain.VisualBrainState.WARMING
                 }
+            }
+        }
+
+        // Voice Command Routing: Wire speech recognition into main interactive command lifecycle
+        (voiceInputPort as? com.animus.smartroom.voice.SpeechRecognitionManager)?.setOnResultDispatched { spokenText ->
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                sendChatMessage(spokenText)
             }
         }
 
@@ -306,6 +306,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Observe proactive events from Animus Backend Agent Event Bus
+        viewModelScope.launch {
+            app.agentEventClient.eventFlow.collectLatest { event ->
+                Log.i("MainViewModel", "[PROACTIVE_BACKEND_EVENT] Type=${event.eventType}, Message='${event.message}'")
+                val severity = when (event.priority.uppercase()) {
+                    "HIGH", "CRITICAL" -> com.animus.smartroom.ui.glass.FeedbackSeverity.WARNING
+                    else -> com.animus.smartroom.ui.glass.FeedbackSeverity.INFO
+                }
+                _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
+                    requestId = event.eventId,
+                    intent = event.eventType,
+                    state = com.animus.smartroom.ui.glass.ActionExecutionState.IDLE,
+                    message = event.message,
+                    severity = severity,
+                    isPersistent = false
+                )
+                _chatHistory.update { history ->
+                    history + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = event.message)
+                }
+            }
+        }
+
+        // Observe continuous RoomState telemetry updates from backend
+        viewModelScope.launch {
+            app.roomStateSyncClient.roomStateFlow.collectLatest { st ->
+                if (st != null && st.ac.isOnline) {
+                    val hvacMode = when (st.ac.hvacMode.uppercase()) {
+                        "COOL" -> com.animus.smartroom.device.adapter.AcMode.COOL
+                        "FAN" -> com.animus.smartroom.device.adapter.AcMode.FAN
+                        "DRY" -> com.animus.smartroom.device.adapter.AcMode.DRY
+                        "AUTO" -> com.animus.smartroom.device.adapter.AcMode.AUTO
+                        else -> com.animus.smartroom.device.adapter.AcMode.COOL
+                    }
+                    val fanSpeed = when (st.ac.fanSpeed.uppercase()) {
+                        "LOW" -> com.animus.smartroom.device.adapter.AcFanSpeed.LOW
+                        "MEDIUM" -> com.animus.smartroom.device.adapter.AcFanSpeed.MEDIUM
+                        "HIGH" -> com.animus.smartroom.device.adapter.AcFanSpeed.HIGH
+                        "AUTO" -> com.animus.smartroom.device.adapter.AcFanSpeed.AUTO
+                        else -> com.animus.smartroom.device.adapter.AcFanSpeed.AUTO
+                    }
+                    app.tuyaAcAdapter.updateStateDirect(
+                        power = st.ac.power,
+                        targetTemp = st.ac.targetTemperature,
+                        currentTemp = st.ac.ambientTemperature,
+                        mode = hvacMode,
+                        fanSpeed = fanSpeed,
+                        isOnline = st.ac.isOnline
+                    )
                 }
             }
         }
@@ -693,89 +745,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             requestId = reqId,
             intent = trimmed,
             state = com.animus.smartroom.ui.glass.ActionExecutionState.EXECUTING,
-            message = "Executing: '$trimmed'...",
+            message = "Processing: '$trimmed'...",
             severity = com.animus.smartroom.ui.glass.FeedbackSeverity.INFO
         )
 
         viewModelScope.launch {
             _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.EXECUTING
-            val currentProviderName = brainManager.activeProvider.value.displayName
-            Log.i("MainViewModel", "[LOCAL_QWEN] User command: '$trimmed' (Provider: $currentProviderName)")
-
-            // Remote Mode Safety Check: Guard room-only actuators (Projector, Fire TV, Soundbar BT) when away from room
-            if (_operationMode.value == com.animus.smartroom.ui.glass.OperationMode.REMOTE) {
-                val lower = trimmed.lowercase(java.util.Locale.ROOT)
-                val isRoomOnlyActuatorCommand = lower.startsWith("turn on projector") || lower.startsWith("turn off projector") ||
-                        lower.contains("movie mode") || lower.startsWith("watch ") ||
-                        lower.startsWith("switch audio") || lower.startsWith("transfer audio") ||
-                        lower.startsWith("connect soundbar") || lower.startsWith("disconnect soundbar")
-
-                if (isRoomOnlyActuatorCommand) {
-                    val msg = "Room actuators (Projector, Fire TV, Soundbar) are disabled in Remote Mode. AC, Music & Gemini remain active."
-                    _aiCommandState.update {
-                        it.copy(
-                            isProcessing = false,
-                            lastResultMessage = msg,
-                            isSuccess = false
-                        )
-                    }
-                    _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = msg) }
-                    _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.ERROR
-                    if (_activeRequestId.value == reqId) {
-                        _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
-                            requestId = reqId,
-                            intent = trimmed,
-                            state = com.animus.smartroom.ui.glass.ActionExecutionState.ERROR_BLOCKED,
-                            message = msg,
-                            severity = com.animus.smartroom.ui.glass.FeedbackSeverity.ERROR,
-                            isPersistent = false
-                        )
-                    }
-                    return@launch
-                }
+            _aiCommandState.update {
+                it.copy(
+                    isProcessing = true,
+                    lastInputText = trimmed,
+                    activeProviderName = "Animus Personal Agent",
+                    lastResultMessage = "Processing with Animus..."
+                )
             }
+            Log.i("MainViewModel", "[ANIMUS_INGRESS] User input: '$trimmed' entering Animus Phase F daemon")
 
-            // Check if query requires fresh external knowledge lookup
-            if (geminiKnowledgeBridge.isFreshKnowledgeQuery(trimmed)) {
-                _aiCommandState.update {
-                    it.copy(
-                        isProcessing = true,
-                        lastInputText = trimmed,
-                        activeProviderName = "Gemini Knowledge Bridge",
-                        lastResultMessage = "Looking up streaming availability..."
-                    )
-                }
+            val brainResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                brainManager.interpret(trimmed)
+            }
+            Log.i("MainViewModel", "[ANIMUS_RESULT] Result: $brainResult")
 
-                val apiKey = apiKeyStorage.getApiKey()
-                val knowledgeResult = geminiKnowledgeBridge.queryKnowledge(trimmed, apiKey)
-
-                if (knowledgeResult.isSuccess) {
-                    val formattedMsg = buildString {
-                        append(knowledgeResult.summary)
-                        if (knowledgeResult.mediaServices.isNotEmpty()) {
-                            val availableList = knowledgeResult.mediaServices.filter { it.isAvailable }
-                            if (availableList.isNotEmpty()) {
-                                append("\n\nAvailable on: ")
-                                append(availableList.joinToString(", ") { it.serviceName })
-                            }
-                        }
-                    }
+            when (brainResult) {
+                is BrainResult.RemoteAgentSuccess -> {
+                    val reply = brainResult.agentMessage
+                    Log.i("MainViewModel", "[REMOTE_PHASE_F_SUCCESS] Agent reply: '$reply' (actionTaken=${brainResult.actionTaken}, followup=${brainResult.followupRequired})")
                     _aiCommandState.update {
                         it.copy(
                             isProcessing = false,
-                            lastResultMessage = formattedMsg,
+                            lastResultMessage = reply,
                             isSuccess = true
                         )
                     }
-                    _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = formattedMsg) }
-                    _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.COMPLETED
+                    _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = reply) }
                     if (_activeRequestId.value == reqId) {
+                        val finalState = when {
+                            brainResult.actionTaken -> com.animus.smartroom.ui.glass.ActionExecutionState.VERIFIED_SUCCESS
+                            brainResult.followupRequired -> com.animus.smartroom.ui.glass.ActionExecutionState.IDLE
+                            else -> com.animus.smartroom.ui.glass.ActionExecutionState.IDLE
+                        }
+                        val severity = if (brainResult.actionTaken) com.animus.smartroom.ui.glass.FeedbackSeverity.SUCCESS else com.animus.smartroom.ui.glass.FeedbackSeverity.INFO
                         _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
                             requestId = reqId,
                             intent = trimmed,
-                            state = com.animus.smartroom.ui.glass.ActionExecutionState.VERIFIED_SUCCESS,
-                            message = formattedMsg,
-                            severity = com.animus.smartroom.ui.glass.FeedbackSeverity.SUCCESS
+                            state = finalState,
+                            message = reply,
+                            severity = severity,
+                            isPersistent = false
                         )
                         viewModelScope.launch {
                             kotlinx.coroutines.delay(3000L)
@@ -784,168 +800,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         }
                     }
+                    _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.COMPLETED
                     viewModelScope.launch {
-                        kotlinx.coroutines.delay(2500)
+                        kotlinx.coroutines.delay(2000)
                         if (_visualBrainState.value == com.animus.smartroom.ui.brain.VisualBrainState.COMPLETED) {
                             _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.READY
-                        }
-                    }
-                } else {
-                    _aiCommandState.update {
-                        it.copy(
-                            isProcessing = false,
-                            lastResultMessage = knowledgeResult.summary,
-                            isSuccess = false
-                        )
-                    }
-                    _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = knowledgeResult.summary) }
-                    _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.ERROR
-                    if (_activeRequestId.value == reqId) {
-                        _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
-                            requestId = reqId,
-                            intent = trimmed,
-                            state = com.animus.smartroom.ui.glass.ActionExecutionState.ERROR_BLOCKED,
-                            message = knowledgeResult.summary,
-                            severity = com.animus.smartroom.ui.glass.FeedbackSeverity.ERROR,
-                            isPersistent = false
-                        )
-                    }
-                }
-                return@launch
-            }
-
-            // Ordinary deterministic command flow
-            val isMusicQuery = trimmed.startsWith("play", ignoreCase = true)
-            val musicSubject = if (isMusicQuery) trimmed.substring(4).trim() else ""
-
-            _aiCommandState.update {
-                it.copy(
-                    isProcessing = true,
-                    lastInputText = trimmed,
-                    activeProviderName = currentProviderName,
-                    lastResultMessage = if (isMusicQuery && musicSubject.isNotBlank())
-                        "Resolving $musicSubject..."
-                    else
-                        "Processing command with $currentProviderName..."
-                )
-            }
-
-            val brainResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                brainManager.interpret(trimmed)
-            }
-            Log.i("MainViewModel", "[DETERMINISTIC_BRAIN] Brain interpreted result: $brainResult")
-
-            when (brainResult) {
-                is BrainResult.Success -> {
-                    val isUnderstandingFailure = brainResult.commands.all { it is AnimusCommand.UnknownCommand }
-                    if (isUnderstandingFailure) {
-                        val reply = "I couldn't understand that command."
-                        Log.i("MainViewModel", "[COMMAND_UNDERSTANDING_FAILURE] '$trimmed' not understood -> conversational fallback")
-                        _aiCommandState.update {
-                            it.copy(
-                                isProcessing = false,
-                                lastResultMessage = reply,
-                                isSuccess = false
-                            )
-                        }
-                        _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = reply) }
-                        if (_activeRequestId.value == reqId) {
-                            _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
-                                requestId = reqId,
-                                intent = trimmed,
-                                state = com.animus.smartroom.ui.glass.ActionExecutionState.IDLE,
-                                message = reply,
-                                severity = com.animus.smartroom.ui.glass.FeedbackSeverity.INFO,
-                                isPersistent = false
-                            )
-                            viewModelScope.launch {
-                                kotlinx.coroutines.delay(3000L)
-                                if (_activeRequestId.value == reqId && _actionFeedbackState.value?.message == reply) {
-                                    _actionFeedbackState.value = null
-                                }
-                            }
-                        }
-                        // Conversational failure: Visual Brain stays READY (no fake hardware error)
-                        _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.READY
-                    } else {
-                        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            commandRouter.execute(brainResult.commands)
-                        }
-                        Log.i("MainViewModel", "[PHYSICAL_EXECUTION] Execution result: success=${result.success}, message='${result.message}'")
-                        _aiCommandState.update {
-                            it.copy(
-                                isProcessing = false,
-                                lastResultMessage = result.message,
-                                isSuccess = result.success
-                            )
-                        }
-                        _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = result.message) }
-                        if (_activeRequestId.value == reqId) {
-                            if (result.success) {
-                                _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
-                                    requestId = reqId,
-                                    intent = trimmed,
-                                    state = com.animus.smartroom.ui.glass.ActionExecutionState.VERIFIED_SUCCESS,
-                                    message = result.message,
-                                    severity = com.animus.smartroom.ui.glass.FeedbackSeverity.SUCCESS
-                                )
-                                viewModelScope.launch {
-                                    kotlinx.coroutines.delay(3000L)
-                                    if (_activeRequestId.value == reqId && _actionFeedbackState.value?.state == com.animus.smartroom.ui.glass.ActionExecutionState.VERIFIED_SUCCESS) {
-                                        _actionFeedbackState.value = null
-                                    }
-                                }
-                            } else {
-                                _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
-                                    requestId = reqId,
-                                    intent = trimmed,
-                                    state = com.animus.smartroom.ui.glass.ActionExecutionState.ERROR_BLOCKED,
-                                    message = result.message,
-                                    severity = com.animus.smartroom.ui.glass.FeedbackSeverity.ERROR,
-                                    isPersistent = true
-                                )
-                                voiceOutputAdapter.speak(result.message)
-                            }
-                        }
-                        if (result.success) {
-                            _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.COMPLETED
-                            viewModelScope.launch {
-                                kotlinx.coroutines.delay(2500)
-                                if (_visualBrainState.value == com.animus.smartroom.ui.brain.VisualBrainState.COMPLETED) {
-                                    _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.READY
-                                }
-                            }
-                        } else {
-                            _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.ERROR
-                        }
-                    }
-                }
-                is BrainResult.InvalidResponse -> {
-                    Log.w("MainViewModel", "[brain] Invalid brain response: ${brainResult.reason}")
-                    val reply = "I couldn't understand that command."
-                    _aiCommandState.update {
-                        it.copy(
-                            isProcessing = false,
-                            lastResultMessage = reply,
-                            isSuccess = false
-                        )
-                    }
-                    _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = reply) }
-                    _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.READY
-                    if (_activeRequestId.value == reqId) {
-                        _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
-                            requestId = reqId,
-                            intent = trimmed,
-                            state = com.animus.smartroom.ui.glass.ActionExecutionState.IDLE,
-                            message = reply,
-                            severity = com.animus.smartroom.ui.glass.FeedbackSeverity.INFO,
-                            isPersistent = false
-                        )
-                        viewModelScope.launch {
-                            kotlinx.coroutines.delay(3000L)
-                            if (_activeRequestId.value == reqId && _actionFeedbackState.value?.message == reply) {
-                                _actionFeedbackState.value = null
-                            }
                         }
                     }
                 }
@@ -973,7 +832,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 is BrainResult.Unavailable -> {
                     Log.w("MainViewModel", "[brain] Brain is unavailable")
-                    val msg = "Brain provider is unavailable."
+                    val msg = "Animus backend is unreachable. Ensure PC daemon is running on port 8095."
                     _aiCommandState.update {
                         it.copy(
                             isProcessing = false,
@@ -993,6 +852,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             isPersistent = false
                         )
                     }
+                }
+                is BrainResult.Success -> {
+                    val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        commandRouter.execute(brainResult.commands)
+                    }
+                    _aiCommandState.update {
+                        it.copy(
+                            isProcessing = false,
+                            lastResultMessage = result.message,
+                            isSuccess = result.success
+                        )
+                    }
+                    _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = result.message) }
+                }
+                is BrainResult.InvalidResponse -> {
+                    val reply = "I couldn't understand that command."
+                    _aiCommandState.update {
+                        it.copy(
+                            isProcessing = false,
+                            lastResultMessage = reply,
+                            isSuccess = false
+                        )
+                    }
+                    _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = reply) }
+                    _visualBrainState.value = com.animus.smartroom.ui.brain.VisualBrainState.READY
                 }
             }
         }

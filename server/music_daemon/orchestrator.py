@@ -240,6 +240,48 @@ class SmartRoomOrchestrator:
             except Exception as e:
                 logger.warning(f"[ORCHESTRATOR_PREPOPULATE_WARN] Could not pre-populate radio queue: {e}")
 
+    def duck_active_media(self, attenuation: float = 0.7) -> bool:
+        """
+        Ducks active room media (MPV player, PC master volume)
+        during active voice input turns.
+        """
+        success = False
+        if hasattr(self, "player") and self.player:
+            if self.player.get_status().get("playback_status") == "PLAYING":
+                success = self.player.duck_volume(attenuation) or success
+
+        if hasattr(self, "pc") and self.pc:
+            try:
+                curr_vol = self.pc.get_master_volume()
+                self._pre_duck_pc_volume = curr_vol
+                ducked_vol = max(10, int(curr_vol * (1.0 - attenuation)))
+                self.pc.set_master_volume(ducked_vol)
+                success = True
+            except Exception as e:
+                logger.warning(f"[ORCHESTRATOR_DUCK] PC volume duck failed: {e}")
+
+        logger.info(f"[ORCHESTRATOR_DUCK] Active media ducked (attenuation={attenuation}).")
+        return success
+
+    def unduck_active_media(self) -> bool:
+        """
+        Restores previous volume levels for active room media after voice turn completes.
+        """
+        success = False
+        if hasattr(self, "player") and self.player:
+            success = self.player.unduck_volume() or success
+
+        if hasattr(self, "pc") and self.pc and hasattr(self, "_pre_duck_pc_volume") and self._pre_duck_pc_volume is not None:
+            try:
+                self.pc.set_master_volume(self._pre_duck_pc_volume)
+                self._pre_duck_pc_volume = None
+                success = True
+            except Exception as e:
+                logger.warning(f"[ORCHESTRATOR_UNDUCK] PC volume unduck failed: {e}")
+
+        logger.info("[ORCHESTRATOR_UNDUCK] Active media unducked.")
+        return success
+
     def queue_track(
         self,
         title: str,
@@ -541,7 +583,7 @@ class SmartRoomOrchestrator:
             "duration": resolved.duration,
             "video_id": resolved.video_id,
             "thumbnail_url": resolved.thumbnail_url,
-            "audio_output_status": st.get("audio_output_status") or (status_code if status_code else "CONNECTED"),
+            "audio_output_status": "CONNECTED" if ready else st.get("audio_output_status", "DISCONNECTED"),
             "audio_device_id": st.get("audio_device_id") or (lg_dev.get("id") if isinstance(lg_dev, dict) else None),
             "audio_device_name": st.get("audio_device_name") or (lg_dev.get("name") if isinstance(lg_dev, dict) else None),
             "is_authenticated": resolved.is_authenticated
@@ -585,33 +627,39 @@ class SmartRoomOrchestrator:
         t0 = time.time()
         logger.info(f"[ORCHESTRATOR_MOVIE_MODE_START] Starting Movie Mode workflow (content='{content}', provider='{provider}')...")
 
-        # 0. Pre-Flight Physical Check: Projector Power State
+        # 0. Pre-Flight Physical Check & Automatic Wake: Projector Power State
         if self.projector:
             pwr = self.projector.get_power_state()
-            if pwr.get("power_state") != ProjectorPowerState.ON.value:
-                logger.warning(
-                    f"[ORCHESTRATOR_MOVIE_MODE_BLOCKED] Projector is {pwr.get('power_state')}. "
-                    "Cannot power on automatically. Aborting Movie Mode safely."
+            if pwr.get("power_state") not in (ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value):
+                logger.info(
+                    f"[ORCHESTRATOR_MOVIE_MODE_WAKE] Projector is {pwr.get('power_state')}. "
+                    "Attempting automatic wake..."
                 )
-                self._last_action_duration_ms = int((time.time() - t0) * 1000)
-                feedback_msg = "The projector is currently off. I can't turn it on right now. Please turn on the projector manually."
-                return {
-                    "status": "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION",
-                    "success": False,
-                    "content": content,
-                    "content_launched": False,
-                    "spoken_response": feedback_msg,
-                    "message": feedback_msg,
-                    "health": {
-                        "healthy": False,
-                        "projector_on": False,
-                        "projector_source_hdmi1": False,
-                        "fire_tv": self.fire_tv.get_status() if self.fire_tv else {},
-                        "soundbar_connected": False,
-                        "degradation_reason": "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION"
-                    },
-                    "duration_ms": self._last_action_duration_ms
-                }
+                wake_ok = self.projector.wake(timeout_seconds=120.0)
+                if not wake_ok:
+                    logger.warning(
+                        f"[ORCHESTRATOR_MOVIE_MODE_BLOCKED] Projector wake failed or timed out. "
+                        "Aborting Movie Mode safely."
+                    )
+                    self._last_action_duration_ms = int((time.time() - t0) * 1000)
+                    feedback_msg = "The projector is currently off. I tried to turn it on, but it didn't respond. Please turn on the projector manually."
+                    return {
+                        "status": "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION",
+                        "success": False,
+                        "content": content,
+                        "content_launched": False,
+                        "spoken_response": feedback_msg,
+                        "message": feedback_msg,
+                        "health": {
+                            "healthy": False,
+                            "projector_on": False,
+                            "projector_source_hdmi1": False,
+                            "fire_tv": self.fire_tv.get_status() if self.fire_tv else {},
+                            "soundbar_connected": False,
+                            "degradation_reason": "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION"
+                        },
+                        "duration_ms": self._last_action_duration_ms
+                    }
 
         self._in_movie_mode = True
 
@@ -635,9 +683,9 @@ class SmartRoomOrchestrator:
         launch_type = None
         resolved_details = {}
 
-        if content:
+        if content or provider:
             # Resolve content target
-            resolved = self.content_resolver.resolve_content(content, explicit_provider=provider)
+            resolved = self.content_resolver.resolve_content(content or "", explicit_provider=provider)
             resolved_details = {
                 "provider": resolved.provider_id,
                 "resolution_type": resolved.resolution_type,
@@ -645,14 +693,30 @@ class SmartRoomOrchestrator:
                 "confidence": resolved.confidence
             }
 
-            if resolved.resolution_type == "DIRECT_VIDEO_ID" and self.capabilities:
-                res = self.capabilities.play_youtube_video_id(resolved.content_id)
-                content_launched = res.success
-                launch_type = "DIRECT_VIDEO_AUTOPLAY"
-            elif resolved.resolution_type in ("DIRECT_URI", "PROVIDER_DETAILS") and self.capabilities:
-                res = self.capabilities.launch_streaming_provider(resolved.provider_id, resolved.direct_uri or resolved.content_id)
-                content_launched = res.success
-                launch_type = res.details.get("launch_status", "PROVIDER_DIRECT_LAUNCH")
+            if resolved.resolution_type == "DIRECT_VIDEO_ID":
+                if hasattr(self, "capabilities") and self.capabilities:
+                    res = self.capabilities.play_youtube_video_id(resolved.content_id)
+                    content_launched = res.success
+                    launch_type = "DIRECT_VIDEO_AUTOPLAY"
+                elif self.fire_tv:
+                    content_launched = self.fire_tv.play_video(resolved.content_id, "youtube") if hasattr(self.fire_tv, "play_video") else self.fire_tv.launch_streaming_provider("youtube", resolved.content_id)
+                    launch_type = "DIRECT_VIDEO_AUTOPLAY"
+            elif resolved.resolution_type in ("DIRECT_URI", "PROVIDER_DETAILS"):
+                if hasattr(self, "capabilities") and self.capabilities:
+                    res = self.capabilities.launch_streaming_provider(resolved.provider_id, resolved.direct_uri or resolved.content_id)
+                    content_launched = res.success
+                    launch_type = res.details.get("launch_status", "PROVIDER_DIRECT_LAUNCH")
+                elif self.fire_tv:
+                    content_launched = self.fire_tv.launch_streaming_provider(resolved.provider_id, resolved.direct_uri or resolved.content_id) if hasattr(self.fire_tv, "launch_streaming_provider") else False
+                    launch_type = "PROVIDER_DIRECT_LAUNCH"
+            elif resolved.resolution_type == "APP_LAUNCH_ONLY":
+                if hasattr(self, "capabilities") and self.capabilities:
+                    res = self.capabilities.launch_streaming_provider(resolved.provider_id)
+                    content_launched = res.success
+                    launch_type = "APP_LAUNCH_ONLY"
+                elif self.fire_tv:
+                    content_launched = self.fire_tv.launch_streaming_provider(resolved.provider_id) if hasattr(self.fire_tv, "launch_streaming_provider") else False
+                    launch_type = "APP_LAUNCH_ONLY"
             else:
                 # Search fallback
                 if self.fire_tv:
@@ -661,24 +725,38 @@ class SmartRoomOrchestrator:
 
         # 6. Evaluate Health & Invariants
         health = self.get_movie_mode_health()
-        if content and not content_launched:
+        target_specified = bool(content or provider)
+        if target_specified and not content_launched:
             health["healthy"] = False
             health["content_launched"] = False
             if not health.get("degradation_reason"):
                 health["degradation_reason"] = "Content Launch Failed"
 
-        is_success = health["healthy"] and (not content or content_launched)
+        is_success = health["healthy"] and (not target_specified or content_launched)
         self._last_action_duration_ms = int((time.time() - t0) * 1000)
+
+        prov_name = provider or (resolved_details.get("provider") if resolved_details else None)
+        prov_display = prov_name.title() if prov_name else None
+        has_real_content = bool(content and content.strip().lower() not in ("something", "anything", "stuff", "a movie", "movie", "a show", "show"))
+        if has_real_content and prov_display:
+            target_msg = f"Starting Movie Mode for '{content}' on {prov_display}"
+        elif prov_display:
+            target_msg = f"Starting Movie Mode with {prov_display}"
+        elif has_real_content:
+            target_msg = f"Starting Movie Mode for '{content}'"
+        else:
+            target_msg = "Starting Movie Mode"
 
         return {
             "status": "HEALTHY" if is_success else "DEGRADED",
             "success": is_success,
             "content": content,
+            "provider": provider,
             "content_launched": content_launched,
             "launch_type": launch_type,
-            "resolution": resolved_details if content else None,
-            "spoken_response": f"Starting Movie Mode for '{content}'" if content else "Starting Movie Mode",
-            "message": f"Starting Movie Mode for '{content}'" if content else "Starting Movie Mode",
+            "resolution": resolved_details if (content or provider) else None,
+            "spoken_response": target_msg,
+            "message": target_msg,
             "health": health,
             "duration_ms": self._last_action_duration_ms
         }

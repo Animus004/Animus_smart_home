@@ -127,19 +127,20 @@ class FollowUpEngine:
                     "request": "No, not music",
                     "intent": "RELAXATION_NARROW_OPTIONS"
                 }
-            elif "music" in lower or "song" in lower or "tune" in lower:
-                return {
-                    "resolved": True,
-                    "request": "Play relaxing music on soundbar",
-                    "intent": "PLAY_RELAXING_MUSIC"
-                }
-            elif any(m in lower for m in ["movie", "watch", "cinema", "film"]):
+            elif any(w in lower for w in ["music", "song", "tune", "first", "1st", "option 1", "number 1", "first one", "lofi", "lo-fi", "chill"]):
+                if "quiet" not in lower:
+                    return {
+                        "resolved": True,
+                        "request": "Play relaxing music on soundbar",
+                        "intent": "PLAY_RELAXING_MUSIC"
+                    }
+            if any(m in lower for m in ["movie", "watch", "cinema", "film", "second", "2nd", "option 2", "number 2", "second one"]):
                 return {
                     "resolved": True,
                     "request": "Let's watch something.",
                     "intent": "START_CINEMA_ENTERTAINMENT"
                 }
-            elif any(q in lower for q in ["quiet", "silence", "just quiet", "quiet room", "chill"]):
+            elif any(q in lower for q in ["quiet", "silence", "just quiet", "quiet room", "third", "3rd", "option 3", "number 3", "third one"]):
                 return {
                     "resolved": True,
                     "request": "Set room to quiet comfortable mode",
@@ -149,9 +150,33 @@ class FollowUpEngine:
                 # Unrelated statement -> supersede follow-up safely
                 return {"resolved": False, "request": user_response}
 
-        # 2. Streaming Provider Selection ("Netflix", "Prime", "Apple TV", "YouTube")
+        # 2. Streaming Provider Selection ("Netflix", "Prime", "Apple TV", "YouTube", or ordinals)
         if context_type == "STREAMING_PROVIDER_SELECTION":
             self._pending_context = None
+            prefs = self.user_profile.entertainment.preferred_streaming_services
+            # Ordinals
+            if any(o in lower for o in ["first", "1st", "number 1", "option 1", "the first one"]) and len(prefs) >= 1:
+                prov = prefs[0]
+                return {
+                    "resolved": True,
+                    "request": f"Put on {prov.title()}",
+                    "intent": f"LAUNCH_{prov.upper().replace(' ', '_')}"
+                }
+            elif any(o in lower for o in ["second", "2nd", "number 2", "option 2", "the second one"]) and len(prefs) >= 2:
+                prov = prefs[1]
+                return {
+                    "resolved": True,
+                    "request": f"Put on {prov.title()}",
+                    "intent": f"LAUNCH_{prov.upper().replace(' ', '_')}"
+                }
+            elif any(o in lower for o in ["third", "3rd", "number 3", "option 3", "the third one"]) and len(prefs) >= 3:
+                prov = prefs[2]
+                return {
+                    "resolved": True,
+                    "request": f"Put on {prov.title()}",
+                    "intent": f"LAUNCH_{prov.upper().replace(' ', '_')}"
+                }
+
             for prov in ["netflix", "apple tv", "prime video", "prime", "youtube", "hotstar", "smarttube", "vlc", "hulu", "disney"]:
                 if prov in lower:
                     return {
@@ -166,13 +191,13 @@ class FollowUpEngine:
         # 3. Audio producer volume selection ("Fire TV" vs "PC")
         if context_type == "AUDIO_PRODUCER_DISAMBIGUATION":
             self._pending_context = None
-            if any(tv_kw in lower for tv_kw in ["fire", "tv", "television", "firetv", "fire stick", "fire tv"]):
+            if any(tv_kw in lower for tv_kw in ["fire", "tv", "television", "firetv", "fire stick", "fire tv", "first", "1st", "option 1", "the first one"]):
                 return {
                     "resolved": True,
                     "request": "Turn down Fire TV volume",
                     "intent": "FIRE_TV_VOLUME_DOWN"
                 }
-            elif any(pc_kw in lower for pc_kw in ["pc", "computer", "laptop", "pc audio", "desktop audio", "windows"]):
+            elif any(pc_kw in lower for pc_kw in ["pc", "computer", "laptop", "pc audio", "desktop audio", "windows", "second", "2nd", "option 2", "the second one"]):
                 return {
                     "resolved": True,
                     "request": "Turn down PC volume",

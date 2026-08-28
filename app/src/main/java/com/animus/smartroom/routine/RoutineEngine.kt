@@ -52,6 +52,7 @@ class RoutineEngine(
     fun restorePersistedRoutines() {
         val stored = routineStorage.getActiveRoutine()
         if (stored != null) {
+            val wakeTime = stored.scheduledWakeTime
             when {
                 stored.status == RoutineStatus.ALARMING -> {
                     Log.i(TAG, "[restore] Restored ALARMING routine '${stored.id}'")
@@ -63,7 +64,7 @@ class RoutineEngine(
                     // Ensure alarm sound is ringing if app was reopened while alarming
                     AlarmSoundPlayer.startAlarm(context.applicationContext)
                 }
-                stored.status == RoutineStatus.ACTIVE && stored.scheduledWakeTime != null && stored.scheduledWakeTime <= System.currentTimeMillis() -> {
+                stored.status == RoutineStatus.ACTIVE && wakeTime != null && wakeTime <= System.currentTimeMillis() -> {
                     // When scheduled time has passed, routine MUST become ALARMING so user sees STOP UI
                     val alarming = stored.copy(status = RoutineStatus.ALARMING)
                     routineStorage.saveActiveRoutine(alarming)

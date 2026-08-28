@@ -1,7 +1,6 @@
 package com.animus.smartroom.device.tuya
 
 import android.util.Log
-import com.animus.smartroom.core.device.AirConditionerDeviceAdapter
 import com.animus.smartroom.core.device.DeviceCommand
 import com.animus.smartroom.device.ac.BackendAcClient
 import com.animus.smartroom.device.adapter.AcFanSpeed
@@ -31,8 +30,9 @@ import java.util.Locale
 class TuyaAirConditionerAdapter(
     private val apiClient: TuyaApiClient? = null,
     val allowWriteCommands: Boolean = true,
-    private val backendAcClient: BackendAcClient = BackendAcClient()
-) : AirConditionerAdapter, AirConditionerDeviceAdapter {
+    private val hostProvider: (() -> String)? = null,
+    private val backendAcClient: BackendAcClient = BackendAcClient(hostProvider = hostProvider ?: { "192.168.1.9" })
+) : AirConditionerAdapter {
 
     override val deviceType: com.animus.smartroom.device.model.DeviceType get() = com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
 
@@ -271,7 +271,7 @@ class TuyaAirConditionerAdapter(
         }
     }
 
-    override suspend fun getAcState(device: RoomDevice): TuyaAcState {
+    suspend fun getAcState(device: RoomDevice): TuyaAcState {
         return refreshState(device.id).getOrElse { _acState.value }
     }
 
@@ -382,6 +382,28 @@ class TuyaAirConditionerAdapter(
             }
             else -> DeviceCommandResult(success = false, message = "Unsupported command for AC: $command")
         }
+    }
+
+    fun updateStateDirect(
+        power: Boolean,
+        targetTemp: Int,
+        currentTemp: Int,
+        mode: AcMode,
+        fanSpeed: AcFanSpeed,
+        isOnline: Boolean
+    ): TuyaAcState {
+        val updated = TuyaAcState(
+            power = power,
+            targetTemperature = if (targetTemp in MIN_TEMPERATURE..MAX_TEMPERATURE) targetTemp else 24,
+            ambientTemperature = currentTemp,
+            mode = mode,
+            fanSpeed = fanSpeed,
+            isOnline = isOnline,
+            lastSeenTimestamp = System.currentTimeMillis(),
+            recoveryState = if (isOnline) "HEALTHY" else "OFFLINE"
+        )
+        _acState.value = updated
+        return updated
     }
 
     override suspend fun getState(device: RoomDevice): Map<String, Any> {

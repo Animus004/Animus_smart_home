@@ -19,8 +19,8 @@ import kotlinx.coroutines.withContext
 class AgentApiRemoteClient(
     private val hostProvider: () -> String = { "192.168.1.9" },
     private val port: Int = 8095,
-    private val connectTimeoutMs: Int = 4000,
-    private val readTimeoutMs: Int = 15000
+    private val connectTimeoutMs: Int = 5000,
+    private val readTimeoutMs: Int = 135000
 ) {
 
     companion object {

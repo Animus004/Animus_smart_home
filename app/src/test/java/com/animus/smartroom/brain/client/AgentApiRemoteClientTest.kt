@@ -135,7 +135,7 @@ class AgentApiRemoteClientTest {
     fun testRuntimeControlPortSpeaksRemoteMessageWithoutLocalDuplicateExecution() = runBlocking {
         var spokenMessage: String? = null
         val fakeVoiceOutput = object : VoiceOutputPort {
-            override fun speak(text: String, flush: Boolean) {
+            override suspend fun speak(text: String) {
                 spokenMessage = text
             }
             override fun stop() {}
@@ -158,15 +158,29 @@ class AgentApiRemoteClientTest {
             initialProvider = BrainProviderType.REMOTE_PHASE_F
         )
 
+        val fakeStore = com.animus.smartroom.core.port.FakePersistentStore()
+        val storage = com.animus.smartroom.scheduler.storage.ScheduledActionStorage(fakeStore)
+        val clock = com.animus.smartroom.core.port.SystemClock()
+
         val port = RuntimeControlPortImpl(
             brainManager = manager,
             commandRouter = CommandRouter(),
-            deviceSchedulerEngine = DeviceSchedulerEngine(),
+            deviceSchedulerEngine = DeviceSchedulerEngine(storage = storage, clock = clock),
             voiceOutputPort = fakeVoiceOutput
         )
 
         val res = port.submitCommand("Buddy, I'm up.")
         assertTrue(res is BrainResult.RemoteAgentSuccess)
         assertEquals("Good morning, buddy!", spokenMessage)
+    }
+
+    @Test
+    fun testDynamicHostProviderResolution() {
+        var currentIp = "192.168.1.9"
+        val client = AgentApiRemoteClient(hostProvider = { currentIp })
+        assertEquals("http://192.168.1.9:8095", client.baseUrl)
+
+        currentIp = "192.168.1.15"
+        assertEquals("http://192.168.1.15:8095", client.baseUrl)
     }
 }

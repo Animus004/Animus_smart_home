@@ -243,6 +243,7 @@ def test_aggregator_full_healthy_mock():
     mock_ftv.is_online.return_value = True
     mock_ftv.get_power_state.return_value = "AWAKE"
     mock_ftv.get_foreground_app.return_value = "com.google.android.youtube.tv"
+    mock_ftv.get_content_title.return_value = "YouTube - Interstellar Trailer"
     mock_ftv.is_soundbar_connected.return_value = True
 
     mock_pc = MagicMock()
@@ -278,6 +279,7 @@ def test_aggregator_full_healthy_mock():
     assert rs.projector.brightness.value == 85
     assert rs.projector.signal_active.value is True
     assert rs.projector.signal_active.provenance == Provenance.DERIVED
+    assert rs.projector.content_title.value == "YouTube - Interstellar Trailer"
 
     # AC
     assert rs.ac.power.value is True
@@ -288,6 +290,7 @@ def test_aggregator_full_healthy_mock():
     # Fire TV
     assert rs.fire_tv.online.value is True
     assert rs.fire_tv.foreground_app.value == "com.google.android.youtube.tv"
+    assert rs.fire_tv.content_title.value == "YouTube - Interstellar Trailer"
 
     # PC
     assert rs.pc.master_volume.value == 75

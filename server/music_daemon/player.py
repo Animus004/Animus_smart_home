@@ -230,6 +230,7 @@ class MpvPlayer:
                 "started_at": time.time()
             }
             self._playback_status = "PLAYING"
+            self._send_ipc_command(["set_property", "volume", 100])
             self._send_ipc_command(["set_property", "pause", False])
             return True, None
         else:
@@ -271,9 +272,38 @@ class MpvPlayer:
         clamped_vol = max(0, min(100, volume))
         res = self._send_ipc_command(["set_property", "volume", clamped_vol])
         if res and res.get("error") == "success":
+            self._current_volume = clamped_vol
             logger.info(f"[PC_MUSIC_VOLUME] Volume set to {clamped_vol}%.")
             return clamped_vol
         return 100
+
+    def duck_volume(self, attenuation: float = 0.7) -> bool:
+        """
+        Smoothly reduces active playback volume by attenuation ratio (e.g. 70% reduction)
+        during active voice/user input.
+        """
+        if not self.process or self.process.poll() is not None:
+            return False
+        curr = getattr(self, "_current_volume", 100)
+        self._pre_duck_volume = curr
+        ducked_vol = max(10, int(curr * (1.0 - attenuation)))
+        logger.info(f"[PC_MUSIC_DUCK] Ducking volume from {curr}% to {ducked_vol}%.")
+        self.set_volume(ducked_vol)
+        return True
+
+    def unduck_volume(self) -> bool:
+        """
+        Restores previous volume after user turn completes.
+        """
+        if not self.process or self.process.poll() is not None:
+            return False
+        if hasattr(self, "_pre_duck_volume") and self._pre_duck_volume is not None:
+            restored = self._pre_duck_volume
+            self._pre_duck_volume = None
+            logger.info(f"[PC_MUSIC_UNDUCK] Restoring volume to {restored}%.")
+            self.set_volume(restored)
+            return True
+        return False
 
     def stop(self) -> bool:
         """
@@ -333,6 +363,8 @@ class MpvPlayer:
 
         return {
             "status": status,
+            "playback_status": status,
+            "paused": is_paused,
             "title": self.current_track.get("title") if self.current_track else None,
             "artist": self.current_track.get("artist") if self.current_track else None,
             "duration": self.current_track.get("duration") if self.current_track else None,

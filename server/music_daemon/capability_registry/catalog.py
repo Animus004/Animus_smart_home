@@ -173,6 +173,19 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         status=CapabilityStatus.VERIFIED_EXECUTABLE
     ),
     CapabilityDefinition(
+        canonical_id="PROJECTOR_GET_CONTENT_TITLE",
+        subsystem=Subsystem.PROJECTOR,
+        description="Reads active projected media/content title via Android media session or HDMI pass-through.",
+        underlying_controller="ProjectorController",
+        underlying_capability_name="projector_get_content_title",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
         canonical_id="PROJECTOR_SET_BRIGHTNESS",
         subsystem=Subsystem.PROJECTOR,
         description="Adjusts physical projector display brightness scalar between 1 and 100% with read-back verification.",
@@ -759,6 +772,19 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         description="Reads focused foreground package name from dumpsys window.",
         underlying_controller="FireTvController",
         underlying_capability_name="app_get_foreground",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="FIRE_TV_GET_CONTENT_TITLE",
+        subsystem=Subsystem.FIRE_TV,
+        description="Reads active media/content title playing on Fire TV via dumpsys media_session or foreground app.",
+        underlying_controller="FireTvController",
+        underlying_capability_name="get_content_title",
         operation_type=OperationType.QUERY,
         idempotent=True,
         requires_device_online=True,

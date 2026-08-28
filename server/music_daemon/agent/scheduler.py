@@ -40,7 +40,7 @@ class ScheduledTask(BaseModel):
     task_id: str = Field(default_factory=lambda: f"sched_{uuid.uuid4().hex[:8]}")
     created_at: float = Field(default_factory=time.time)
     scheduled_for: float
-    expires_at: float = Field(default_factory=lambda: time.time() + 3600.0)
+    expires_at: Optional[float] = None
     creator: str = "USER"
     original_utterance: str
     authorization_context: Dict[str, Any] = Field(default_factory=dict)
@@ -53,9 +53,14 @@ class ScheduledTask(BaseModel):
     cancellation_reason: Optional[str] = None
     execution_summary: Optional[str] = None
 
+    def model_post_init(self, __context: Any) -> None:
+        if self.expires_at is None:
+            self.expires_at = self.scheduled_for + 3600.0
+
     def is_due(self, current_time: float) -> bool:
         """Returns True if the scheduled time has arrived and task is not expired."""
-        return self.status == ScheduledTaskStatus.SCHEDULED and self.scheduled_for <= current_time < self.expires_at
+        exp = self.expires_at if self.expires_at is not None else (self.scheduled_for + 3600.0)
+        return self.status == ScheduledTaskStatus.SCHEDULED and self.scheduled_for <= current_time < exp
 
 
 class RoomScheduler:
@@ -179,6 +184,12 @@ class RoomScheduler:
     def get_pending_tasks(self) -> List[ScheduledTask]:
         """Returns all currently scheduled (non-terminal) tasks."""
         return [t for t in self.tasks.values() if t.status == ScheduledTaskStatus.SCHEDULED]
+
+    def get_scheduled_tasks(self, include_completed: bool = False) -> List[ScheduledTask]:
+        """Returns scheduled tasks, optionally including completed/terminal ones."""
+        if include_completed:
+            return list(self.tasks.values())
+        return self.get_pending_tasks()
 
     def get_task(self, task_id: str) -> Optional[ScheduledTask]:
         return self.tasks.get(task_id)
@@ -305,10 +316,13 @@ class RoomScheduler:
         if task.target_subsystem.upper() == "AC" and task.target_capability == "AC_SET_TEMPERATURE":
             target_t = task.parameters.get("temperature")
             ac_obj = getattr(room_state, "ac", None)
-            curr_t = getattr(getattr(ac_obj, "target_temperature", None), "value", None)
+            tt_field = getattr(ac_obj, "target_temperature", None)
+            curr_t = getattr(tt_field, "value", tt_field)
             return target_t is not None and curr_t == target_t
         if task.target_subsystem.upper() == "PROJECTOR" and task.target_capability == "PROJECTOR_POWER_OFF":
             proj_obj = getattr(room_state, "projector", None)
-            curr_pow = getattr(getattr(proj_obj, "power", None), "value", None)
+            pow_field = getattr(proj_obj, "power", getattr(proj_obj, "is_powered_on", None))
+            curr_pow = getattr(pow_field, "value", pow_field)
             return curr_pow is False
         return False
+

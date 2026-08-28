@@ -190,13 +190,36 @@ class SmartIntentRouter(
             return BrainIntent.RoutineCommand("MOVIE_MODE", emptyMap(), correlationId)
         }
 
-        // Music Mode
-        if (cleaned.contains("music mode") || cleaned.contains("play music") || cleaned.contains("listen to music") || cleaned.startsWith("play zara")) {
-            val title = if (cleaned.startsWith("play zara")) "Zara Zara" else "Zara Zara"
+        // Bare Play / Resume / Unpause
+        if (cleaned == "play" || cleaned == "resume" || cleaned == "unpause" || cleaned == "continue") {
             return BrainIntent.DirectCommand(
                 target = CapabilityRegistry.DeviceTarget.MEDIA,
                 capability = CapabilityRegistry.ActionCapability.MEDIA_PLAY,
-                parameters = mapOf("title" to title),
+                parameters = emptyMap(),
+                correlationId = correlationId
+            )
+        }
+
+        // Specific track
+        if (cleaned.startsWith("play ")) {
+            val rawTitle = cleaned.removePrefix("play ").trim()
+            if (rawTitle.isNotEmpty()) {
+                val formattedTitle = if (rawTitle.equals("zara", ignoreCase = true) || rawTitle.equals("zara zara", ignoreCase = true)) "Zara Zara" else rawTitle
+                return BrainIntent.DirectCommand(
+                    target = CapabilityRegistry.DeviceTarget.MEDIA,
+                    capability = CapabilityRegistry.ActionCapability.MEDIA_PLAY,
+                    parameters = mapOf("title" to formattedTitle),
+                    correlationId = correlationId
+                )
+            }
+        }
+
+        // Music Mode
+        if (cleaned.contains("music mode") || cleaned.contains("play music") || cleaned.contains("listen to music")) {
+            return BrainIntent.DirectCommand(
+                target = CapabilityRegistry.DeviceTarget.MEDIA,
+                capability = CapabilityRegistry.ActionCapability.MEDIA_PLAY,
+                parameters = emptyMap(),
                 correlationId = correlationId
             )
         }

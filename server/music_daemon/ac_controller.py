@@ -383,6 +383,7 @@ class AcController:
             endpoint=self.endpoint
         )
         self._last_known_status: Dict[str, Any] = {}
+        self._lan_degraded_until: float = 0.0
 
     def get_status(self) -> Dict[str, Any]:
         """
@@ -469,10 +470,12 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
             if self.lan_transport.send_dps_command({"1": on}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
+            else:
+                self._lan_degraded_until = time.time() + 60.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -481,6 +484,7 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN command unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
+                self._lan_degraded_until = time.time() + 60.0
 
         if not lan_ok:
             transport_used = TransportType.CLOUD.value
@@ -529,10 +533,12 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
             if self.lan_transport.send_dps_command({"2": temp_celsius}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
+            else:
+                self._lan_degraded_until = time.time() + 60.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -541,6 +547,7 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN temperature unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
+                self._lan_degraded_until = time.time() + 60.0
 
         if not lan_ok:
             transport_used = TransportType.CLOUD.value
@@ -611,10 +618,12 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
             if self.lan_transport.send_dps_command({"4": tuya_mode}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
+            else:
+                self._lan_degraded_until = time.time() + 60.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -623,6 +632,7 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN mode unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
+                self._lan_degraded_until = time.time() + 60.0
 
         if not lan_ok:
             transport_used = TransportType.CLOUD.value
@@ -682,10 +692,12 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
             if self.lan_transport.send_dps_command({"5": tuya_speed}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
+            else:
+                self._lan_degraded_until = time.time() + 60.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -694,6 +706,7 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN fan speed unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
+                self._lan_degraded_until = time.time() + 60.0
 
         if not lan_ok:
             transport_used = TransportType.CLOUD.value

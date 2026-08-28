@@ -131,7 +131,8 @@ animus_personal_agent = AnimusPersonalAgent(
     context_engine=context_engine,
     preference_manager=preference_manager,
     planner_client=planner_client,
-    planner_executor=planner_executor
+    planner_executor=planner_executor,
+    orchestrator=orchestrator
 )
 
 from tts_service import RoomTtsService
@@ -171,9 +172,33 @@ async def lifespan(app: FastAPI):
     # Pre-warm local Qwen LLM in dedicated GPU VRAM (keep_alive: 24h)
     threading.Thread(target=ollama_mgr.ensure_model_ready, name="OllamaPrewarm", daemon=True).start()
 
+    # Start persistent hardware auto-reconnection watchdog (handles power-cut recovery)
+    def _hardware_watchdog_loop():
+        logger.info("[HARDWARE_WATCHDOG] ADB Auto-Reconnection Watchdog started.")
+        while True:
+            try:
+                # 1. Fire TV connection check & reconnect
+                if hasattr(fire_tv, "is_connected"):
+                    conn_val = fire_tv.is_connected(auto_connect=False)
+                    is_ftv_ready = conn_val[0] if isinstance(conn_val, tuple) else bool(conn_val)
+                    if not is_ftv_ready:
+                        fire_tv.connect()
+
+                # 2. Projector connection check & reconnect
+                if hasattr(projector, "is_connected"):
+                    is_p_ready, _ = projector.is_connected(auto_connect=False)
+                    if not is_p_ready:
+                        projector.connect()
+            except Exception as e:
+                logger.debug(f"[HARDWARE_WATCHDOG_ERR] {e}")
+            time.sleep(15.0)
+
+    threading.Thread(target=_hardware_watchdog_loop, name="HardwareReconnectionWatchdog", daemon=True).start()
+
     yield
 
     logger.info("[PC_MUSIC_DAEMON_STOP] Shutting down orchestrator and releasing resources...")
+    animus_personal_agent.stop_scheduler_loop()
     reminder_scheduler.stop()
     room_tts_service.shutdown()
     player.shutdown()
@@ -714,7 +739,7 @@ def set_projector_power(req: ProjectorPowerRequest):
     if act == "STATUS":
         return projector.get_power_state()
     elif act == "WAKE":
-        success = projector.wake()
+        success = projector.wake(timeout_seconds=120.0)
         pwr = projector.get_power_state()
         return {"success": success, "action": "WAKE", "power_state": pwr.get("power_state"), "message": "Projector wake executed"}
     elif act == "SLEEP":
@@ -723,13 +748,14 @@ def set_projector_power(req: ProjectorPowerRequest):
         return {"success": success, "action": "SLEEP", "power_state": pwr.get("power_state"), "message": "Projector sleep executed"}
     elif act == "ON":
         pwr = projector.get_power_state()
-        if pwr.get("power_state") == "ON":
+        if pwr.get("power_state") in ["ON", "AWAKE"] and pwr.get("interactive"):
             return {"success": True, "action": "ON", "power_state": "ON", "message": "Already ON"}
-        # If in standby, wake it up
-        if pwr.get("power_state") in ["STANDBY", "SLEEPING", "AWAKE"]:
-            ok = projector.wake()
-            return {"success": ok, "action": "WAKE", "power_state": projector.get_power_state().get("power_state"), "message": "Woken from standby"}
-        return {"success": False, "action": "ON", "error": "Cold power-on unavailable via ADB (requires IR blaster or physical button)"}
+        ok = projector.wake(timeout_seconds=120.0)
+        pwr_after = projector.get_power_state()
+        if ok:
+            return {"success": True, "action": "ON", "power_state": pwr_after.get("power_state"), "message": "Projector wake executed"}
+        else:
+            return {"success": False, "action": "ON", "power_state": pwr_after.get("power_state"), "error": "Cold power-on unavailable via ADB (use wake)", "message": "Projector power-on failed or timed out"}
     elif act == "OFF":
         try:
             success = projector.power_off()
@@ -1404,23 +1430,62 @@ def agent_interact_endpoint(req: AgentInteractRequest) -> Dict[str, Any]:
     return resp.model_dump()
 
 
+class TtsConfigUpdateRequest(BaseModel):
+    enabled: Optional[bool] = None
+    voice: Optional[str] = None
+    rate: Optional[str] = None
+    pitch: Optional[str] = None
+
+
+class TtsTestRequest(BaseModel):
+    text: Optional[str] = Field(default="Good evening, sir. Neural voice test complete.", description="Text to speak")
+
+
 @app.get("/api/agent/tts/status")
 def get_room_tts_status() -> Dict[str, Any]:
     """Returns the current state and enable status of the Room TTS Service."""
-    return {
-        "enabled": room_tts_service.is_enabled(),
-        "state": room_tts_service.state.value,
-        "is_speaking": room_tts_service.is_speaking()
-    }
+    if not room_tts_service:
+        return {"enabled": False, "state": "IDLE", "is_speaking": False}
+    return room_tts_service.get_config()
 
 
 @app.post("/api/agent/tts/config")
-def configure_room_tts(enabled: bool) -> Dict[str, Any]:
-    """Enables or disables Room-Level TTS output."""
-    room_tts_service.set_enabled(enabled)
+def configure_room_tts(
+    enabled: Optional[bool] = None,
+    req: Optional[TtsConfigUpdateRequest] = None
+) -> Dict[str, Any]:
+    """Enables/disables Room-Level TTS output and updates voice/rate parameters."""
+    if not room_tts_service:
+        return {"status": "ERROR", "message": "TTS service not initialized"}
+
+    en = enabled if enabled is not None else (req.enabled if req and req.enabled is not None else None)
+    if en is not None:
+        room_tts_service.set_enabled(en)
+    if req and req.voice:
+        room_tts_service.set_voice(req.voice)
+    if req and req.rate:
+        room_tts_service.set_rate(req.rate)
+    if req and req.pitch:
+        room_tts_service.set_pitch(req.pitch)
+
     return {
         "status": "SUCCESS",
-        "enabled": room_tts_service.is_enabled()
+        **room_tts_service.get_config()
+    }
+
+
+@app.post("/api/agent/tts/test")
+def test_room_tts(req: Optional[TtsTestRequest] = None) -> Dict[str, Any]:
+    """Immediately triggers a test utterance through the room audio sink."""
+    if not room_tts_service:
+        raise HTTPException(status_code=503, detail="TTS service not initialized")
+    msg = req.text if req and req.text else "Good evening, sir. Neural voice test complete."
+    room_tts_service.speak_async(msg)
+    return {
+        "status": "QUEUED",
+        "text": msg,
+        "voice": room_tts_service.voice,
+        "engine_mode": room_tts_service.engine_mode
     }
 
 

@@ -58,6 +58,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
         handleCommandIntent(intent)
         setContent {
             AnimusSmartRoomTheme {
@@ -81,6 +91,7 @@ class MainActivity : ComponentActivity() {
                     val widgetSettings by viewModel.widgetSettings.collectAsStateWithLifecycle()
                     val chatHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
                     val actionFeedback by viewModel.actionFeedbackState.collectAsStateWithLifecycle()
+                    val roomState by viewModel.roomState.collectAsStateWithLifecycle()
 
                     ImmersiveGlassScreen(
                         visualBrainState = visualBrainState,
@@ -126,7 +137,8 @@ class MainActivity : ComponentActivity() {
                         onStartVoiceListening = { viewModel.onStartVoiceListening() },
                         onStopVoiceListening = { viewModel.onStopVoiceListening() },
                         actionFeedback = actionFeedback,
-                        onDismissFeedback = { viewModel.dismissActionFeedback() }
+                        onDismissFeedback = { viewModel.dismissActionFeedback() },
+                        roomState = roomState
                     )
                 }
             }
@@ -252,7 +264,7 @@ fun HomeScreen(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Animus Smart Room",
+                        text = "Agent Animus",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -261,7 +273,7 @@ fun HomeScreen(
                     BrainStatusIndicator(state = visualBrainState, compact = true)
                 }
                 Text(
-                    text = "Room Audio & Automation Center",
+                    text = "Intelligent Room Automation Center",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1996,8 +2008,9 @@ fun ActiveRoutineCard(
         }
     }
 
-    val remainingMillis = ((routine.scheduledWakeTime ?: currentTime) - currentTime).coerceAtLeast(0L)
-    val isRinging = routine.isAlarming || (routine.status == com.animus.smartroom.routine.model.RoutineStatus.ACTIVE && routine.scheduledWakeTime != null && currentTime >= routine.scheduledWakeTime)
+    val wakeTime = routine.scheduledWakeTime
+    val remainingMillis = ((wakeTime ?: currentTime) - currentTime).coerceAtLeast(0L)
+    val isRinging = routine.isAlarming || (routine.status == com.animus.smartroom.routine.model.RoutineStatus.ACTIVE && wakeTime != null && currentTime >= wakeTime)
 
     if (isRinging) {
         // Unmistakable urgent alarm card

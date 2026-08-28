@@ -229,7 +229,7 @@ object BrainCommandValidator {
             }
 
             BrainCommandDto.CMD_START_MOVIE_MODE -> {
-                BrainValidationResult.Valid(AnimusCommand.StartMovieMode(contentTitle = dto.title))
+                BrainValidationResult.Valid(AnimusCommand.StartMovieMode(contentTitle = dto.title, provider = dto.provider))
             }
 
             BrainCommandDto.CMD_STOP_MOVIE_MODE -> {
@@ -350,6 +350,11 @@ object BrainCommandValidator {
             if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
         } else null
 
+        val provider = if (json.has("provider") && !json.isNull("provider")) {
+            val s = json.optString("provider").trim()
+            if (s.equals("null", ignoreCase = true) || s.isBlank()) null else s
+        } else null
+
         val rawText = if (json.has("rawText") && !json.isNull("rawText")) {
             val s = json.optString("rawText")
             if (s.equals("null", ignoreCase = true)) null else s
@@ -379,6 +384,7 @@ object BrainCommandValidator {
             wakeTime = wakeTime,
             playbackUrl = playbackUrl,
             directVideoId = directVideoId,
+            provider = provider,
             rawText = rawText,
             parameters = params
         )

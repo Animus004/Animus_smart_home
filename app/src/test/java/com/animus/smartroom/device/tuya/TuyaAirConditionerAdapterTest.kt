@@ -11,32 +11,32 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.mockito.Mockito.`when`
-import org.mockito.Mockito.mock
 
 class TuyaAirConditionerAdapterTest {
 
     private val testDevice = RoomDevice(
         id = "ac_test_1",
         displayName = "Lloyd AC",
-        deviceType = DeviceType.AIR_CONDITIONER,
-        isOnline = true
+        type = DeviceType.AIR_CONDITIONER
     )
 
     @Test
     fun testStatusUsesBackend() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        val statusJson = JSONObject().apply {
-            put("power", true)
-            put("target_temperature", 24)
-            put("ambient_temperature", 26)
-            put("mode", "COOL")
-            put("fan_speed", "HIGH")
-            put("is_online", true)
+        val fakeClient = object : BackendAcClient() {
+            override suspend fun getStatus(): Result<JSONObject> {
+                val statusJson = JSONObject().apply {
+                    put("power", true)
+                    put("target_temperature", 24)
+                    put("ambient_temperature", 26)
+                    put("mode", "COOL")
+                    put("fan_speed", "HIGH")
+                    put("is_online", true)
+                }
+                return Result.success(statusJson)
+            }
         }
-        `when`(mockClient.getStatus()).thenReturn(Result.success(statusJson))
 
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
         val state = adapter.getAcState(testDevice)
 
         assertTrue(state.power)
@@ -48,15 +48,18 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testTemperatureCommandUsesBackend() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        val respJson = JSONObject().apply {
-            put("status", "SUCCESS")
-            put("target_temperature", 22)
-            put("power", true)
+        val fakeClient = object : BackendAcClient() {
+            override suspend fun setTemperature(celsius: Int): Result<JSONObject> {
+                val respJson = JSONObject().apply {
+                    put("status", "SUCCESS")
+                    put("target_temperature", celsius)
+                    put("power", true)
+                }
+                return Result.success(respJson)
+            }
         }
-        `when`(mockClient.setTemperature(22)).thenReturn(Result.success(respJson))
 
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
         val result = adapter.setTemperature(testDevice, 22)
 
         assertTrue(result.success)
@@ -65,14 +68,17 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testPowerCommandUsesBackend() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        val respJson = JSONObject().apply {
-            put("status", "SUCCESS")
-            put("power", true)
+        val fakeClient = object : BackendAcClient() {
+            override suspend fun setPower(on: Boolean): Result<JSONObject> {
+                val respJson = JSONObject().apply {
+                    put("status", "SUCCESS")
+                    put("power", on)
+                }
+                return Result.success(respJson)
+            }
         }
-        `when`(mockClient.setPower(true)).thenReturn(Result.success(respJson))
 
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
         val result = adapter.setPower(testDevice, true)
 
         assertTrue(result.success)
@@ -81,10 +87,13 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testBackendFailureDoesNotSimulateSuccess() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        `when`(mockClient.setTemperature(24)).thenReturn(Result.failure(Exception("TCP 6668 timeout on PC")))
+        val fakeClient = object : BackendAcClient() {
+            override suspend fun setTemperature(celsius: Int): Result<JSONObject> {
+                return Result.failure(Exception("TCP 6668 timeout on PC"))
+            }
+        }
 
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
         val result = adapter.setTemperature(testDevice, 24)
 
         assertFalse(result.success)
@@ -93,10 +102,13 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testTimeoutDoesNotSimulateSuccess() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        `when`(mockClient.setPower(true)).thenReturn(Result.failure(Exception("Connect timeout")))
+        val fakeClient = object : BackendAcClient() {
+            override suspend fun setPower(on: Boolean): Result<JSONObject> {
+                return Result.failure(Exception("Connect timeout"))
+            }
+        }
 
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
         val result = adapter.setPower(testDevice, true)
 
         assertFalse(result.success)
@@ -105,8 +117,8 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testInvalidTemperatureRejectedLocally() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val fakeClient = BackendAcClient()
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
 
         val resultLow = adapter.setTemperature(testDevice, 14)
         assertFalse(resultLow.success)
@@ -119,8 +131,8 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testHeatModeRejected() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val fakeClient = BackendAcClient()
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
 
         val result = adapter.setMode(testDevice, AcMode.HEAT)
         assertFalse(result.success)
@@ -129,20 +141,23 @@ class TuyaAirConditionerAdapterTest {
 
     @Test
     fun testActualBackendResponseIsMappedToUiState() = runBlocking {
-        val mockClient = mock(BackendAcClient::class.java)
-        val respJson = JSONObject().apply {
-            put("status", "SUCCESS")
-            put("actual_state", JSONObject().apply {
-                put("power", true)
-                put("target_temperature", 25)
-                put("ambient_temperature", 27)
-                put("mode", "DRY")
-                put("fan_speed", "LOW")
-            })
+        val fakeClient = object : BackendAcClient() {
+            override suspend fun setMode(modeStr: String): Result<JSONObject> {
+                val respJson = JSONObject().apply {
+                    put("status", "SUCCESS")
+                    put("actual_state", JSONObject().apply {
+                        put("power", true)
+                        put("target_temperature", 25)
+                        put("ambient_temperature", 27)
+                        put("mode", "DRY")
+                        put("fan_speed", "LOW")
+                    })
+                }
+                return Result.success(respJson)
+            }
         }
-        `when`(mockClient.setMode("DRY")).thenReturn(Result.success(respJson))
 
-        val adapter = TuyaAirConditionerAdapter(backendAcClient = mockClient)
+        val adapter = TuyaAirConditionerAdapter(backendAcClient = fakeClient)
         val result = adapter.setMode(testDevice, AcMode.DRY)
 
         assertTrue(result.success)

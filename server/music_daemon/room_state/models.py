@@ -24,6 +24,8 @@ from room_state.freshness import (
     AC_MODE_TTL,
     AC_FAN_SPEED_TTL,
     AC_TRANSPORT_TTL,
+    IR_HUB_ONLINE_TTL,
+    IR_HUB_TRANSPORT_TTL,
     FIRE_TV_ONLINE_TTL,
     FIRE_TV_POWER_TTL,
     FIRE_TV_APP_TTL,
@@ -122,6 +124,7 @@ class ProjectorState(BaseModel):
     brightness: StateField[int] = Field(default_factory=lambda: StateField.unknown("PROJECTOR_UNINITIALIZED"))
     signal_active: StateField[bool] = Field(default_factory=lambda: StateField.unknown("PROJECTOR_UNINITIALIZED"))
     health: StateField[str] = Field(default_factory=lambda: StateField.unknown("PROJECTOR_UNINITIALIZED"))
+    content_title: StateField[Optional[str]] = Field(default_factory=lambda: StateField.unknown("PROJECTOR_UNINITIALIZED"))
 
     def to_dict(self, current_time: Optional[float] = None) -> Dict[str, Any]:
         return {
@@ -130,6 +133,7 @@ class ProjectorState(BaseModel):
             "brightness": self.brightness.to_dict(PROJECTOR_BRIGHTNESS_TTL, current_time),
             "signal_active": self.signal_active.to_dict(PROJECTOR_SIGNAL_TTL, current_time),
             "health": self.health.to_dict(PROJECTOR_HEALTH_TTL, current_time),
+            "content_title": self.content_title.to_dict(PROJECTOR_INPUT_TTL, current_time),
         }
 
 
@@ -159,6 +163,7 @@ class FireTvState(BaseModel):
     power_state: StateField[str] = Field(default_factory=lambda: StateField.unknown("FIRE_TV_UNINITIALIZED"))
     foreground_app: StateField[Optional[str]] = Field(default_factory=lambda: StateField.unknown("FIRE_TV_UNINITIALIZED"))
     soundbar_connected: StateField[bool] = Field(default_factory=lambda: StateField.unknown("FIRE_TV_UNINITIALIZED"))
+    content_title: StateField[Optional[str]] = Field(default_factory=lambda: StateField.unknown("FIRE_TV_UNINITIALIZED"))
 
     def to_dict(self, current_time: Optional[float] = None) -> Dict[str, Any]:
         return {
@@ -166,6 +171,7 @@ class FireTvState(BaseModel):
             "power_state": self.power_state.to_dict(FIRE_TV_POWER_TTL, current_time),
             "foreground_app": self.foreground_app.to_dict(FIRE_TV_APP_TTL, current_time),
             "soundbar_connected": self.soundbar_connected.to_dict(FIRE_TV_BT_TTL, current_time),
+            "content_title": self.content_title.to_dict(FIRE_TV_APP_TTL, current_time),
         }
 
 
@@ -235,6 +241,18 @@ class AudioStreamState(BaseModel):
         }
 
 
+class IrHubState(BaseModel):
+    """Authoritative Smart IR Hub Subsystem State (Tuya IR Blaster)."""
+    online: StateField[bool] = Field(default_factory=lambda: StateField.unknown("IR_HUB_UNINITIALIZED"))
+    transport: StateField[str] = Field(default_factory=lambda: StateField.unknown("IR_HUB_UNINITIALIZED"))
+
+    def to_dict(self, current_time: Optional[float] = None) -> Dict[str, Any]:
+        return {
+            "online": self.online.to_dict(IR_HUB_ONLINE_TTL, current_time),
+            "transport": self.transport.to_dict(IR_HUB_TRANSPORT_TTL, current_time),
+        }
+
+
 class RoomEnvironmentState(BaseModel):
     """High-Level Room Environment & Mode Tracking."""
     room_mode: StateField[str] = Field(default_factory=lambda: StateField.unknown("ENVIRONMENT_UNINITIALIZED"))
@@ -260,6 +278,7 @@ class RoomState(BaseModel):
     is_consistent: bool = True
     projector: ProjectorState = Field(default_factory=ProjectorState)
     ac: AcState = Field(default_factory=AcState)
+    ir_hub: IrHubState = Field(default_factory=IrHubState)
     fire_tv: FireTvState = Field(default_factory=FireTvState)
     pc: PcState = Field(default_factory=PcState)
     soundbar: SoundbarState = Field(default_factory=SoundbarState)
@@ -274,6 +293,7 @@ class RoomState(BaseModel):
             "is_consistent": self.is_consistent,
             "projector": self.projector.to_dict(now),
             "ac": self.ac.to_dict(now),
+            "ir_hub": self.ir_hub.to_dict(now),
             "fire_tv": self.fire_tv.to_dict(now),
             "pc": self.pc.to_dict(now),
             "soundbar": self.soundbar.to_dict(now),
@@ -332,3 +352,61 @@ class RoomState(BaseModel):
                 if isinstance(fdata, dict) and fdata.get("provenance") == Provenance.UNKNOWN.value:
                     unk_list.append(f"{sub}.{fname}")
         return unk_list
+
+    def to_brain_markdown_prompt(self, current_time: Optional[float] = None) -> str:
+        """
+        Formats canonical RoomState into an unambiguous structured perception block
+        specifically designed for Gemini / LLM planner context injection.
+        """
+        now = current_time if current_time is not None else self.timestamp
+        d = self.to_dict(now)
+        
+        lines = [
+            "### CURRENT PHYSICAL REALITY",
+            f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))}",
+            f"System State Consistency: {'VALID' if self.is_consistent else 'DEGRADED / PARTIAL'}",
+            "",
+            "AC:",
+            f"  power: {'ON' if d['ac']['power']['value'] is True else ('OFF' if d['ac']['power']['value'] is False else 'UNKNOWN')}",
+            f"  target: {d['ac']['target_temperature']['value']}°C" if d['ac']['target_temperature']['value'] is not None else "  target: UNKNOWN",
+            f"  mode: {d['ac']['mode']['value']}",
+            f"  fan: {d['ac']['fan_speed']['value']}",
+            f"  ambient: {d['ac']['ambient_temperature']['value']}°C" if d['ac']['ambient_temperature']['value'] is not None else "  ambient: N/A",
+            f"  freshness: {'FRESH' if d['ac']['power']['provenance'] in ('OBSERVED', 'DERIVED') else d['ac']['power']['provenance']}",
+            f"  provenance: {d['ac']['power']['provenance']}",
+            f"  transport: {d['ac']['transport_used']['value']}",
+            "",
+            "SMART IR HUB:",
+            f"  online: {'YES' if d['ir_hub']['online']['value'] is True else ('NO' if d['ir_hub']['online']['value'] is False else 'UNKNOWN')}",
+            f"  freshness: {'FRESH' if d['ir_hub']['online']['provenance'] in ('OBSERVED', 'DERIVED') else d['ir_hub']['online']['provenance']}",
+            f"  provenance: {d['ir_hub']['online']['provenance']}",
+            f"  transport: {d['ir_hub']['transport']['value']}",
+            "",
+            "PROJECTOR:",
+            f"  power: {'ON' if d['projector']['power']['value'] is True else ('OFF' if d['projector']['power']['value'] is False else 'UNKNOWN')}",
+            f"  input_source: {d['projector']['input_source']['value']}",
+            f"  signal_active: {'YES' if d['projector']['signal_active']['value'] is True else ('NO' if d['projector']['signal_active']['value'] is False else 'UNKNOWN')}",
+            f"  freshness: {'FRESH' if d['projector']['power']['provenance'] in ('OBSERVED', 'DERIVED') else d['projector']['power']['provenance']}",
+            f"  provenance: {d['projector']['power']['provenance']}",
+            "",
+            "FIRE TV:",
+            f"  online: {'YES' if d['fire_tv']['online']['value'] is True else ('NO' if d['fire_tv']['online']['value'] is False else 'UNKNOWN')}",
+            f"  power: {d['fire_tv']['power_state']['value']}",
+            f"  foreground_app: {d['fire_tv']['foreground_app']['value']}",
+            f"  soundbar_connected: {'YES' if d['fire_tv']['soundbar_connected']['value'] is True else ('NO' if d['fire_tv']['soundbar_connected']['value'] is False else 'UNKNOWN')}",
+            f"  freshness: {'FRESH' if d['fire_tv']['online']['provenance'] in ('OBSERVED', 'DERIVED') else d['fire_tv']['online']['provenance']}",
+            f"  provenance: {d['fire_tv']['online']['provenance']}",
+            "",
+            "PC AUDIO:",
+            f"  volume: {d['pc']['master_volume']['value']}%" if d['pc']['master_volume']['value'] is not None else "  volume: UNKNOWN",
+            f"  muted: {'YES' if d['pc']['is_muted']['value'] is True else ('NO' if d['pc']['is_muted']['value'] is False else 'UNKNOWN')}",
+            f"  endpoint: {d['pc']['default_audio_endpoint']['value']}",
+            f"  freshness: {'FRESH' if d['pc']['online']['provenance'] in ('OBSERVED', 'DERIVED') else d['pc']['online']['provenance']}",
+            f"  provenance: {d['pc']['online']['provenance']}",
+            "",
+            "SOUNDBAR ROUTE:",
+            f"  owner: {d['soundbar']['current_owner']['value']}",
+            f"  connected: {'YES' if d['soundbar']['is_connected']['value'] is True else 'NO'}",
+            f"  active_stream: {d['audio_stream']['active_producer']['value']}",
+        ]
+        return "\n".join(lines)

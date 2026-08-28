@@ -67,7 +67,8 @@ sealed interface BrainAction {
     ) : BrainAction
 
     data class MovieMode(
-        val contentTitle: String? = null
+        val contentTitle: String? = null,
+        val provider: String? = null
     ) : BrainAction
 
     data object StopMovieMode : BrainAction

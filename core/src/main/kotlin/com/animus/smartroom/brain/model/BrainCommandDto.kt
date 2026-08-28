@@ -16,6 +16,7 @@ data class BrainCommandDto(
     val wakeTime: String? = null,
     val playbackUrl: String? = null,
     val directVideoId: String? = null,
+    val provider: String? = null,
     val rawText: String? = null,
     val parameters: Map<String, Any> = emptyMap()
 ) {

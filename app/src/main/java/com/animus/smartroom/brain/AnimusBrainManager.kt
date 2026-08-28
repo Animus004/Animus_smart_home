@@ -11,9 +11,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class AnimusBrainManager(
-    private val localBrain: AnimusBrain = LocalAnimusBrain(),
-    private val cloudBrain: AnimusBrain = CloudAnimusBrain(),
-    private val remotePhaseFBrain: AnimusBrain = RemotePhaseFBrain(),
+    val localBrain: AnimusBrain = LocalAnimusBrain(),
+    val cloudBrain: AnimusBrain = CloudAnimusBrain(),
+    val remotePhaseFBrain: AnimusBrain = RemotePhaseFBrain(),
     initialProvider: BrainProviderType = BrainProviderType.REMOTE_PHASE_F,
     private val onProviderChanged: ((BrainProviderType) -> Unit)? = null
 ) : AnimusBrain {
@@ -22,42 +22,21 @@ class AnimusBrainManager(
         private const val TAG = "AnimusBrainManager"
     }
 
-    private val _activeProvider = MutableStateFlow(initialProvider)
+    private val _activeProvider = MutableStateFlow(BrainProviderType.REMOTE_PHASE_F)
     val activeProvider: StateFlow<BrainProviderType> = _activeProvider.asStateFlow()
 
     override val providerType: BrainProviderType
-        get() = _activeProvider.value
+        get() = BrainProviderType.REMOTE_PHASE_F
 
     fun setProvider(type: BrainProviderType) {
-        Log.i(TAG, "[brain-selection] Switching active Brain provider to: $type")
-        _activeProvider.value = type
-        onProviderChanged?.invoke(type)
+        Log.i(TAG, "[brain-selection] Brain provider set to: $type (Authoritative Animus backend active)")
+        _activeProvider.value = BrainProviderType.REMOTE_PHASE_F
+        onProviderChanged?.invoke(BrainProviderType.REMOTE_PHASE_F)
     }
 
     override suspend fun interpret(input: String): BrainResult {
-        val currentProvider = _activeProvider.value
-        val reason = when (currentProvider) {
-            BrainProviderType.REMOTE_PHASE_F -> "Authoritative Phase F remote backend is active"
-            BrainProviderType.GEMINI -> "Gemini Cloud provider is active"
-            BrainProviderType.LOCAL -> "Local offline provider is active"
-        }
-        Log.i(TAG, "[brain-selection] Selected brain: $currentProvider, Reason: $reason for input '$input'")
-
-        val targetBrain = when (currentProvider) {
-            BrainProviderType.REMOTE_PHASE_F -> remotePhaseFBrain
-            BrainProviderType.LOCAL -> localBrain
-            BrainProviderType.GEMINI -> cloudBrain
-        }
-
-        val result = targetBrain.interpret(input)
-
-        // If cloud brain is unavailable, fall back to local brain
-        return if (currentProvider == BrainProviderType.GEMINI && (result is BrainResult.Unavailable || result is BrainResult.Failure)) {
-            Log.w(TAG, "[brain-selection] Cloud brain unavailable ($result). Falling back to Local Brain.")
-            localBrain.interpret(input)
-        } else {
-            result
-        }
+        Log.i(TAG, "[brain-selection] Delegating input directly to authoritative Animus Agent (Phase F): '$input'")
+        return remotePhaseFBrain.interpret(input)
     }
 }
 

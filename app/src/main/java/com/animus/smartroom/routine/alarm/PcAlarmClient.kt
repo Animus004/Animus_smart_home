@@ -19,13 +19,15 @@ class PcAlarmClient(
     private val host: String = "192.168.1.9",
     private val port: Int = 8095,
     private val connectTimeoutMs: Int = 1500,
-    private val readTimeoutMs: Int = 3000
+    private val readTimeoutMs: Int = 3000,
+    private val hostProvider: (() -> String)? = null
 ) {
     companion object {
         private const val TAG = "PcAlarmClient"
     }
 
-    private val baseUrl = "http://$host:$port"
+    private val baseUrl: String
+        get() = "http://${hostProvider?.invoke() ?: host}:$port"
 
     suspend fun startPcAlarm(): PcAlarmResult = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null

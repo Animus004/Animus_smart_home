@@ -60,7 +60,7 @@ class AgentWebSocketClient(
                 try {
                     pollAndProcessEvents()
                 } catch (e: Exception) {
-                    Log.debug(TAG, "Error in event polling pass: ${e.message}")
+                    Log.d(TAG, "Error in event polling pass: ${e.message}")
                 }
                 delay(pollIntervalMs)
             }
@@ -107,8 +107,8 @@ class AgentWebSocketClient(
             val url = URL("$baseUrl$EVENTS_UNACKED_PATH")
             connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 3000
-                readTimeout = 4000
+                connectTimeout = 5000
+                readTimeout = 15000
                 setRequestProperty("Accept", "application/json")
             }
 
@@ -123,7 +123,7 @@ class AgentWebSocketClient(
                 return list
             }
         } catch (e: Exception) {
-            Log.debug(TAG, "Failed to poll unacknowledged events: ${e.message}")
+            Log.d(TAG, "Failed to poll unacknowledged events: ${e.message}")
         } finally {
             try {
                 connection?.disconnect()
@@ -138,12 +138,12 @@ class AgentWebSocketClient(
             val url = URL("$baseUrl$EVENTS_ACK_PATH/$eventId")
             connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 2000
-                readTimeout = 2000
+                connectTimeout = 5000
+                readTimeout = 8000
             }
             return connection.responseCode == HttpURLConnection.HTTP_OK
         } catch (e: Exception) {
-            Log.debug(TAG, "Failed to ACK event $eventId: ${e.message}")
+            Log.d(TAG, "Failed to ACK event $eventId: ${e.message}")
             return false
         } finally {
             try {
@@ -151,8 +151,4 @@ class AgentWebSocketClient(
             } catch (_: Exception) {}
         }
     }
-}
-
-private fun Log.debug(tag: String, msg: String) {
-    Log.d(tag, msg)
 }

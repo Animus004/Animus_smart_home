@@ -65,9 +65,17 @@ class SmartRoomContentResolver:
     Resolves spoken or typed content queries into structured streaming intents.
     """
 
-    def __init__(self, music_resolver=None, provider_registry: Optional[MediaProviderRegistry] = None):
+    def __init__(self, music_resolver=None, provider_registry: Optional[MediaProviderRegistry] = None, watchmode_resolver=None):
         self.music_resolver = music_resolver
         self.provider_registry = provider_registry or MediaProviderRegistry()
+        if watchmode_resolver is not None:
+            self.watchmode = watchmode_resolver
+        else:
+            try:
+                from watchmode_resolver import WatchmodeResolver
+                self.watchmode = WatchmodeResolver()
+            except Exception:
+                self.watchmode = None
 
     def _extract_provider_from_text(self, text: str) -> Tuple[str, Optional[str]]:
         """
@@ -95,14 +103,30 @@ class SmartRoomContentResolver:
             (r"^hoichoi\s+", "hoichoi"),
         ]
 
-        # Strip standard conversational prefixes first:
-        # "buddy play...", "please open...", "put on...", "let's watch..."
+        # Strip standard conversational prefixes and temporal markers:
+        # "buddy play...", "please open...", "put on...", "let's watch...", "I feel like watching..."
         clean_text = re.sub(
-            r"^(?:buddy|hey\s+buddy|alexa|computer|please|can\s+you|could\s+you|let['’]s)\s+",
+            r"\s+(?:right\s+now|now|at\s+the\s+moment|tonight|today)\s*$",
             "",
             clean_text,
             flags=re.IGNORECASE
         ).strip()
+
+        clean_text = re.sub(
+            r"^(?:buddy|hey\s+buddy|alexa|computer|please|can\s+you|could\s+you|let['’]s|i\s+(?:want|would\s+like|feel\s+like|am\s+in\s+the\s+mood)\s+(?:to\s+)?)\s*",
+            "",
+            clean_text,
+            flags=re.IGNORECASE
+        ).strip()
+
+        action_match = re.match(
+            r"^(?:watching|watch|see|put\s+on|launch|open|start|play)\s+(?:the\s+movie\s+|movie\s+|the\s+film\s+|film\s+|the\s+)?(.+)$",
+            clean_text,
+            flags=re.IGNORECASE
+        )
+        if action_match:
+            clean_text = action_match.group(1).strip()
+
         lower = clean_text.lower()
 
         # Check pure app launch phrases e.g. "open netflix", "launch prime video", "open youtube"
@@ -120,7 +144,7 @@ class SmartRoomContentResolver:
             "mx_player": ["mx player", "mxplayer"],
         }
 
-        # Check if query is just "watch <app>", "open <app>", "put on <app>"
+        # Check if query is just "watch <app>", "open <app>", "put on <app>", or pure "<app>"
         for pid, aliases in direct_apps.items():
             for alias in aliases:
                 exact_commands = [
@@ -208,11 +232,11 @@ class SmartRoomContentResolver:
                 content_id=None,
                 direct_uri=None,
                 launch_component=provider.launch_component,
-                resolution_type="SEARCH_QUERY",
-                confidence="LOW",
+                resolution_type="APP_LAUNCH_ONLY" if explicit_provider else "SEARCH_QUERY",
+                confidence="HIGH" if explicit_provider else "LOW",
                 provider_display_name=provider.display_name,
                 autoplay_supported=provider.autoplay_verified,
-                details={"reason": "Empty query"}
+                details={"reason": "Explicit provider launch" if explicit_provider else "Empty query"}
             )
 
         raw = query.strip()
@@ -281,8 +305,8 @@ class SmartRoomContentResolver:
         provider_id = (explicit_provider or detected_provider or "youtube").strip().lower()
         provider = self.provider_registry.get_provider(provider_id) or self.provider_registry.get_provider("youtube")
 
-        # If query resolved to pure app launch (no title)
-        if not cleaned_title:
+        # If query resolved to pure app launch (no title or generic placeholder like 'something')
+        if not cleaned_title or cleaned_title.lower() in ("something", "anything", "stuff", "videos", "movies", "shows", "video", "movie", "show"):
             return ResolvedContent(
                 provider_id=provider.provider_id,
                 raw_query=raw,
@@ -297,21 +321,37 @@ class SmartRoomContentResolver:
                 details={"app_launch": True, "provider_detected": bool(detected_provider)}
             )
 
-        # 5. Non-YouTube providers: construct provider deep-link intent
+        # 5. Non-YouTube providers: check Watchmode for exact deep-link / numeric content ID
         if provider.provider_id != "youtube":
-            uri, component = provider.build_uri(cleaned_title, "content")
+            resolved_content_id = cleaned_title
+            resolved_uri = None
+            if getattr(self, "watchmode", None):
+                try:
+                    ott_info = self.watchmode.resolve_title(cleaned_title, target_provider=provider.provider_id)
+                    if ott_info and (ott_info.get("content_id") or ott_info.get("web_url")):
+                        resolved_content_id = str(ott_info.get("content_id") or cleaned_title)
+                        resolved_uri = ott_info.get("web_url")
+                except Exception as e:
+                    logger.warning(f"[CONTENT_RESOLVER_WATCHMODE_ERROR] {e}")
+
+            if not resolved_uri:
+                resolved_uri, component = provider.build_uri(resolved_content_id, "content")
+            else:
+                component = provider.launch_component
+
+            is_direct_id = bool(getattr(self, "watchmode", None) and resolved_content_id != cleaned_title)
             return ResolvedContent(
                 provider_id=provider.provider_id,
                 raw_query=raw,
                 title=cleaned_title,
-                content_id=cleaned_title,
-                direct_uri=uri,
+                content_id=resolved_content_id,
+                direct_uri=resolved_uri,
                 launch_component=component,
                 resolution_type="PROVIDER_DETAILS",
-                confidence="MEDIUM",
+                confidence="HIGH" if is_direct_id else "MEDIUM",
                 provider_display_name=provider.display_name,
                 autoplay_supported=provider.autoplay_verified,
-                details={"provider_detected": bool(detected_provider), "explicit": bool(explicit_provider)}
+                details={"provider_detected": bool(detected_provider), "explicit": bool(explicit_provider), "watchmode_resolved": is_direct_id}
             )
 
         # 6. YouTube resolution: attempt catalog resolution to extract Video ID for instant autoplay

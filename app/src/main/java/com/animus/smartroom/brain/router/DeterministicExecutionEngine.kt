@@ -294,9 +294,28 @@ class DeterministicExecutionEngine(
         val corrId = cmd.correlationId
         when (cmd.capability) {
             CapabilityRegistry.ActionCapability.MEDIA_PLAY -> {
-                val title = cmd.parameters["title"]?.toString() ?: "Zara Zara"
+                val title = cmd.parameters["title"]?.toString()
                 val artist = cmd.parameters["artist"]?.toString()
-                musicController?.playTrackPreset(title, artist, "LG SNC4R")
+                if (!title.isNullOrBlank()) {
+                    musicController?.playTrackPreset(title, artist, "LG SNC4R")
+                } else {
+                    val status = musicController?.uiState?.value?.playbackStatus
+                    if (status == com.animus.smartroom.media.model.PlaybackStatus.PAUSED) {
+                        musicController?.play()
+                    } else {
+                        tracer?.mark("ACTION_COMPLETED")
+                        tracer?.mark("HARDWARE_VERIFIED")
+                        tracer?.mark("FINAL_RESULT")
+                        return ExecutionResult(
+                            status = ExecutionResult.Status.SUCCESS,
+                            correlationId = corrId,
+                            intent = cmd.capability.name,
+                            target = "MEDIA",
+                            message = "What would you like me to play, buddy?",
+                            latencyTraceMs = tracer?.getTraceLatencies() ?: emptyMap()
+                        )
+                    }
+                }
             }
             CapabilityRegistry.ActionCapability.MEDIA_PAUSE -> musicController?.pause()
             CapabilityRegistry.ActionCapability.MEDIA_STOP -> musicController?.pause()

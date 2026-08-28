@@ -144,40 +144,40 @@ fun BrainSwitchPanel(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Local Qwen Option
-                val isLocal = activeBrainProvider == BrainProviderType.LOCAL
+                // Animus Personal Agent (Phase F) Option
+                val isPhaseF = activeBrainProvider == BrainProviderType.REMOTE_PHASE_F
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(GlassTokens.CornerRadiusMedium)
                         .background(
-                            if (isLocal) GlassTokens.AccentGreen.copy(alpha = 0.2f)
+                            if (isPhaseF) GlassTokens.AccentGreen.copy(alpha = 0.2f)
                             else GlassTokens.GlassSurface
                         )
                         .border(
                             1.dp,
-                            if (isLocal) GlassTokens.AccentGreen else GlassTokens.BorderLight,
+                            if (isPhaseF) GlassTokens.AccentGreen else GlassTokens.BorderLight,
                             GlassTokens.CornerRadiusMedium
                         )
-                        .clickable { onSetBrainProvider(BrainProviderType.LOCAL) }
+                        .clickable { onSetBrainProvider(BrainProviderType.REMOTE_PHASE_F) }
                         .padding(14.dp)
                 ) {
                     Column {
                         Icon(
-                            imageVector = Icons.Default.Memory,
-                            contentDescription = "Local Ollama",
-                            tint = if (isLocal) GlassTokens.AccentGreen else Color.White.copy(alpha = 0.6f),
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Animus Phase F",
+                            tint = if (isPhaseF) GlassTokens.AccentGreen else Color.White.copy(alpha = 0.6f),
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Local Qwen 2.5 / 3",
+                            text = "Animus Live Agent",
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Ollama on PC / Device",
+                            text = "Authoritative Brain (:8095)",
                             color = Color.White.copy(alpha = 0.6f),
                             fontSize = 11.sp
                         )

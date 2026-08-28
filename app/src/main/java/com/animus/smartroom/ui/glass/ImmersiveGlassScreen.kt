@@ -79,6 +79,7 @@ fun ImmersiveGlassScreen(
     onStopVoiceListening: () -> Unit,
     actionFeedback: ActionFeedback? = null,
     onDismissFeedback: () -> Unit,
+    roomState: com.animus.smartroom.context.model.RoomStateDto? = null,
     modifier: Modifier = Modifier
 ) {
     var activeTool by remember { mutableStateOf(ActiveGlassTool.NONE) }
@@ -305,6 +306,7 @@ fun ImmersiveGlassScreen(
                             registeredDevices = registeredDevices,
                             tuyaAcState = tuyaAcState,
                             bluetoothUiState = bluetoothUiState,
+                            roomState = roomState,
                             onClose = { activeTool = ActiveGlassTool.NONE }
                         )
                     }

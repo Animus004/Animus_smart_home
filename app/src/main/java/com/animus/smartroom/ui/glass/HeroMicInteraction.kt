@@ -35,11 +35,17 @@ fun HeroMicInteraction(
     val isReady = brainState == VisualBrainState.READY && !isProcessing
     val isListening = voiceState is VoiceInputState.Listening || voiceState is VoiceInputState.Recognizing
 
+    // Gemini Live Signature Multi-Spectral Palette
+    val geminiBlue = Color(0xFF4285F4)
+    val geminiPurple = Color(0xFF8E24AA)
+    val geminiCyan = Color(0xFF00E5FF)
+    val animusEmerald = GlassTokens.AccentGreen
+
     val stateColor = when (brainState) {
-        VisualBrainState.READY -> GlassTokens.AccentGreen
+        VisualBrainState.READY -> if (isListening) geminiCyan else animusEmerald
         VisualBrainState.WARMING -> GlassTokens.AccentYellow
-        VisualBrainState.EXECUTING -> GlassTokens.AccentBlue
-        VisualBrainState.COMPLETED -> GlassTokens.AccentCyan
+        VisualBrainState.EXECUTING -> geminiBlue
+        VisualBrainState.COMPLETED -> geminiCyan
         VisualBrainState.ERROR -> GlassTokens.AccentRed
     }
 
@@ -51,13 +57,24 @@ fun HeroMicInteraction(
 
     val infiniteTransition = rememberInfiniteTransition(label = "HeroMicPulse")
 
-    // Outer ripple animation
+    // Gemini Live Breathing Scale (Hypnotic smooth organic sine cycle)
+    val breathingScale by infiniteTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "GeminiBreathingScale"
+    )
+
+    // Outer ripple animation (Responsive to Listening / Executing / Idle)
     val outerRippleScale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
-        targetValue = if (isListening) 1.55f else if (brainState == VisualBrainState.EXECUTING || isProcessing) 1.35f else 1.15f,
+        targetValue = if (isListening) 1.62f else if (brainState == VisualBrainState.EXECUTING || isProcessing) 1.38f else 1.18f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = if (isListening) 650 else if (brainState == VisualBrainState.EXECUTING || isProcessing) 800 else 2400,
+                durationMillis = if (isListening) 600 else if (brainState == VisualBrainState.EXECUTING || isProcessing) 800 else 3200,
                 easing = FastOutSlowInEasing
             ),
             repeatMode = RepeatMode.Reverse
@@ -67,11 +84,11 @@ fun HeroMicInteraction(
 
     // Inner ripple animation
     val innerRippleScale by infiniteTransition.animateFloat(
-        initialValue = 0.95f,
-        targetValue = if (isListening) 1.25f else 1.06f,
+        initialValue = 0.94f,
+        targetValue = if (isListening) 1.28f else 1.08f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = if (isListening) 650 else 2400,
+                durationMillis = if (isListening) 600 else 3200,
                 easing = FastOutSlowInEasing
             ),
             repeatMode = RepeatMode.Reverse
@@ -84,53 +101,66 @@ fun HeroMicInteraction(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000, easing = LinearEasing),
+            animation = tween(durationMillis = 2800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "OrbitalRotation"
     )
 
     Box(
-        modifier = modifier.size(200.dp),
+        modifier = modifier
+            .size(200.dp)
+            .scale(if (!isListening && (brainState == VisualBrainState.READY)) breathingScale else 1f),
         contentAlignment = Alignment.Center
     ) {
-        // Outer glow ripple ring
+        // LAYER 1: Deep Gemini Live Breathing Glow Aura
         Box(
             modifier = Modifier
-                .size(175.dp)
+                .size(190.dp)
                 .scale(outerRippleScale)
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            animatedColor.copy(alpha = if (isListening) 0.35f else 0.12f),
+                            (if (isListening) geminiCyan else if (brainState == VisualBrainState.EXECUTING) geminiPurple else animatedColor).copy(alpha = if (isListening) 0.40f else 0.16f),
+                            animatedColor.copy(alpha = if (isListening) 0.18f else 0.05f),
                             Color.Transparent
                         )
                     )
                 )
         )
 
-        // Middle reactive ring (rotates during executing state)
+        // LAYER 2: Middle Prismatic Aura Ring (Gemini Live sweep gradient)
         Box(
             modifier = Modifier
-                .size(145.dp)
+                .size(150.dp)
                 .scale(innerRippleScale)
-                .rotate(if (brainState == VisualBrainState.EXECUTING || isProcessing) continuousRotation else 0f)
+                .rotate(if (brainState == VisualBrainState.EXECUTING || isProcessing || isListening) continuousRotation else 0f)
                 .clip(CircleShape)
                 .border(
-                    width = if (brainState == VisualBrainState.EXECUTING || isProcessing) 2.dp else 1.5.dp,
+                    width = if (brainState == VisualBrainState.EXECUTING || isProcessing) 2.2.dp else 1.5.dp,
                     brush = if (brainState == VisualBrainState.EXECUTING || isProcessing) {
                         Brush.sweepGradient(
                             colors = listOf(
-                                animatedColor,
-                                animatedColor.copy(alpha = 0.1f),
-                                animatedColor
+                                geminiBlue,
+                                geminiPurple,
+                                geminiCyan,
+                                geminiBlue
+                            )
+                        )
+                    } else if (isListening) {
+                        Brush.sweepGradient(
+                            colors = listOf(
+                                geminiCyan,
+                                geminiBlue.copy(alpha = 0.3f),
+                                geminiCyan
                             )
                         )
                     } else {
                         Brush.linearGradient(
                             colors = listOf(
-                                animatedColor.copy(alpha = if (isListening) 0.65f else 0.25f),
+                                animatedColor.copy(alpha = 0.55f),
+                                geminiPurple.copy(alpha = 0.20f),
                                 animatedColor.copy(alpha = 0.08f)
                             )
                         )
@@ -140,7 +170,7 @@ fun HeroMicInteraction(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            animatedColor.copy(alpha = if (isListening) 0.22f else 0.08f),
+                            animatedColor.copy(alpha = if (isListening) 0.25f else 0.09f),
                             Color.Transparent
                         )
                     )

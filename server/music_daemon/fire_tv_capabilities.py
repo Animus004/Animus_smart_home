@@ -453,7 +453,7 @@ class FireTVCapabilityRegistry:
             verified=True
         )
 
-    def launch_streaming_provider(self, provider_id: str, content_uri_or_id: str) -> FireTVCapabilityResult:
+    def launch_streaming_provider(self, provider_id: str, content_uri_or_id: Optional[str] = None) -> FireTVCapabilityResult:
         """
         Launches direct title or content on a registered streaming provider.
         Preconditions: Provider registered, Fire TV reachable, awake.
@@ -477,7 +477,7 @@ class FireTVCapabilityRegistry:
 
         self.wake()
 
-        ok, uri, comp, msg = self.provider_registry.resolve_launch_intent(provider.provider_id, content_uri_or_id)
+        ok, uri, comp, msg = self.provider_registry.resolve_launch_intent(provider.provider_id, content_uri_or_id or "")
         if not ok:
             return FireTVCapabilityResult(
                 capability=FireTVCapabilityType.MEDIA_DIRECT_PROVIDER.value,
@@ -515,11 +515,12 @@ class FireTVCapabilityRegistry:
                 verified=True
             )
 
-        res_status = "DIRECT_PLAYING" if provider.autoplay_verified else "CONTENT_PAGE_OPENED"
+        res_status = "APP_LAUNCH_ONLY" if not uri else ("DIRECT_PLAYING" if provider.autoplay_verified else "CONTENT_PAGE_OPENED")
+        msg_text = f"{provider.display_name} launched." if not uri else f"{provider.display_name} content launched ({res_status})."
         return FireTVCapabilityResult(
             capability=FireTVCapabilityType.MEDIA_DIRECT_PROVIDER.value,
             success=True,
-            message=f"{provider.display_name} content launched ({res_status}).",
+            message=msg_text,
             details={
                 "provider": provider.provider_id,
                 "display_name": provider.display_name,

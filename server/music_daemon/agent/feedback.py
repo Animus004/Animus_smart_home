@@ -101,12 +101,16 @@ class AgentFeedbackGenerator:
         if result.execution_attempted:
             # A. Failure Handling
             if not result.execution_success or result.physical_verification == PhysicalVerificationStatus.FAILED:
-                if result.target_device == "AC":
-                    return f"I couldn't turn the AC on, {addr}. The controller didn't confirm the change."
-                if result.target_device == "PROJECTOR" or "PROJECTOR" in (result.understood_intent or ""):
-                    return f"I couldn't wake the projector, {addr}. It isn't responding right now, so I stopped the cinema setup instead of pretending it worked."
                 if result.failure_reason:
                     return f"I couldn't complete that, {addr}: {result.failure_reason}"
+                if result.target_device == "PROJECTOR" or "PROJECTOR" in (result.understood_intent or ""):
+                    return f"The projector is still starting up and hasn't become reachable yet, {addr}."
+                if result.target_device == "AC":
+                    if result.understood_intent == "SET_AC_MODE" or result.target_capability == "AC_SET_MODE":
+                        return f"I couldn't change the AC mode, {addr}. The requested mode is unavailable."
+                    if result.understood_intent == "SET_AC_TEMPERATURE" or result.target_capability == "AC_SET_TEMPERATURE":
+                        return f"I couldn't adjust the AC temperature, {addr}. The controller didn't confirm the change."
+                    return f"I couldn't turn the AC on, {addr}. The controller didn't confirm the change."
                 return f"I couldn't complete that, {addr}. The hardware didn't confirm the change."
 
             # B. Success Handling from State Delta
@@ -135,12 +139,33 @@ class AgentFeedbackGenerator:
                     if delta.subsystem == "PROJECTOR":
                         return f"Projector's on, {addr}." if delta.new_value else f"Projector is off, {addr}."
 
+                if delta.attribute == "mode":
+                    m_val = str(delta.new_value or delta.verified_value).upper()
+                    if result.physical_audits:
+                        for pa in result.physical_audits:
+                            if pa.capability == "AC_SET_TEMPERATURE" and pa.requested_value and "temperature" in pa.requested_value:
+                                t_val = pa.requested_value["temperature"]
+                                return f"Switched the AC mode to {m_val} at {t_val}°C, {addr}."
+                    return f"Switched the AC mode to {m_val}, {addr}."
+
+                if delta.attribute == "fan_speed":
+                    f_val = str(delta.new_value or delta.verified_value).upper()
+                    return f"Set the AC fan speed to {f_val}, {addr}."
+
                 if delta.attribute == "media_playback":
                     return f"Paused the media for you, {addr}." if delta.new_value == "PAUSED" else f"Resumed playback, {addr}."
 
                 if delta.attribute == "media_provider":
                     prov_title = str(delta.new_value).replace("_", " ").title()
-                    return f"Got you {addr} — {prov_title} instead. The cinema setup is already ready, so I only switched the app."
+                    content_name = None
+                    if result.physical_audits:
+                        for pa in result.physical_audits:
+                            if pa.requested_value and isinstance(pa.requested_value, dict) and pa.requested_value.get("content"):
+                                content_name = str(pa.requested_value["content"]).title()
+                                break
+                    if content_name:
+                        return f"Putting on {content_name} on {prov_title} for you now, {addr}."
+                    return f"Opening {prov_title} on the cinema screen for you, {addr}."
 
         # Fallback to execution result formatter if execution summary available
         if result.execution_summary and "steps" in result.execution_summary:
@@ -238,7 +263,7 @@ class AgentFeedbackGenerator:
             first_fail = next((s for s in goal.steps if s.status == StepStatus.FAILED), None)
             if first_fail:
                 if first_fail.target_subsystem == "PROJECTOR":
-                    return f"I couldn't wake the projector, {addr}. It isn't responding right now, so I stopped the setup."
+                    return f"The projector is still starting up and hasn't become reachable yet, {addr}."
                 if first_fail.target_subsystem == "AC":
                     return f"I couldn't adjust the AC, {addr}. The hardware didn't confirm the change."
             return f"I couldn't complete that goal, {addr}."

@@ -190,8 +190,8 @@ class CommandRouter(
             is AnimusCommand.ScheduleDeviceAction -> "ScheduleDeviceAction(target='${command.target}', action='${command.action}', delay=${command.delayMinutes}, time='${command.scheduledTime}')"
             is AnimusCommand.CancelScheduledAction -> "CancelScheduledAction(target='${command.target}')"
             is AnimusCommand.QueryScheduledAction -> "QueryScheduledAction(target='${command.target}')"
-            is AnimusCommand.StartMovieMode -> "StartMovieMode(content='${command.contentTitle}')"
-            is AnimusCommand.WatchContent -> "WatchContent(title='${command.title}', category='${command.category}')"
+            is AnimusCommand.StartMovieMode -> "StartMovieMode(content='${command.contentTitle}', provider='${command.provider}')"
+            is AnimusCommand.WatchContent -> "WatchContent(title='${command.title}', category='${command.category}', provider='${command.provider}')"
             is AnimusCommand.StopMovieMode -> "StopMovieMode"
             is AnimusCommand.UnknownCommand -> "UnknownCommand(raw='${command.rawText}')"
         }
@@ -806,12 +806,17 @@ class CommandRouter(
             }
 
             is AnimusCommand.StartMovieMode -> {
-                Log.i(TAG, "[ai] Executing StartMovieMode (content='${command.contentTitle}')")
-                val res = musicController?.startMovieModeWithFeedback(command.contentTitle)
-                val titleInfo = if (!command.contentTitle.isNullOrBlank()) " for '${command.contentTitle}'" else ""
+                Log.i(TAG, "[ai] Executing StartMovieMode (content='${command.contentTitle}', provider='${command.provider}')")
+                val res = musicController?.startMovieModeWithFeedback(command.contentTitle, command.provider)
+                val targetInfo = when {
+                    !command.contentTitle.isNullOrBlank() && !command.provider.isNullOrBlank() -> " for '${command.contentTitle}' on ${command.provider}"
+                    !command.provider.isNullOrBlank() -> " with ${command.provider}"
+                    !command.contentTitle.isNullOrBlank() -> " for '${command.contentTitle}'"
+                    else -> ""
+                }
                 val ok = if (musicController != null) (res != null && res.success) else true
                 val msg = if (ok) {
-                    "Starting Movie Mode$titleInfo: waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
+                    "Starting Movie Mode$targetInfo: waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
                 } else {
                     res?.spokenResponse ?: res?.message ?: "Failed to start Movie Mode via PC daemon."
                 }
@@ -822,13 +827,19 @@ class CommandRouter(
             }
 
             is AnimusCommand.WatchContent -> {
-                Log.i(TAG, "[ai] Executing WatchContent (title='${command.title}', category='${command.category}')")
-                val res = musicController?.startMovieModeWithFeedback(command.title)
+                Log.i(TAG, "[ai] Executing WatchContent (title='${command.title}', category='${command.category}', provider='${command.provider}')")
+                val res = musicController?.startMovieModeWithFeedback(command.title, command.provider)
+                val targetInfo = when {
+                    !command.title.isNullOrBlank() && !command.provider.isNullOrBlank() -> " for '${command.title}' on ${command.provider}"
+                    !command.provider.isNullOrBlank() -> " with ${command.provider}"
+                    !command.title.isNullOrBlank() -> " for '${command.title}'"
+                    else -> ""
+                }
                 val ok = if (musicController != null) (res != null && res.success) else true
                 val msg = if (ok) {
-                    "Starting Movie Mode for '${command.title}': waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
+                    "Starting Movie Mode$targetInfo: waking Fire TV, turning on Projector to HDMI 1, and connecting LG soundbar."
                 } else {
-                    res?.spokenResponse ?: res?.message ?: "Failed to start Movie Mode for '${command.title}' via PC daemon."
+                    res?.spokenResponse ?: res?.message ?: "Failed to start Movie Mode via PC daemon."
                 }
                 CommandExecutionResult(
                     success = ok,

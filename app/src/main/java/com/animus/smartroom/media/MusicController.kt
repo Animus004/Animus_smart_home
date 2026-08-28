@@ -50,7 +50,9 @@ open class MusicController(
         context?.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
 
     // Provider layer
-    private val pcLocalProvider = com.animus.smartroom.media.provider.PcLocalMusicProvider()
+    private val pcLocalProvider = com.animus.smartroom.media.provider.PcLocalMusicProvider(
+        hostProvider = { context?.let { com.animus.smartroom.brain.provider.LocalBrainConfigStorage(it).getConfig().host } ?: "192.168.1.9" }
+    )
     private val youtubeMusicProvider = context?.let { YouTubeMusicProvider(it) }
     private val genericMusicProvider = context?.let { GenericMusicProvider(it) }
 
@@ -557,14 +559,14 @@ open class MusicController(
         }
     }
 
-    open fun startMovieModeWithFeedback(contentTitle: String? = null): PcLocalMusicProvider.MovieModeResult {
-        Log.i(TAG, "[MOVIE_MODE] Dispatching startMovieModeWithFeedback to PC daemon (content='$contentTitle')")
-        return pcLocalProvider.startMovieModeWithFeedback(contentTitle)
+    open fun startMovieModeWithFeedback(contentTitle: String? = null, provider: String? = null): PcLocalMusicProvider.MovieModeResult {
+        Log.i(TAG, "[MOVIE_MODE] Dispatching startMovieModeWithFeedback to PC daemon (content='$contentTitle', provider='$provider')")
+        return pcLocalProvider.startMovieModeWithFeedback(contentTitle, provider)
     }
 
-    open fun startMovieMode(contentTitle: String? = null): Boolean {
-        Log.i(TAG, "[MOVIE_MODE] Dispatching startMovieMode to PC daemon (content='$contentTitle')")
-        return pcLocalProvider.startMovieMode(contentTitle)
+    open fun startMovieMode(contentTitle: String? = null, provider: String? = null): Boolean {
+        Log.i(TAG, "[MOVIE_MODE] Dispatching startMovieMode to PC daemon (content='$contentTitle', provider='$provider')")
+        return pcLocalProvider.startMovieMode(contentTitle, provider)
     }
 
     open fun stopMovieModeWithFeedback(): PcLocalMusicProvider.MovieModeResult {

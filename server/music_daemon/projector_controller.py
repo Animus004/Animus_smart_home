@@ -81,7 +81,19 @@ class IrProjectorTransport:
         """Dispatches verified IR pulse targeting the learned Zebronics profile."""
         logger.info(f"[TUYA_IR_DISPATCH] Dispatching IR pulse: remote='{remote_id}', key='{key_name}'")
 
-        # 1. Try Local Tuya 3.3 if LAN IP, local_key, and dev_id are configured
+        # 1. Primary Zero-Cloud Local Tuya IR Adapter (Tuya 3.5 on LAN 192.168.1.12:6668)
+        if self.lan_ip and self.local_key and self.dev_id and "mock" not in self.dev_id.lower():
+            try:
+                from tuya_local_ir_adapter import TuyaLocalIrAdapter
+                local_ir = TuyaLocalIrAdapter(ip=self.lan_ip, dev_id=self.dev_id, local_key=self.local_key)
+                ok, msg = local_ir.send_power_wake()
+                if ok:
+                    logger.info(f"[TUYA_IR_DISPATCH_LOCAL_OK] Dispatched via TuyaLocalIrAdapter to {self.lan_ip}: {msg}")
+                    return True
+            except Exception as e:
+                logger.warning(f"[TUYA_IR_DISPATCH_LOCAL_ERR] {e}")
+
+        # 2. Try Local Tuya 3.3 if LAN IP, local_key, and dev_id are configured
         if self.lan_ip and self.local_key and self.dev_id and "mock" not in self.dev_id.lower():
             try:
                 from ac_controller import LocalTuyaTransport
@@ -99,7 +111,7 @@ class IrProjectorTransport:
             except Exception as e:
                 logger.warning(f"[TUYA_IR_DISPATCH_LAN_ERR] {e}")
 
-        # 2. Try Tuya Cloud OpenAPI if Cloud credentials are configured
+        # 3. Try Tuya Cloud OpenAPI if Cloud credentials are configured
         if self.access_id and self.access_secret and self.dev_id and "mock" not in self.dev_id.lower():
             try:
                 from ac_controller import CloudTuyaTransport
@@ -252,13 +264,38 @@ class ProjectorController:
         target: str = DEFAULT_TARGET,
         adb_path: Optional[str] = None,
         timeout: float = 4.0,
-        use_ir_power: bool = False,
+        use_ir_power: Optional[bool] = None,
         ir_transport: Optional[IrProjectorTransport] = None
     ):
         self.target = target
         self.adb_path = adb_path or shutil.which("adb") or DEFAULT_ADB_PATH
         self.timeout = timeout
-        self.use_ir_power = use_ir_power
+        
+        if ir_transport is None and use_ir_power is not False:
+            try:
+                from ac_controller import _read_local_properties
+                props = _read_local_properties()
+                ir_dev = props.get("tuya.ir_blaster.device_id")
+                ir_key = props.get("tuya.ir_blaster.local_key")
+                ir_remote = props.get("tuya.ir_blaster.remote_id", "d718f75c8f82c9145954hl")
+                if ir_dev and ir_key:
+                    ir_transport = IrProjectorTransport(
+                        lan_ip="192.168.1.12",
+                        dev_id=ir_dev,
+                        local_key=ir_key,
+                        projector_remote_id=ir_remote,
+                        access_id=props.get("tuya.access.id"),
+                        access_secret=props.get("tuya.access.secret"),
+                        endpoint=props.get("tuya.region.endpoint", "https://openapi.tuyain.com")
+                    )
+            except Exception as e:
+                logger.debug(f"[PROJECTOR_INIT_IR_ERR] {e}")
+
+        if use_ir_power is None:
+            self.use_ir_power = ir_transport is not None
+        else:
+            self.use_ir_power = bool(use_ir_power)
+
         self.ir_transport = ir_transport
 
     def _run_adb(self, args: list[str], timeout: Optional[float] = None) -> tuple[int, str, str]:
@@ -326,6 +363,8 @@ class ProjectorController:
                     return state == "device", state
 
         return False, "disconnected"
+
+
 
     def send_key(self, keycode: int | str) -> bool:
         """Sends an Android KEYCODE to the projector."""
@@ -460,43 +499,100 @@ class ProjectorController:
             "raw_display": disp_out.replace("\r", "").splitlines()
         }
 
-    def wake(self, timeout_seconds: float = 3.0) -> bool:
+    def get_content_title(self) -> Optional[str]:
         """
-        Wakes the projector display from standby/sleep.
-        If use_ir_power is enabled and ADB is offline, dispatches 1x IR Power pulse.
+        Extracts active media/content title from the projector's onboard Android OS.
+        Inspects dumpsys media_session metadata and foreground activity.
         """
         is_ready, _ = self.is_connected(auto_connect=False)
+        if not is_ready:
+            return None
+
+        # 1. Try dumpsys media_session for rich metadata title
+        code, dump, _ = self._run_shell("dumpsys media_session")
+        if code == 0 and dump:
+            title_match = re.search(r'description=(.+?),', dump)
+            if not title_match:
+                title_match = re.search(r'title=([^,\n]+)', dump)
+            if title_match:
+                t = title_match.group(1).strip()
+                if t and t.lower() not in ("null", "none", ""):
+                    return t
+
+        # 2. Fallback to friendly name based on foreground package
+        fg = self.get_foreground_package()
+        if not fg:
+            return None
+
+        app_name_map = {
+            "com.google.android.youtube.tv": "YouTube",
+            "com.netflix.mediaclient": "Netflix",
+            "com.amazon.avod.thirdpartyclient": "Prime Video",
+            "com.newlink.filemanager": "USB Media Player",
+            "com.newlink.nlsource": "HDMI 1 Input",
+            "com.newlink.overseaslauncher": "Android Home"
+        }
+        return app_name_map.get(fg, fg)
+
+    def wake(self, timeout_seconds: float = 120.0) -> bool:
+        """
+        Wakes the projector display from standby/sleep.
+        If use_ir_power is enabled and ADB is offline, dispatches 1x IR Power pulse
+        and performs bounded readiness polling (tolerating 60–120s physical boot and Wi-Fi connection time).
+        """
+        is_ready, state = self.is_connected(auto_connect=False)
         if is_ready:
             cur_st = self.get_power_state()
             if cur_st.get("interactive") and cur_st.get("power_state") == ProjectorPowerState.ON.value:
                 logger.info("[PROJECTOR_WAKE] Projector is already awake and interactive.")
                 return True
+        elif self.use_ir_power:
+            # Probe network / ADB connection to see if it's already running before assuming cold standby
+            logger.info("[PROJECTOR_WAKE_PROBE] Projector not in active device table. Probing ADB connection...")
+            is_ready, state = self.is_connected(auto_connect=True)
+            if is_ready:
+                cur_st = self.get_power_state()
+                if cur_st.get("interactive") and cur_st.get("power_state") in (ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value):
+                    logger.info("[PROJECTOR_WAKE_IR_SUPPRESSED] Projector is online over ADB Wi-Fi and awake. IR pulse suppressed.")
+                    return True
 
         if self.use_ir_power and self.ir_transport:
             if not is_ready:
                 logger.info("[PROJECTOR_WAKE] ADB offline (deep standby). Dispatching 1x IR Power pulse...")
                 try:
                     self.ir_transport.send_power_wake()
+                except IrDebounceException:
+                    logger.info("[PROJECTOR_WAKE] IR pulse recently dispatched (debounce window active). Proceeding to readiness polling.")
                 except Exception as e:
                     logger.error(f"[PROJECTOR_WAKE_IR_FAIL] Failed dispatching IR wake: {e}")
                     return False
 
-                # Bounded poll for ADB boot connection
-                t_end = time.time() + max(timeout_seconds, 12.0)
+                # Bounded poll for ADB boot connection and Wi-Fi readiness (default 120s physical boot & Wi-Fi connection time)
+                eff_timeout = timeout_seconds
+                t_end = time.time() + eff_timeout
+                logger.info(f"[PROJECTOR_WAKE_POLL] Polling for projector boot readiness (bounded timeout={eff_timeout:.1f}s)...")
                 while time.time() < t_end:
-                    time.sleep(0.5)
+                    time.sleep(2.0)
                     ready, _ = self.is_connected(auto_connect=True)
                     if ready:
                         st = self.get_power_state()
                         if st.get("power_state") in [ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value]:
-                            logger.info("[PROJECTOR_WAKE] Projector wake verified after IR pulse.")
+                            logger.info("[PROJECTOR_WAKE] Projector wake verified after IR pulse and boot completion.")
                             return True
+                logger.warning(f"[PROJECTOR_WAKE_TIMEOUT] Projector wake not verified after {eff_timeout:.1f}s.")
                 return False
 
         # Pure ADB fallback path
         if not is_ready:
-            self.connect()
-            is_ready, _ = self.is_connected()
+            eff_timeout = timeout_seconds
+            t_end = time.time() + eff_timeout
+            while time.time() < t_end:
+                self.connect()
+                ready, _ = self.is_connected(auto_connect=False)
+                if ready:
+                    is_ready = True
+                    break
+                time.sleep(2.0)
             if not is_ready:
                 return False
 

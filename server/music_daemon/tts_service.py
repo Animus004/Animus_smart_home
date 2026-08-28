@@ -27,7 +27,8 @@ class TtsState(str, Enum):
 class RoomTtsService:
     """
     Authoritative Room-Level TTS Service for Animus Smart Room.
-    Synthesizes agentMessage into audio and plays through active room audio sink with music ducking.
+    Synthesizes agentMessage into high-fidelity neural audio with SAPI fallback,
+    and plays through active room audio sink with music ducking.
     """
     def __init__(
         self,
@@ -35,13 +36,20 @@ class RoomTtsService:
         orchestrator: Optional[Any] = None,
         room_state_aggregator: Optional[Any] = None,
         cache_dir: str = r"D:\AnimusSmartRoom\server\music_daemon\scratch\tts_cache",
-        enabled: bool = False
+        enabled: bool = False,
+        voice: Optional[str] = None,
+        rate: Optional[str] = None,
+        pitch: Optional[str] = None
     ):
         self.mpv_binary = mpv_binary
         self.orchestrator = orchestrator
         self.room_state_aggregator = room_state_aggregator
         self.cache_dir = cache_dir
         self.enabled = enabled
+        self.voice = voice or os.getenv("ANIMUS_TTS_VOICE", "en-GB-SoniaNeural")
+        self.rate = rate or os.getenv("ANIMUS_TTS_RATE", "+8%")
+        self.pitch = pitch or os.getenv("ANIMUS_TTS_PITCH", "+0Hz")
+        self.engine_mode = "NEURAL"
         self._state = TtsState.IDLE
         self._state_lock = threading.RLock()
 
@@ -60,7 +68,7 @@ class RoomTtsService:
             daemon=True
         )
         self._worker_thread.start()
-        logger.info(f"[ROOM_TTS] Service initialized (enabled={self.enabled}, cache_dir='{self.cache_dir}')")
+        logger.info(f"[ROOM_TTS] Service initialized (enabled={self.enabled}, voice='{self.voice}', cache_dir='{self.cache_dir}')")
 
     @property
     def state(self) -> TtsState:
@@ -77,6 +85,33 @@ class RoomTtsService:
     def set_enabled(self, enabled: bool):
         self.enabled = enabled
         logger.info(f"[ROOM_TTS] Room TTS enabled state set to: {self.enabled}")
+
+    def set_voice(self, voice: str):
+        """Sets active neural TTS voice."""
+        self.voice = voice
+        logger.info(f"[ROOM_TTS] Neural voice changed to: {self.voice}")
+
+    def set_rate(self, rate: str):
+        """Sets speaking rate (e.g. '+10%', '-5%')."""
+        self.rate = rate
+        logger.info(f"[ROOM_TTS] Speaking rate changed to: {self.rate}")
+
+    def set_pitch(self, pitch: str):
+        """Sets voice pitch (e.g. '+2Hz', '-2Hz')."""
+        self.pitch = pitch
+        logger.info(f"[ROOM_TTS] Voice pitch changed to: {self.pitch}")
+
+    def get_config(self) -> Dict[str, Any]:
+        """Returns current voice and engine configuration."""
+        return {
+            "enabled": self.enabled,
+            "voice": self.voice,
+            "rate": self.rate,
+            "pitch": self.pitch,
+            "engine_mode": self.engine_mode,
+            "state": self.state.value,
+            "is_speaking": self.is_speaking()
+        }
 
     def speak_async(self, text: str):
         """
@@ -193,6 +228,48 @@ class RoomTtsService:
         """
         return self._synthesize_sapi_wav(text, output_wav_path)
 
+    def synthesize_to_audio(self, text: str, output_audio_path: str) -> bool:
+        """
+        Synthesizes text to audio file using high-fidelity Neural TTS,
+        with automatic fallback to local SAPI if network is unavailable.
+        """
+        if self.engine_mode == "NEURAL":
+            ok = self._synthesize_neural(text, output_audio_path)
+            if ok:
+                return True
+            logger.warning("[ROOM_TTS_FALLBACK] Neural TTS failed; falling back to offline SAPI.")
+
+        # Offline SAPI fallback
+        return self.synthesize_to_wav(text, output_audio_path)
+
+    def _synthesize_neural(self, text: str, output_audio_path: str) -> bool:
+        """Synthesizes text via Microsoft Edge Neural TTS."""
+        try:
+            import asyncio
+            import edge_tts
+
+            os.makedirs(os.path.dirname(os.path.abspath(output_audio_path)), exist_ok=True)
+            if os.path.exists(output_audio_path):
+                try:
+                    os.remove(output_audio_path)
+                except Exception:
+                    pass
+
+            async def _run():
+                communicate = edge_tts.Communicate(
+                    text=text,
+                    voice=self.voice,
+                    rate=self.rate,
+                    pitch=self.pitch
+                )
+                await communicate.save(output_audio_path)
+
+            asyncio.run(_run())
+            return os.path.exists(output_audio_path) and os.path.getsize(output_audio_path) > 0
+        except Exception as e:
+            logger.warning(f"[ROOM_TTS_NEURAL_ERROR] Neural synthesis error: {e}")
+            return False
+
     def _synthesize_sapi_wav(self, text: str, output_wav_path: str) -> bool:
         """
         Synthesizes text to a WAV file using local native SAPI.
@@ -261,27 +338,36 @@ FileStream.Close
     def _process_utterance(self, text: str, timeout: float = 15.0) -> bool:
         """
         Executes end-to-end synthesis and playback:
-        1. Synthesizes text to WAV file via local SAPI backend.
+        1. Synthesizes text to neural MP3 (or fallback WAV) file.
         2. Applies temporary audio ducking if music is active.
-        3. Plays WAV through resolved audio sink via mpv.
+        3. Plays audio through resolved audio sink via mpv.
         4. Restores music volume and cleans up scratch audio.
         """
         with self._state_lock:
             self._state = TtsState.SYNTHESIZING
 
-        wav_file = os.path.join(self.cache_dir, f"tts_{int(time.time()*1000)}.wav")
         ducked_original_volume: Optional[int] = None
+        is_neural = (self.engine_mode == "NEURAL")
+        audio_file = os.path.join(self.cache_dir, f"tts_{int(time.time()*1000)}.mp3")
+        # Adaptive timeout for longer utterances
+        effective_timeout = max(timeout, len(text) * 0.15 + 5.0)
 
         try:
-            # 1. Synthesize Audio
-            ok = self.synthesize_to_wav(text, wav_file)
+            # 1. Synthesize Audio (respect instance patch if test/caller overridden synthesize_to_wav)
+            if "synthesize_to_wav" in self.__dict__:
+                audio_file = os.path.join(self.cache_dir, f"tts_{int(time.time()*1000)}.wav")
+                ok = self.synthesize_to_wav(text, audio_file)
+            else:
+                ok = self.synthesize_to_audio(text, audio_file)
+                if not ok:
+                    audio_file = os.path.join(self.cache_dir, f"tts_{int(time.time()*1000)}.wav")
+                    ok = self.synthesize_to_wav(text, audio_file)
+
             if not ok:
-                logger.error("[ROOM_TTS_SYNTH_FAIL] SAPI synthesis failed to produce audio file.")
+                logger.error("[ROOM_TTS_SYNTH_FAIL] Synthesis failed to produce audio file.")
                 with self._state_lock:
                     self._state = TtsState.ERROR
                 return False
-
-
 
             # 2. Apply Music Ducking
             ducked_original_volume = self._apply_music_ducking()
@@ -290,7 +376,7 @@ FileStream.Close
             with self._state_lock:
                 self._state = TtsState.PLAYING
 
-            self._play_wav_file(wav_file, timeout=timeout)
+            self._play_wav_file(audio_file, timeout=effective_timeout)
             return True
 
         except Exception as e:
@@ -304,16 +390,53 @@ FileStream.Close
             if ducked_original_volume is not None:
                 self._restore_music_volume(ducked_original_volume)
 
-            # 5. Clean up temporary WAV
-            if os.path.exists(wav_file):
+            # 5. Clean up temporary audio file
+            if os.path.exists(audio_file):
                 try:
-                    os.remove(wav_file)
+                    os.remove(audio_file)
                 except Exception:
                     pass
 
             with self._state_lock:
                 if self._state != TtsState.ERROR or self._speech_queue.empty():
                     self._state = TtsState.IDLE
+
+    def _play_audio_file(self, audio_file: str, timeout: float = 15.0):
+        """Plays the generated audio file (MP3/WAV) through mpv bound to the active room audio sink."""
+        try:
+            cmd = [
+                self.mpv_binary,
+                "--no-video",
+                "--really-quiet",
+                "--volume=100"
+            ]
+            dev_id = self._resolve_audio_device_id()
+            if dev_id:
+                cmd.append(f"--audio-device={dev_id}")
+                logger.info(f"[ROOM_TTS_PLAY] Routing speech to audio endpoint: {dev_id}")
+            else:
+                logger.info("[ROOM_TTS_PLAY] Routing speech to Windows default audio endpoint")
+
+            cmd.append(audio_file)
+            self._current_player_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            self._current_player_process.wait(timeout=timeout)
+            logger.info("[ROOM_TTS_PLAYBACK_COMPLETE] Finished playing room speech.")
+        except subprocess.TimeoutExpired:
+            logger.warning(f"[ROOM_TTS_TIMEOUT] Playback timed out after {timeout}s; terminating process.")
+            if self._current_player_process:
+                self._current_player_process.kill()
+        except Exception as e:
+            logger.error(f"[ROOM_TTS_PLAYBACK_ERROR] Error running mpv audio output: {e}")
+        finally:
+            self._current_player_process = None
+
+    def _play_wav_file(self, wav_file: str, timeout: float = 15.0):
+        """Backward compatibility alias for _play_audio_file."""
+        return self._play_audio_file(wav_file, timeout=timeout)
 
     def _apply_music_ducking(self) -> Optional[int]:
         """Temporarily ducks active music playback by ~70% (sets volume to 30% of original)."""
@@ -323,6 +446,9 @@ FileStream.Close
             status = self.orchestrator.player.get_status()
             if status.get("status") == "PLAYING":
                 orig_vol = status.get("volume", 100)
+                # Guard: if volume was already ducked (< 20), baseline was 100%
+                if orig_vol < 20:
+                    orig_vol = 100
                 ducked_vol = max(10, int(orig_vol * 0.3))
                 logger.info(f"[ROOM_TTS_DUCKING] Ducking music volume: {orig_vol}% -> {ducked_vol}%")
                 self.orchestrator.player.set_volume(ducked_vol)
@@ -336,20 +462,27 @@ FileStream.Close
         if not self.orchestrator or not hasattr(self.orchestrator, "player"):
             return
         try:
-            logger.info(f"[ROOM_TTS_RESTORE_VOL] Restoring music volume to {original_volume}%")
-            self.orchestrator.player.set_volume(original_volume)
+            target_vol = 100 if original_volume < 20 else original_volume
+            logger.info(f"[ROOM_TTS_RESTORE_VOL] Restoring music volume to {target_vol}%")
+            self.orchestrator.player.set_volume(target_vol)
         except Exception as e:
             logger.debug(f"[ROOM_TTS_RESTORE_FAIL] Could not restore volume: {e}")
 
     def _get_bt_helper(self) -> Optional[Any]:
-        """Obtains the active BluetoothAudioHelper from orchestrator or player."""
-        if not self.orchestrator:
+        """Obtains the active BluetoothAudioHelper from orchestrator, player, or standalone fallback."""
+        if self.orchestrator:
+            if hasattr(self.orchestrator, "bt_helper") and self.orchestrator.bt_helper:
+                return self.orchestrator.bt_helper
+            elif hasattr(self.orchestrator, "player") and hasattr(self.orchestrator.player, "bt_helper"):
+                return self.orchestrator.player.bt_helper
+        try:
+            if not hasattr(self, "_standalone_bt_helper") or self._standalone_bt_helper is None:
+                from bluetooth_helper import BluetoothAudioHelper
+                self._standalone_bt_helper = BluetoothAudioHelper(mpv_binary=self.mpv_binary)
+            return self._standalone_bt_helper
+        except Exception as e:
+            logger.debug(f"[ROOM_TTS_BT_HELPER_FAIL] Could not create fallback BluetoothAudioHelper: {e}")
             return None
-        if hasattr(self.orchestrator, "bt_helper") and self.orchestrator.bt_helper:
-            return self.orchestrator.bt_helper
-        elif hasattr(self.orchestrator, "player") and hasattr(self.orchestrator.player, "bt_helper"):
-            return self.orchestrator.player.bt_helper
-        return None
 
     def _get_soundbar_owner(self) -> str:
         """
@@ -410,12 +543,11 @@ FileStream.Close
             except Exception:
                 pass
 
-        # 4. If orchestrator is present, movie mode is NOT active, and Fire TV is NOT connected:
+        # 4. If movie mode is NOT active and Fire TV is NOT connected:
         # Default soundbar management domain for the PC daemon is PC
-        if self.orchestrator:
-            in_movie = getattr(self.orchestrator, "_in_movie_mode", False)
-            if in_movie is not True:
-                return "PC"
+        in_movie = getattr(self.orchestrator, "_in_movie_mode", False) if self.orchestrator else False
+        if not in_movie:
+            return "PC"
 
         return "UNKNOWN"
 

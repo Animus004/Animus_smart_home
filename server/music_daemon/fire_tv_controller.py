@@ -46,6 +46,11 @@ class FireTvController:
         self.adb_path = adb_path or shutil.which("adb") or DEFAULT_FIRE_TV_ADB_PATH
         self.required_bt_mac = required_bt_mac
         self.timeout = timeout
+        try:
+            from watchmode_resolver import WatchmodeResolver
+            self.watchmode = WatchmodeResolver()
+        except Exception:
+            self.watchmode = None
 
     def _run_adb(self, args: list[str], timeout: Optional[float] = None) -> tuple[int, str, str]:
         cmd = [self.adb_path] + args
@@ -330,8 +335,15 @@ class FireTvController:
         return self.send_key(126)
 
     def media_pause(self) -> bool:
-        """Sends KEYCODE_MEDIA_PAUSE (127)."""
-        return self.send_key(127)
+        """Sends KEYCODE_MEDIA_PAUSE (127). For Netflix/YouTube or video streaming apps, ensures KEYCODE_MEDIA_PLAY_PAUSE (85) compatibility."""
+        fg = None
+        try:
+            fg = self.get_foreground_app()
+        except Exception:
+            pass
+        if fg and ("netflix" in fg or "youtube" in fg):
+            return self.send_key(85)
+        return self.send_key(127) or self.send_key(85)
 
     def media_toggle(self) -> bool:
         """Sends KEYCODE_MEDIA_PLAY_PAUSE (85)."""
@@ -350,26 +362,142 @@ class FireTvController:
         return self.send_key(88)
 
     def launch_streaming_provider(self, provider: str, content: Optional[str] = None) -> bool:
-        """Launches streaming provider app on Fire TV (Netflix, Prime, Hotstar, YouTube)."""
+        """
+        Launches streaming provider app on Fire TV (Netflix, Prime, Hotstar, YouTube, etc.).
+        Supports content-aware deep-linking (video IDs, numeric content IDs, URLs, or search terms).
+        """
         self.wake()
-        p = provider.lower()
+        p = provider.lower().strip()
+        c = (content or "").strip()
+
+        # If content is a title query (not already a URL, URI, or numeric ID), resolve via Watchmode
+        if c and not c.startswith("http://") and not c.startswith("https://") and not re.match(r'^\d+$', c) and "://" not in c and "youtube" not in p:
+            if getattr(self, "watchmode", None):
+                try:
+                    resolved = self.watchmode.resolve_title(c, p)
+                    if resolved and (resolved.get("content_id") or resolved.get("web_url")):
+                        cid = resolved.get("content_id")
+                        wurl = resolved.get("web_url")
+                        logger.info(f"[FIRE_TV_WATCHMODE_RESOLVED] '{c}' on {p} -> id='{cid}', url='{wurl}'")
+                        if "netflix" in p and cid and re.match(r'^\d+$', str(cid)):
+                            c = str(cid)
+                        elif wurl:
+                            c = wurl
+                        elif cid:
+                            c = str(cid)
+                except Exception as e:
+                    logger.warning(f"[FIRE_TV_WATCHMODE_ERROR] Resolution failed for '{c}': {e}")
+
         if "netflix" in p:
-            code, _, _ = self._run_shell("am start -n com.netflix.ninja/.MainActivity")
+            if c:
+                if c.startswith("http://") or c.startswith("https://") or c.startswith("netflix://"):
+                    cmd = f"am start -a android.intent.action.VIEW -d '{c}' -n com.netflix.ninja/.MainActivity"
+                elif re.match(r'^\d+$', c):
+                    cmd = f"am start -a android.intent.action.VIEW -d 'https://www.netflix.com/watch/{c}' -n com.netflix.ninja/.MainActivity"
+                else:
+                    cmd = "am start -n com.netflix.ninja/.MainActivity"
+            else:
+                cmd = "am start -n com.netflix.ninja/.MainActivity"
+            code, _, _ = self._run_shell(cmd)
             return code == 0
+
         elif "prime" in p or "amazon" in p:
-            code, _, _ = self._run_shell("am start -n com.amazon.avod/com.amazon.avod.client.activity.HomeScreenActivity")
+            if c:
+                if c.startswith("http://") or c.startswith("https://") or c.startswith("amzn://"):
+                    cmd = f"am start -a android.intent.action.VIEW -d '{c}' -n com.amazon.avod/com.amazon.avod.client.activity.HomeScreenActivity"
+                else:
+                    cmd = f"am start -a android.intent.action.VIEW -d 'https://www.amazon.com/gp/video/detail/{c}' -n com.amazon.avod/com.amazon.avod.client.activity.HomeScreenActivity"
+            else:
+                cmd = "am start -n com.amazon.avod/com.amazon.avod.client.activity.HomeScreenActivity"
+            code, _, _ = self._run_shell(cmd)
             return code == 0
+
         elif "youtube" in p:
+            if c:
+                if re.match(r'^[a-zA-Z0-9_-]{11}$', c):
+                    watch_url = f"https://www.youtube.com/watch?v={c}"
+                    code, _, _ = self._run_shell(f"am start -a android.intent.action.VIEW -d '{watch_url}' -n com.amazon.firetv.youtube/dev.cobalt.app.MainActivity")
+                    return code == 0
+                elif c.startswith("http://") or c.startswith("https://") or c.startswith("vnd.youtube:"):
+                    code, _, _ = self._run_shell(f"am start -a android.intent.action.VIEW -d '{c}' -n com.amazon.firetv.youtube/dev.cobalt.app.MainActivity")
+                    return code == 0
+                else:
+                    return self.search_or_launch_content(c)
             return self.launch_youtube()
+
         elif "hotstar" in p or "disney" in p:
-            code, _, _ = self._run_shell("am start -n in.startv.hotstar/in.startv.hotstar.splash.SplashActivity")
+            if c:
+                if c.startswith("http://") or c.startswith("https://") or c.startswith("hotstar://"):
+                    cmd = f"am start -a android.intent.action.VIEW -d '{c}' -n in.startv.hotstar/in.startv.hotstar.splash.SplashActivity"
+                else:
+                    cmd = f"am start -a android.intent.action.VIEW -d 'https://www.hotstar.com/movies/{c}' -n in.startv.hotstar/in.startv.hotstar.splash.SplashActivity"
+            else:
+                cmd = "am start -n in.startv.hotstar/in.startv.hotstar.splash.SplashActivity"
+            code, _, _ = self._run_shell(cmd)
             return code == 0
+
+        elif "apple" in p:
+            if c:
+                if c.startswith("http://") or c.startswith("https://"):
+                    cmd = f"am start -a android.intent.action.VIEW -d '{c}' -n com.apple.atve.amazon.appletv/.MainActivity"
+                else:
+                    cmd = f"am start -a android.intent.action.VIEW -d 'https://tv.apple.com/in/{c}' -n com.apple.atve.amazon.appletv/.MainActivity"
+            else:
+                cmd = "am start -n com.apple.atve.amazon.appletv/.MainActivity"
+            code, _, _ = self._run_shell(cmd)
+            return code == 0
+
+        elif "zee5" in p:
+            if c:
+                if c.startswith("http://") or c.startswith("https://") or c.startswith("zee5://"):
+                    cmd = f"am start -a android.intent.action.VIEW -d '{c}' -n com.zee5.amazon/com.zee5.android.launch.presentation.AppStartActivity"
+                else:
+                    cmd = f"am start -a android.intent.action.VIEW -d 'https://www.zee5.com/movies/details/{c}' -n com.zee5.amazon/com.zee5.android.launch.presentation.AppStartActivity"
+            else:
+                cmd = "am start -n com.zee5.amazon/com.zee5.android.launch.presentation.AppStartActivity"
+            code, _, _ = self._run_shell(cmd)
+            return code == 0
+
+        elif "sonyliv" in p or "sony" in p:
+            if c:
+                if c.startswith("http://") or c.startswith("https://"):
+                    cmd = f"am start -a android.intent.action.VIEW -d '{c}' -n com.onemainstream.sonyliv.android/com.sonyliv.ui.splash.SplashActivity"
+                else:
+                    cmd = f"am start -a android.intent.action.VIEW -d 'https://www.sonyliv.com/movies/{c}' -n com.onemainstream.sonyliv.android/com.sonyliv.ui.splash.SplashActivity"
+            else:
+                cmd = "am start -n com.onemainstream.sonyliv.android/com.sonyliv.ui.splash.SplashActivity"
+            code, _, _ = self._run_shell(cmd)
+            return code == 0
+
         else:
-            code, _, _ = self._run_shell(f"am start -a android.intent.action.VIEW -d '{provider}'")
+            if c:
+                code, _, _ = self._run_shell(f"am start -a android.intent.action.VIEW -d '{c}'")
+            else:
+                code, _, _ = self._run_shell(f"am start -a android.intent.action.VIEW -d '{provider}'")
             return code == 0
 
     def media_direct_provider(self, provider: str, content: Optional[str] = None) -> bool:
         return self.launch_streaming_provider(provider, content)
+
+    def play_video(self, video_id_or_url: str, provider: str = "youtube") -> bool:
+        """Directly plays video or content on target streaming provider."""
+        return self.launch_streaming_provider(provider, video_id_or_url)
+
+    def search_content(self, query: str, provider: str = "youtube") -> bool:
+        """Dispatches search for content on target streaming provider."""
+        p = provider.lower()
+        if "youtube" in p:
+            return self.search_or_launch_content(query)
+        return self.search_global(f"{query} on {provider}")
+
+    def search_global(self, query: str) -> bool:
+        """Triggers Fire OS global voice/assistant search for a query across all apps."""
+        if not query or not query.strip():
+            return False
+        self.wake()
+        clean = query.strip()
+        code, _, _ = self._run_shell(f"am start -a android.intent.action.SEARCH -e query '{clean}'")
+        return code == 0
 
     def launch_youtube(self) -> bool:
         """Launches YouTube application via Cobalt MainActivity."""
@@ -395,6 +523,48 @@ class FireTvController:
             if match:
                 return match.group(1)
         return None
+
+    def get_content_title(self) -> Optional[str]:
+        """
+        Extracts active media/content title playing on the Fire TV Stick.
+        Inspects dumpsys media_session metadata and foreground activity.
+        """
+        is_conn, _ = self.is_connected(auto_connect=False)
+        if not is_conn:
+            return None
+
+        # 1. Try dumpsys media_session for rich metadata title
+        code, dump, _ = self._run_shell("dumpsys media_session")
+        if code == 0 and dump:
+            title_match = re.search(r'description=(.+?),', dump)
+            if not title_match:
+                title_match = re.search(r'title=([^,\n]+)', dump)
+            if title_match:
+                t = title_match.group(1).strip()
+                if t and t.lower() not in ("null", "none", ""):
+                    return t
+
+        # 2. Fallback to friendly name based on foreground package
+        fg = self.get_foreground_app()
+        if not fg:
+            return None
+
+        app_name_map = {
+            "com.amazon.firetv.youtube": "YouTube",
+            "com.google.android.youtube.tv": "YouTube",
+            "dev.cobalt.app": "YouTube",
+            "com.netflix.ninja": "Netflix",
+            "com.netflix.mediaclient": "Netflix",
+            "com.amazon.avod": "Prime Video",
+            "in.startv.hotstar": "Disney+ Hotstar",
+            "com.jio.media.ondemand": "JioCinema",
+            "com.jio.media.jiobeats": "JioSaavn",
+            "com.sony.liv": "SonyLIV",
+            "com.graymatrix.did": "Zee5",
+            "com.spotify.tv.android": "Spotify",
+            "com.amazon.tv.launcher": "Fire TV Home"
+        }
+        return app_name_map.get(fg, fg)
 
     def search_or_launch_content(self, query: str) -> bool:
         """

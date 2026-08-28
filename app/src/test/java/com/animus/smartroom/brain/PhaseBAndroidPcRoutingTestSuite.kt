@@ -121,4 +121,27 @@ class PhaseBAndroidPcRoutingTestSuite {
         assertEquals(false, result.success)
         assertTrue(result.message.contains("turn on the projector manually"))
     }
+
+    @Test
+    fun testP_B10_LocalCommandParser_Netflix_Provider_Only() {
+        val parsed = parser.parse("I feel like watching Netflix right now")
+        assertTrue(parsed is AnimusCommand.StartMovieMode)
+        val cmd = parsed as AnimusCommand.StartMovieMode
+        assertEquals(null, cmd.contentTitle)
+        assertEquals("netflix", cmd.provider)
+
+        val watchNet = parser.parse("watch netflix")
+        assertTrue(watchNet is AnimusCommand.StartMovieMode)
+        assertEquals(null, (watchNet as AnimusCommand.StartMovieMode).contentTitle)
+        assertEquals("netflix", (watchNet as AnimusCommand.StartMovieMode).provider)
+    }
+
+    @Test
+    fun testP_B11_CommandRouter_Netflix_Provider_Execution() = runBlocking {
+        val cmd = AnimusCommand.StartMovieMode(provider = "netflix")
+        val result = commandRouter.execute(cmd)
+
+        assertTrue(result.success)
+        assertTrue(result.message.contains("with netflix"))
+    }
 }

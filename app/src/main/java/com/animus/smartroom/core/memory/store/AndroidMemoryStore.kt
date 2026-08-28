@@ -4,13 +4,11 @@ import com.animus.smartroom.core.memory.model.MemoryEvent
 import com.animus.smartroom.core.memory.query.MemoryQuery
 import com.animus.smartroom.core.memory.query.MemoryQueryEngine
 import com.animus.smartroom.core.port.PersistentStore
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Persistent adapter for [MemoryStore] backed by the platform [PersistentStore] port.
- * Preserves memory events across process termination and system reboots.
+ * Android persistent implementation of [MemoryStore] backed by [PersistentStore].
  */
 class AndroidMemoryStore(
     private val persistentStore: PersistentStore,
@@ -18,55 +16,50 @@ class AndroidMemoryStore(
 ) : MemoryStore {
 
     companion object {
-        const val KEY_MEMORY_EVENTS = "animus_memory_events"
+        private const val KEY_EVENTS = "animus_memory_events"
     }
 
-    private val mutex = Mutex()
+    private val events = CopyOnWriteArrayList<MemoryEvent>()
 
-    private fun loadEvents(): MutableList<MemoryEvent> {
-        val rawJson = persistentStore.getString(KEY_MEMORY_EVENTS, "[]")
-        val result = mutableListOf<MemoryEvent>()
+    init {
+        loadEvents()
+    }
+
+    private fun loadEvents() {
+        val raw = persistentStore.getString(KEY_EVENTS) ?: return
         try {
-            val array = JSONArray(rawJson)
-            for (i in 0 until array.length()) {
-                val itemStr = array.getString(i)
-                val event = MemoryEvent.fromJson(itemStr)
-                if (event != null) {
-                    result.add(event)
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val str = arr.getString(i)
+                val evt = MemoryEvent.fromJson(str)
+                if (evt != null) {
+                    events.add(evt)
                 }
             }
-        } catch (e: Exception) {
-            // Graceful handling of corrupted cache
-        }
-        return result
+        } catch (_: Exception) {}
     }
 
-    private fun persistEvents(events: List<MemoryEvent>) {
-        val array = JSONArray()
-        events.forEach { array.put(it.toJson()) }
-        persistentStore.putString(KEY_MEMORY_EVENTS, array.toString())
-    }
-
-    override suspend fun record(event: MemoryEvent) = mutex.withLock {
-        val current = loadEvents()
-        current.removeAll { it.id == event.id }
-
-        while (current.size >= maxCapacity) {
-            val oldest = current.minByOrNull { it.timestamp }
-            if (oldest != null) {
-                current.remove(oldest)
-            } else {
-                break
+    private fun persistEvents() {
+        try {
+            val arr = JSONArray()
+            events.takeLast(maxCapacity).forEach { evt ->
+                arr.put(evt.toJson())
             }
-        }
-
-        current.add(event)
-        persistEvents(current)
+            persistentStore.putString(KEY_EVENTS, arr.toString())
+        } catch (_: Exception) {}
     }
 
-    override suspend fun query(query: MemoryQuery): List<MemoryEvent> = mutex.withLock {
-        val current = loadEvents()
-        return MemoryQueryEngine.execute(current, query)
+    override suspend fun record(event: MemoryEvent) {
+        events.removeIf { it.id == event.id }
+        while (events.size >= maxCapacity) {
+            events.removeAt(0)
+        }
+        events.add(event)
+        persistEvents()
+    }
+
+    override suspend fun query(query: MemoryQuery): List<MemoryEvent> {
+        return MemoryQueryEngine.execute(events.toList(), query)
     }
 
     override suspend fun getRecent(limit: Int): List<MemoryEvent> {
@@ -77,16 +70,14 @@ class AndroidMemoryStore(
         return query(MemoryQuery(startTimestamp = timestamp, ascending = true))
     }
 
-    override suspend fun delete(eventId: String): Boolean = mutex.withLock {
-        val current = loadEvents()
-        val removed = current.removeAll { it.id == eventId }
-        if (removed) {
-            persistEvents(current)
-        }
+    override suspend fun delete(eventId: String): Boolean {
+        val removed = events.removeIf { it.id == eventId }
+        if (removed) persistEvents()
         return removed
     }
 
-    override suspend fun clear() = mutex.withLock {
-        persistEvents(emptyList())
+    override suspend fun clear() {
+        events.clear()
+        persistentStore.remove(KEY_EVENTS)
     }
 }

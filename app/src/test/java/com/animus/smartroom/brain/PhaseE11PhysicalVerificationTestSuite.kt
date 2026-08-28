@@ -139,7 +139,7 @@ class PhaseE11PhysicalVerificationTestSuite {
     @Test
     fun testE11_05_MovieModePartialHardwareFailure_ReturnsError() = runBlocking {
         val mockController = object : MusicController() {
-            override fun startMovieModeWithFeedback(contentTitle: String?): PcLocalMusicProvider.MovieModeResult {
+            override fun startMovieModeWithFeedback(contentTitle: String?, provider: String?): PcLocalMusicProvider.MovieModeResult {
                 return PcLocalMusicProvider.MovieModeResult(
                     success = false,
                     status = "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION",
@@ -162,7 +162,7 @@ class PhaseE11PhysicalVerificationTestSuite {
     @Test
     fun testE11_06_MovieModeAllInvariantsVerified_ReturnsSuccess() = runBlocking {
         val mockController = object : MusicController() {
-            override fun startMovieModeWithFeedback(contentTitle: String?): PcLocalMusicProvider.MovieModeResult {
+            override fun startMovieModeWithFeedback(contentTitle: String?, provider: String?): PcLocalMusicProvider.MovieModeResult {
                 return PcLocalMusicProvider.MovieModeResult(
                     success = true,
                     status = "HEALTHY",

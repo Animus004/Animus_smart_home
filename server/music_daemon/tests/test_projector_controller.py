@@ -157,6 +157,7 @@ def test_power_state_disconnected(controller):
         assert pwr["power_state"] == ProjectorPowerState.OFF.value
 
 def test_wake_and_sleep_methods(controller):
+    controller.use_ir_power = False
     with patch.object(controller, "is_connected", return_value=(True, "device")), \
          patch.object(controller, "send_key", return_value=True) as mock_send, \
          patch.object(controller, "get_power_state", return_value={"power_state": "ON", "display_state": "ON", "interactive": True}):
@@ -485,3 +486,53 @@ def test_fastapi_all_projector_endpoints():
         assert resp.status_code == 200
         assert resp.json()["success"] is False
         assert "Cold power-on unavailable via ADB" in resp.json()["error"]
+
+
+# =========================================================================
+# 10. Content Title Extraction & Additive Layer Tests
+# =========================================================================
+
+def test_get_content_title_from_media_session(controller):
+    mock_dump = """
+    MediaSession: Record
+      description=Inception (2010), MediaDescription
+    """
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", return_value=(0, mock_dump, "")):
+        title = controller.get_content_title()
+        assert title == "Inception (2010)"
+
+def test_get_content_title_foreground_fallback(controller):
+    with patch.object(controller, "is_connected", return_value=(True, "device")), \
+         patch.object(controller, "_run_shell", return_value=(0, "", "")), \
+         patch.object(controller, "get_foreground_package", return_value="com.google.android.youtube.tv"):
+        title = controller.get_content_title()
+        assert title == "YouTube"
+
+def test_get_content_title_when_disconnected(controller):
+    with patch.object(controller, "is_connected", return_value=(False, "disconnected")):
+        assert controller.get_content_title() is None
+
+
+# =========================================================================
+# 11. Wake ADB Probing & IR Suppression Tests
+# =========================================================================
+
+def test_wake_probes_and_suppresses_ir_when_already_active_on_network(controller):
+    mock_ir = MagicMock()
+    controller.use_ir_power = True
+    controller.ir_transport = mock_ir
+
+    # 1st call auto_connect=False -> False (not in device list)
+    # 2nd call auto_connect=True -> True (probe connects successfully!)
+    calls = [False, True]
+    def mock_is_conn(auto_connect=False):
+        return (calls.pop(0) if calls else True), "device"
+
+    with patch.object(controller, "is_connected", side_effect=mock_is_conn), \
+         patch.object(controller, "get_power_state", return_value={"interactive": True, "power_state": ProjectorPowerState.ON.value}):
+        res = controller.wake()
+        assert res is True
+        # IR MUST BE SUPPRESSED!
+        mock_ir.send_power_wake.assert_not_called()
+

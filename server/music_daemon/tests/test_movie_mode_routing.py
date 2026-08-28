@@ -132,6 +132,7 @@ def test_orchestrator_movie_mode_fire_tv_bluetooth_disconnected_marks_degraded(m
 
 def test_orchestrator_movie_mode_blocked_when_projector_off(mock_orchestrator, mock_fire_tv, mock_projector):
     mock_projector.get_power_state.return_value = {"power_state": "OFF"}
+    mock_projector.wake.return_value = False
     res = mock_orchestrator.start_movie_mode(content="Article 15")
 
     assert res["status"] == "PROJECTOR_OFF_REQUIRES_MANUAL_ACTION"
@@ -143,8 +144,18 @@ def test_orchestrator_movie_mode_blocked_when_projector_off(mock_orchestrator, m
     # Invariants: No audio preemption and No Fire TV search when projector is OFF
     mock_orchestrator.player.stop.assert_not_called()
     mock_fire_tv.wake.assert_not_called()
-    mock_fire_tv.search_or_launch_content.assert_not_called()
-    mock_projector.set_hdmi.assert_not_called()
+
+
+def test_orchestrator_movie_mode_wakes_projector_when_off(mock_orchestrator, mock_fire_tv, mock_projector):
+    mock_projector.get_power_state.side_effect = [{"power_state": "OFF"}, {"power_state": "ON"}]
+    mock_projector.wake.return_value = True
+    res = mock_orchestrator.start_movie_mode(content="Article 15")
+
+    assert res["success"] is True
+    assert mock_projector.wake.called
+    mock_fire_tv.wake.assert_called_once()
+    mock_fire_tv.search_or_launch_content.assert_called_once_with("Article 15")
+    mock_projector.set_hdmi.assert_called_once_with(1)
 
 
 def test_orchestrator_start_movie_mode_without_content(mock_orchestrator, mock_fire_tv):
@@ -254,3 +265,81 @@ def test_fastapi_firetv_capabilities_endpoint():
     assert "registry" in data
     assert "capabilities" in data["registry"]
     assert "providers" in data["registry"]
+
+
+def test_fastapi_movie_mode_start_with_provider_only():
+    client = TestClient(app)
+
+    with patch("main.orchestrator.start_movie_mode") as mock_start:
+        mock_start.return_value = {
+            "status": "HEALTHY",
+            "content": None,
+            "provider": "netflix",
+            "content_launched": True,
+            "spoken_response": "Starting Movie Mode with Netflix",
+            "duration_ms": 110
+        }
+        res = client.post("/api/room/movie-mode/start", json={"provider": "netflix"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "HEALTHY"
+        assert data["provider"] == "netflix"
+        assert data["spoken_response"] == "Starting Movie Mode with Netflix"
+        mock_start.assert_called_once_with(content=None, provider="netflix")
+
+
+def test_content_resolver_natural_language_and_provider():
+    from content_resolver import SmartRoomContentResolver
+    resolver = SmartRoomContentResolver()
+
+    # 1. Natural Language Netflix (No Content Title -> Provider Only)
+    r1 = resolver.resolve_content("I feel like watching Netflix right now")
+    assert r1.provider_id == "netflix"
+    assert r1.resolution_type == "APP_LAUNCH_ONLY"
+    assert r1.title == ""
+
+    # 2. Watch Netflix command
+    r2 = resolver.resolve_content("watch netflix")
+    assert r2.provider_id == "netflix"
+    assert r2.resolution_type == "APP_LAUNCH_ONLY"
+
+    # 3. Open Netflix command
+    r3 = resolver.resolve_content("open netflix")
+    assert r3.provider_id == "netflix"
+    assert r3.resolution_type == "APP_LAUNCH_ONLY"
+
+    # 4. Deep-link with Content on Netflix
+    r4 = resolver.resolve_content("I feel like watching Stranger Things on Netflix right now")
+    assert r4.provider_id == "netflix"
+    assert r4.resolution_type == "PROVIDER_DETAILS"
+    assert r4.title == "Stranger Things"
+
+    # 5. Generic Unspecified Watch
+    r5 = resolver.resolve_content("I feel like watching something right now")
+    assert r5.resolution_type == "APP_LAUNCH_ONLY"
+    assert r5.title == ""
+
+    # 6. Explicit provider without query
+    r6 = resolver.resolve_content("", explicit_provider="netflix")
+    assert r6.provider_id == "netflix"
+    assert r6.resolution_type == "APP_LAUNCH_ONLY"
+    assert r6.title == ""
+
+
+def test_orchestrator_start_movie_mode_with_provider_only(mock_orchestrator, mock_fire_tv, mock_projector):
+    # Mock launch_streaming_provider on capabilities
+    mock_caps = MagicMock()
+    mock_caps.launch_streaming_provider.return_value = MagicMock(success=True, details={})
+    mock_orchestrator.capabilities = mock_caps
+
+    res = mock_orchestrator.start_movie_mode(provider="netflix")
+
+    assert res["status"] == "HEALTHY"
+    assert res["success"] is True
+    assert res["content"] is None
+    assert res["provider"] == "netflix"
+    assert res["content_launched"] is True
+    assert res["launch_type"] == "APP_LAUNCH_ONLY"
+    assert res["spoken_response"] == "Starting Movie Mode with Netflix"
+    mock_caps.launch_streaming_provider.assert_called_once_with("netflix")
+

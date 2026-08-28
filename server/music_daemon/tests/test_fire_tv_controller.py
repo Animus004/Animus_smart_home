@@ -106,3 +106,85 @@ def test_get_status(fire_tv):
         assert st["reachable"] is True
         assert st["power_state"] == "AWAKE"
         assert st["healthy"] is True
+
+
+def test_fire_tv_get_content_title_from_media_session(fire_tv):
+    mock_dump = """
+    MediaSession: Record
+      description=Interstellar (2014) - Official Trailer, MediaDescription
+    """
+    with patch.object(fire_tv, "is_connected", return_value=(True, "device")), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, mock_dump, "")):
+        title = fire_tv.get_content_title()
+        assert title == "Interstellar (2014) - Official Trailer"
+
+
+def test_fire_tv_get_content_title_from_foreground_app(fire_tv):
+    with patch.object(fire_tv, "is_connected", return_value=(True, "device")), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")), \
+         patch.object(fire_tv, "get_foreground_app", return_value="com.amazon.firetv.youtube"):
+        title = fire_tv.get_content_title()
+        assert title == "YouTube"
+
+
+def test_fire_tv_get_content_title_when_offline(fire_tv):
+    with patch.object(fire_tv, "is_connected", return_value=(False, "disconnected")):
+        assert fire_tv.get_content_title() is None
+
+
+def test_launch_streaming_provider_netflix_numeric_id(fire_tv):
+    with patch.object(fire_tv, "wake"), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = fire_tv.launch_streaming_provider("netflix", "80018191")
+        assert res is True
+        mock_shell.assert_called_with("am start -a android.intent.action.VIEW -d 'https://www.netflix.com/watch/80018191' -n com.netflix.ninja/.MainActivity")
+
+
+def test_launch_streaming_provider_netflix_url(fire_tv):
+    with patch.object(fire_tv, "wake"), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = fire_tv.launch_streaming_provider("netflix", "netflix://title/80018191")
+        assert res is True
+        mock_shell.assert_called_with("am start -a android.intent.action.VIEW -d 'netflix://title/80018191' -n com.netflix.ninja/.MainActivity")
+
+
+def test_launch_streaming_provider_netflix_no_content(fire_tv):
+    with patch.object(fire_tv, "wake"), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = fire_tv.launch_streaming_provider("netflix")
+        assert res is True
+        mock_shell.assert_called_with("am start -n com.netflix.ninja/.MainActivity")
+
+
+def test_launch_streaming_provider_youtube_video_id(fire_tv):
+    with patch.object(fire_tv, "wake"), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = fire_tv.launch_streaming_provider("youtube", "07d2dXHYb94")
+        assert res is True
+        mock_shell.assert_called_with("am start -a android.intent.action.VIEW -d 'https://www.youtube.com/watch?v=07d2dXHYb94' -n com.amazon.firetv.youtube/dev.cobalt.app.MainActivity")
+
+
+def test_launch_streaming_provider_prime_asin(fire_tv):
+    with patch.object(fire_tv, "wake"), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = fire_tv.launch_streaming_provider("prime", "B08W53R987")
+        assert res is True
+        mock_shell.assert_called_with("am start -a android.intent.action.VIEW -d 'https://www.amazon.com/gp/video/detail/B08W53R987' -n com.amazon.avod/com.amazon.avod.client.activity.HomeScreenActivity")
+
+
+def test_launch_streaming_provider_hotstar_id(fire_tv):
+    with patch.object(fire_tv, "wake"), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = fire_tv.launch_streaming_provider("hotstar", "1260014022")
+        assert res is True
+        mock_shell.assert_called_with("am start -a android.intent.action.VIEW -d 'https://www.hotstar.com/movies/1260014022' -n in.startv.hotstar/in.startv.hotstar.splash.SplashActivity")
+
+
+def test_search_global(fire_tv):
+    with patch.object(fire_tv, "wake"), \
+         patch.object(fire_tv, "_run_shell", return_value=(0, "", "")) as mock_shell:
+        res = fire_tv.search_global("Interstellar")
+        assert res is True
+        mock_shell.assert_called_with("am start -a android.intent.action.SEARCH -e query 'Interstellar'")
+
+

@@ -91,9 +91,10 @@ def main():
                 action_taken = resp.action_taken
                 intent = resp.understood_intent
             else:
-                r = requests.post(f"{API_BASE_URL}/api/agent/interact", json={"utterance": user_input}, timeout=10.0)
+                r = requests.post(f"{API_BASE_URL}/api/agent/interact", json={"utterance": user_input}, timeout=120.0)
                 if r.status_code == 200:
                     data = r.json()
+
                     agent_msg = data.get("agent_message", "")
                     action_taken = data.get("action_taken", False)
                     intent = data.get("understood_intent", "")
