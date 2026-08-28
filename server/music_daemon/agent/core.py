@@ -374,13 +374,25 @@ class AnimusPersonalAgent:
             if proj_act and proj_ctrl:
                 try:
                     if proj_act.get("action") == "power_off":
-                        proj_ctrl.power_off(use_oem=True)
+                        proj_ctrl.power_off()
                     elif proj_act.get("action") == "sleep":
                         proj_ctrl.sleep()
                 except Exception as e:
                     logger.error(f"[EMPATHIC_PROJ_EXEC_ERR] {e}")
 
-            # 3. Audio Action
+            # 3. Fire TV Action
+            ftv_act = params.get("fire_tv_action")
+            ftv_ctrl = getattr(self.planner_executor, "fire_tv", None) or getattr(self.planner_executor, "fire_tv_controller", None)
+            if ftv_act and ftv_ctrl:
+                try:
+                    if ftv_act.get("action") in ("sleep", "power_off"):
+                        ftv_ctrl.sleep()
+                    elif ftv_act.get("action") == "wake":
+                        ftv_ctrl.wake()
+                except Exception as e:
+                    logger.error(f"[EMPATHIC_FTV_EXEC_ERR] {e}")
+
+            # 4. Audio Action
             aud_act = params.get("audio_action")
             if aud_act and self.orchestrator:
                 try:
@@ -392,13 +404,19 @@ class AnimusPersonalAgent:
                 except Exception as e:
                     logger.error(f"[EMPATHIC_AUDIO_EXEC_ERR] {e}")
 
-            # 4. PC Action
+            # 5. PC Action
             pc_act = params.get("pc_action")
             pc_ctrl = getattr(self.planner_executor, "pc", None) or getattr(self.planner_executor, "pc_controller", None)
             if pc_act and pc_ctrl:
                 try:
                     if pc_act.get("action") == "lock":
-                        pc_ctrl.lock()
+                        if hasattr(pc_ctrl, "lock_workstation"):
+                            pc_ctrl.lock_workstation()
+                        elif hasattr(pc_ctrl, "lock"):
+                            pc_ctrl.lock()
+                    elif pc_act.get("action") == "sleep":
+                        if hasattr(pc_ctrl, "sleep"):
+                            pc_ctrl.sleep()
                 except Exception as e:
                     logger.error(f"[EMPATHIC_PC_EXEC_ERR] {e}")
 
