@@ -5,6 +5,7 @@ import com.animus.smartroom.brain.AnimusBrainManager
 import com.animus.smartroom.brain.model.BrainProviderType
 import com.animus.smartroom.brain.model.BrainResult
 import com.animus.smartroom.command.router.CommandRouter
+import com.animus.smartroom.core.port.VoiceInputPort
 import com.animus.smartroom.core.port.VoiceOutputPort
 import com.animus.smartroom.core.port.VoicePortState
 import com.animus.smartroom.core.runtime.RuntimeControlPort
@@ -41,10 +42,11 @@ class VoiceLifecycleCoordinatorTest {
     fun testCoordinatorDisabledByDefaultPreservesIdle() {
         val coordinator = VoiceLifecycleCoordinator(
             wakeWordEngine = fakeWakeWordEngine,
-            speechRecognitionManager = fakeSpeechRecognitionManager as Any as SpeechRecognitionManager,
+            speechRecognitionManager = fakeSpeechRecognitionManager,
             runtimeControlPort = fakeRuntimeControlPort,
             voiceOutputPort = fakeVoiceOutputPort,
-            configStorage = null // Default disabled
+            configStorage = null, // Default disabled
+            dispatcher = kotlinx.coroutines.Dispatchers.Unconfined
         )
 
         coordinator.startCoordinator()
@@ -70,10 +72,11 @@ class VoiceLifecycleCoordinatorTest {
 
         val coordinator = VoiceLifecycleCoordinator(
             wakeWordEngine = fakeWakeWordEngine,
-            speechRecognitionManager = fakeSpeechRecognitionManager as Any as SpeechRecognitionManager,
+            speechRecognitionManager = fakeSpeechRecognitionManager,
             runtimeControlPort = fakeRuntimeControlPort,
             voiceOutputPort = fakeVoiceOutputPort,
-            configStorage = null
+            configStorage = null,
+            dispatcher = kotlinx.coroutines.Dispatchers.Unconfined
         )
 
         // Trigger wake callback
@@ -87,10 +90,11 @@ class VoiceLifecycleCoordinatorTest {
 
         val coordinator = VoiceLifecycleCoordinator(
             wakeWordEngine = fakeWakeWordEngine,
-            speechRecognitionManager = fakeSpeechRecognitionManager as Any as SpeechRecognitionManager,
+            speechRecognitionManager = fakeSpeechRecognitionManager,
             runtimeControlPort = fakeRuntimeControlPort,
             voiceOutputPort = fakeVoiceOutputPort,
-            configStorage = null
+            configStorage = null,
+            dispatcher = kotlinx.coroutines.Dispatchers.Unconfined
         )
 
         fakeWakeWordEngine.triggerWake("Animus")
@@ -103,10 +107,11 @@ class VoiceLifecycleCoordinatorTest {
     fun testStopCoordinatorReleasesAllResources() {
         val coordinator = VoiceLifecycleCoordinator(
             wakeWordEngine = fakeWakeWordEngine,
-            speechRecognitionManager = fakeSpeechRecognitionManager as Any as SpeechRecognitionManager,
+            speechRecognitionManager = fakeSpeechRecognitionManager,
             runtimeControlPort = fakeRuntimeControlPort,
             voiceOutputPort = fakeVoiceOutputPort,
-            configStorage = null
+            configStorage = null,
+            dispatcher = kotlinx.coroutines.Dispatchers.Unconfined
         )
 
         coordinator.stopCoordinator()
@@ -147,24 +152,30 @@ class VoiceLifecycleCoordinatorTest {
         }
     }
 
-    private class FakeSpeechRecognitionManager {
+    private class FakeSpeechRecognitionManager : VoiceInputPort {
         val _state = MutableStateFlow<VoicePortState>(VoicePortState.Idle)
-        val state: StateFlow<VoicePortState> = _state.asStateFlow()
+        override val state: StateFlow<VoicePortState> = _state.asStateFlow()
         var startCalled = false
         var cancelCalled = false
 
-        fun startListening() {
+        override fun isAvailable(): Boolean = true
+
+        override fun startListening() {
             startCalled = true
             _state.value = VoicePortState.Listening(0f)
         }
 
-        fun stopListening() {
+        override fun stopListening() {
             _state.value = VoicePortState.Recognizing()
         }
 
-        fun cancel() {
+        override fun cancel() {
             cancelCalled = true
             _state.value = VoicePortState.Idle
+        }
+
+        override fun destroy() {
+            cancel()
         }
     }
 

@@ -71,7 +71,7 @@ class ReminderScheduler:
                     triggered_count += 1
                     logger.info(f"[REMINDER_DUE_TRIGGERED] Reminder id='{rem.id}', message='{rem.message}'")
 
-                    msg = f"Buddy, here is your reminder: {rem.message}."
+                    msg = f"Sir, here is your reminder: {rem.message}."
                     event = AgentEvent(
                         event_type=AgentEventType.REMINDER_DUE,
                         priority=AgentEventPriority.NORMAL,

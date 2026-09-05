@@ -14,19 +14,19 @@ from projector_controller import (
 
 @pytest.fixture
 def controller():
-    return ProjectorController(target="192.168.1.11:5555", adb_path="mock_adb")
+    return ProjectorController(target="192.168.1.10:5555", adb_path="mock_adb")
 
 # =========================================================================
 # 1. Connection & Target Isolation Tests
 # =========================================================================
 
 def test_controller_initialization(controller):
-    assert controller.target == "192.168.1.11:5555"
+    assert controller.target == "192.168.1.10:5555"
     assert controller.adb_path == "mock_adb"
     assert controller.timeout == 4.0
 
 def test_is_connected_authorized(controller):
-    mock_output = "List of devices attached\n192.168.1.11:5555      device product:NL5H00X model:HiDPTAndroid_Hi3751V350\n"
+    mock_output = "List of devices attached\n192.168.1.10:5555      device product:NL5H00X model:HiDPTAndroid_Hi3751V350\n"
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout=mock_output, stderr="")
         is_ready, state = controller.is_connected()
@@ -40,7 +40,7 @@ def test_is_connected_authorized(controller):
         )
 
 def test_is_connected_unauthorized(controller):
-    mock_output = "List of devices attached\n192.168.1.11:5555      unauthorized\n"
+    mock_output = "List of devices attached\n192.168.1.10:5555      unauthorized\n"
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout=mock_output, stderr="")
         is_ready, state = controller.is_connected()
@@ -57,10 +57,10 @@ def test_wrong_device_protection(controller):
 
 def test_connect_and_disconnect(controller):
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0, stdout="connected to 192.168.1.11:5555", stderr="")
+        mock_run.return_value = MagicMock(returncode=0, stdout="connected to 192.168.1.10:5555", stderr="")
         assert controller.connect() is True
 
-        mock_run.return_value = MagicMock(returncode=0, stdout="disconnected 192.168.1.11:5555", stderr="")
+        mock_run.return_value = MagicMock(returncode=0, stdout="disconnected 192.168.1.10:5555", stderr="")
         assert controller.disconnect() is True
 
 # =========================================================================
@@ -481,7 +481,8 @@ def test_fastapi_all_projector_endpoints():
         assert resp.status_code == 200
         assert resp.json()["power_state"] == "STANDBY"
 
-    with patch.object(main_projector, "get_power_state", return_value={"power_state": "OFF"}):
+    with patch.object(main_projector, "wake", return_value=False), \
+         patch.object(main_projector, "get_power_state", return_value={"power_state": "OFF"}):
         resp = client.post("/api/projector/power", json={"action": "ON"})
         assert resp.status_code == 200
         assert resp.json()["success"] is False

@@ -16,7 +16,7 @@ from typing import Dict, Any, List
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 DAEMON_URL = "http://127.0.0.1:8095"
-PROJECTOR_TARGET = "192.168.1.11:5555"
+PROJECTOR_TARGET = "192.168.1.10:5555"
 FIRE_TV_TARGET = "192.168.1.5:5555"
 ADB_PATH = r"C:\platform-tools\platform-tools-latest-windows\platform-tools\adb.exe"
 

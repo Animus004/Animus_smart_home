@@ -84,7 +84,7 @@ class RealRoomE82PhysicalRunner:
 
         # Initialize physical hardware controllers
         print("\n[INIT] Initializing Physical Hardware Controllers...")
-        self.projector_ctrl = ProjectorController(target="192.168.1.11:5555")
+        self.projector_ctrl = ProjectorController(target="192.168.1.10:5555")
         self.ac_ctrl = AcController()
         self.pc_ctrl = PcController()
         self.fire_tv_ctrl = FireTvController(target="192.168.1.5:5555")

@@ -51,7 +51,7 @@ open class MusicController(
 
     // Provider layer
     private val pcLocalProvider = com.animus.smartroom.media.provider.PcLocalMusicProvider(
-        hostProvider = { context?.let { com.animus.smartroom.brain.provider.LocalBrainConfigStorage(it).getConfig().host } ?: "192.168.1.9" }
+        hostProvider = { context?.let { com.animus.smartroom.brain.provider.LocalBrainConfigStorage(it).getConfig().host } ?: "192.168.1.4" }
     )
     private val youtubeMusicProvider = context?.let { YouTubeMusicProvider(it) }
     private val genericMusicProvider = context?.let { GenericMusicProvider(it) }
@@ -577,6 +577,26 @@ open class MusicController(
     open fun stopMovieMode(): Boolean {
         Log.i(TAG, "[MOVIE_MODE] Dispatching stopMovieMode to PC daemon")
         return pcLocalProvider.stopMovieMode()
+    }
+
+    open fun startWorkModeWithFeedback(): PcLocalMusicProvider.WorkModeResult {
+        Log.i(TAG, "[WORK_MODE] Dispatching startWorkModeWithFeedback to PC daemon")
+        return pcLocalProvider.startWorkModeWithFeedback()
+    }
+
+    open fun startWorkMode(): Boolean {
+        Log.i(TAG, "[WORK_MODE] Dispatching startWorkMode to PC daemon")
+        return pcLocalProvider.startWorkMode()
+    }
+
+    open fun stopWorkModeWithFeedback(): PcLocalMusicProvider.WorkModeResult {
+        Log.i(TAG, "[WORK_MODE] Dispatching stopWorkModeWithFeedback to PC daemon")
+        return pcLocalProvider.stopWorkModeWithFeedback()
+    }
+
+    open fun stopWorkMode(): Boolean {
+        Log.i(TAG, "[WORK_MODE] Dispatching stopWorkMode to PC daemon")
+        return pcLocalProvider.stopWorkMode()
     }
 
     private fun dispatchMediaKey(keyCode: Int) {

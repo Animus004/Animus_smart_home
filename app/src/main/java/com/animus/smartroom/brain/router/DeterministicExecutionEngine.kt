@@ -361,8 +361,19 @@ class DeterministicExecutionEngine(
                     latencyTraceMs = tracer?.getTraceLatencies() ?: emptyMap()
                 )
             }
+        } else if (routine.routineName.uppercase() in setOf("WORK_MODE", "ROUTINE_WORK_MODE")) {
+            val feedbackRes = musicController?.startWorkModeWithFeedback()
+            if (feedbackRes != null && !feedbackRes.success) {
+                android.util.Log.w("DeterministicExecutionEngine", "[WORK_MODE] PC daemon work start warning: ${feedbackRes.message}")
+            }
+        } else if (routine.routineName.uppercase() in setOf("WRAPUP_WORK_MODE", "ROUTINE_WRAPUP_WORK_MODE", "WRAPUP_WORK")) {
+            val feedbackRes = musicController?.stopWorkModeWithFeedback()
+            if (feedbackRes != null && !feedbackRes.success) {
+                android.util.Log.w("DeterministicExecutionEngine", "[WORK_WRAPUP] PC daemon work wrapup warning: ${feedbackRes.message}")
+            }
         } else if (routine.routineName.uppercase() in setOf("GOODNIGHT_MODE", "ROUTINE_GOODNIGHT_MODE", "SLEEP_ROUTINE")) {
             musicController?.stopMovieMode()
+            musicController?.stopWorkModeWithFeedback()
         }
 
         for (stage in plan.stages) {

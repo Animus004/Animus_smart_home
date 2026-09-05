@@ -668,7 +668,7 @@ FileStream.Close
         for pat in sensitive_patterns:
             if re.search(pat, trimmed, re.IGNORECASE):
                 logger.warning(f"[ROOM_TTS_SECURITY] Filtered sensitive/stack-trace text from TTS: '{pat}'")
-                return "I encountered an internal error processing that request, buddy."
+                return "I encountered an internal error processing that request, Sir."
 
         return trimmed
 

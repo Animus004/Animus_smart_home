@@ -1439,5 +1439,111 @@ AUTHORITATIVE_CAPABILITIES: List[CapabilityDefinition] = [
         readback_verification_expected=False,
         safety_level=SafetyLevel.SAFE,
         status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+
+    # =========================================================================
+    # 6. LIGHTING SUBSYSTEM (Tuya / Smart Life Wi-Fi / LightController)
+    # =========================================================================
+    CapabilityDefinition(
+        canonical_id="LIGHT_GET_STATUS",
+        subsystem=Subsystem.LIGHTING,
+        description="Reads live smart lighting status (power, brightness, color temperature, active scene).",
+        underlying_controller="LightController",
+        underlying_capability_name="get_status",
+        operation_type=OperationType.QUERY,
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=False,
+        safety_level=SafetyLevel.SAFE,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="LIGHT_SET_POWER",
+        subsystem=Subsystem.LIGHTING,
+        description="Turns smart lighting power ON or OFF.",
+        underlying_controller="LightController",
+        underlying_capability_name="set_power",
+        operation_type=OperationType.ACTION,
+        parameters={
+            "power": ParameterConstraint(
+                name="power",
+                param_type=ParameterType.BOOLEAN,
+                required=True,
+                description="Power state (True for ON, False for OFF)"
+            )
+        },
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=True,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="LIGHT_SET_BRIGHTNESS",
+        subsystem=Subsystem.LIGHTING,
+        description="Adjusts smart lighting brightness between 1 and 100%.",
+        underlying_controller="LightController",
+        underlying_capability_name="set_brightness",
+        operation_type=OperationType.ACTION,
+        parameters={
+            "brightness": ParameterConstraint(
+                name="brightness",
+                param_type=ParameterType.INTEGER,
+                required=True,
+                min_value=1,
+                max_value=100,
+                description="Brightness percentage (1 to 100)"
+            )
+        },
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=True,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="LIGHT_SET_COLOR_TEMP",
+        subsystem=Subsystem.LIGHTING,
+        description="Sets smart lighting color temperature in Kelvin (2200K to 6500K).",
+        underlying_controller="LightController",
+        underlying_capability_name="set_color_temp",
+        operation_type=OperationType.ACTION,
+        parameters={
+            "kelvin": ParameterConstraint(
+                name="kelvin",
+                param_type=ParameterType.INTEGER,
+                required=True,
+                min_value=2200,
+                max_value=6500,
+                description="Color temperature in Kelvin (2200 to 6500)"
+            )
+        },
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=True,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
+    ),
+    CapabilityDefinition(
+        canonical_id="LIGHT_SET_SCENE",
+        subsystem=Subsystem.LIGHTING,
+        description="Applies a predefined lighting preset scene (RELAX, FOCUS, NIGHT, CINEMA, DAY, OFF).",
+        underlying_controller="LightController",
+        underlying_capability_name="set_scene",
+        operation_type=OperationType.ACTION,
+        parameters={
+            "scene_name": ParameterConstraint(
+                name="scene_name",
+                param_type=ParameterType.ENUM,
+                required=True,
+                allowed_values=["RELAX", "FOCUS", "NIGHT", "CINEMA", "DAY", "OFF"],
+                description="Preset lighting scene"
+            )
+        },
+        idempotent=True,
+        requires_device_online=True,
+        readback_verification_expected=True,
+        safety_level=SafetyLevel.LOW_RISK,
+        status=CapabilityStatus.VERIFIED_EXECUTABLE
     )
 ]

@@ -47,6 +47,9 @@ fun ImmersiveGlassScreen(
     maskedApiKey: String?,
     onSaveApiKey: (String?) -> Unit,
     onTestApiKey: (String?, (Boolean, String) -> Unit) -> Unit,
+    brainHost: String = "192.168.1.4",
+    isBackendConnected: Boolean = false,
+    onUpdateBrainHost: (String) -> Unit = {},
     widgetSettings: WidgetSettings,
     onToggleClock: (Boolean) -> Unit,
     onToggleWeather: (Boolean) -> Unit,
@@ -369,6 +372,9 @@ fun ImmersiveGlassScreen(
                             maskedApiKey = maskedApiKey,
                             onSaveApiKey = onSaveApiKey,
                             onTestApiKey = onTestApiKey,
+                            brainHost = brainHost,
+                            isBackendConnected = isBackendConnected,
+                            onUpdateBrainHost = onUpdateBrainHost,
                             onClose = { activeTool = ActiveGlassTool.NONE }
                         )
                     }

@@ -16,7 +16,8 @@ from enum import Enum
 logger = logging.getLogger("music_daemon.fire_tv")
 
 DEFAULT_FIRE_TV_ADB_PATH = r"C:\platform-tools\platform-tools-latest-windows\platform-tools\adb.exe"
-DEFAULT_FIRE_TV_TARGET = "192.168.1.5:5555"
+DEFAULT_FIRE_TV_TARGET = "192.168.1.8:5555"
+DEFAULT_FIRE_TV_MAC = "6c-99-9d-3e-5f-c1"
 REQUIRED_A2DP_BT_MAC = "54:15:89:DC:A5:79"
 
 class FireTvError(Exception):
@@ -33,7 +34,8 @@ class FireTvBluetoothState(str, Enum):
 class FireTvController:
     """
     FireTvController manages communication with the Amazon Fire TV Stick strictly
-    targeting 192.168.1.5:5555 via safe subprocess abstraction.
+    targeting the discovered ADB target (default: 192.168.1.8:5555) via safe subprocess abstraction.
+    Includes dynamic MAC/ARP discovery and automatic IP migration handling.
     """
     def __init__(
         self,
@@ -42,7 +44,22 @@ class FireTvController:
         required_bt_mac: str = REQUIRED_A2DP_BT_MAC,
         timeout: float = 4.0
     ):
+        if target == DEFAULT_FIRE_TV_TARGET or target == "192.168.1.5:5555":
+            try:
+                from ac_controller import _read_local_properties
+                props = _read_local_properties()
+                target = os.environ.get("FIRETV_ADB_TARGET", props.get("firetv.adb.target", DEFAULT_FIRE_TV_TARGET))
+            except Exception:
+                pass
         self.target = target
+        self.mac_address = DEFAULT_FIRE_TV_MAC
+        try:
+            from ac_controller import _read_local_properties
+            props = _read_local_properties()
+            self.mac_address = os.environ.get("FIRETV_MAC", props.get("firetv.adb.mac", DEFAULT_FIRE_TV_MAC)).lower().replace(":", "-")
+        except Exception:
+            pass
+
         self.adb_path = adb_path or shutil.which("adb") or DEFAULT_FIRE_TV_ADB_PATH
         self.required_bt_mac = required_bt_mac
         self.timeout = timeout
@@ -51,6 +68,128 @@ class FireTvController:
             self.watchmode = WatchmodeResolver()
         except Exception:
             self.watchmode = None
+
+    def _test_tcp_port(self, ip: str, port: int = 5555, timeout: float = 0.3) -> bool:
+        """Fast non-blocking TCP socket check to test if ADB port 5555 is open."""
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            res = sock.connect_ex((ip, port))
+            sock.close()
+            return res == 0
+        except Exception:
+            return False
+
+    def _get_arp_table(self) -> Dict[str, str]:
+        """Parses Windows ARP table into {ip: normalized_mac}."""
+        try:
+            out = subprocess.check_output("arp -a", shell=True, text=True)
+            entries = {}
+            for line in out.splitlines():
+                line = line.strip()
+                m = re.search(r'(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2})', line)
+                if m:
+                    ip = m.group(1)
+                    mac = m.group(2).lower().replace(":", "-")
+                    entries[ip] = mac
+            return entries
+        except Exception as e:
+            logger.debug(f"[FIRE_TV_ARP_ERR] {e}")
+            return {}
+
+    def _apply_new_ip(self, new_ip: str) -> None:
+        """Updates internal target and caches to local.properties."""
+        self.target = f"{new_ip}:5555"
+        try:
+            from pathlib import Path
+            p_file = Path("d:/AnimusSmartRoom/local.properties")
+            if p_file.exists():
+                lines = p_file.read_text(encoding="utf-8").splitlines()
+                new_lines = []
+                replaced = False
+                for line in lines:
+                    if line.startswith("firetv.adb.target="):
+                        new_lines.append(f"firetv.adb.target={self.target}")
+                        replaced = True
+                    else:
+                        new_lines.append(line)
+                if not replaced:
+                    new_lines.append(f"firetv.adb.target={self.target}")
+                p_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                logger.info(f"[FIRE_TV_CACHE_UPDATE] Saved new target {self.target} to local.properties")
+        except Exception as e:
+            logger.debug(f"[FIRE_TV_CACHE_UPDATE_ERR] {e}")
+
+    def discover_and_update_ip(self, force_rescan: bool = False) -> Optional[str]:
+        """
+        Dynamically locates the Fire TV Stick on the local network using its permanent MAC address
+        and ADB port 5555. Tolerates dynamic DHCP leasing.
+        """
+        curr_ip = self.target.split(":")[0] if ":" in self.target else self.target
+
+        # 1. Quick check if current target IP still has port 5555 open
+        if not force_rescan and self._test_tcp_port(curr_ip, 5555, timeout=0.25):
+            return curr_ip
+
+        # 2. Check ARP table for known Fire TV MAC address
+        target_mac = self.mac_address.lower().replace(":", "-")
+        arp_entries = self._get_arp_table()
+        for ip, mac in arp_entries.items():
+            if mac == target_mac:
+                if self._test_tcp_port(ip, 5555, timeout=0.4):
+                    if ip != curr_ip:
+                        logger.info(f"[FIRE_TV_IP_MIGRATION] Fire TV MAC {target_mac} moved from {curr_ip} -> {ip}. Updating target.")
+                        self._apply_new_ip(ip)
+                    return ip
+
+        # 3. Parallel scan of local subnet on port 5555
+        prefix = ".".join(curr_ip.split(".")[:3])
+        if not prefix or len(prefix.split(".")) != 3:
+            prefix = "192.168.1"
+        candidates = [f"{prefix}.{i}" for i in range(2, 35)]
+
+        from concurrent.futures import ThreadPoolExecutor
+        open_ips = []
+        try:
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                results = executor.map(lambda ip: (ip, self._test_tcp_port(ip, 5555, timeout=0.35)), candidates)
+                for ip, is_open in results:
+                    if is_open:
+                        open_ips.append(ip)
+        except Exception as e:
+            logger.debug(f"[FIRE_TV_SCAN_ERR] {e}")
+
+        for ip in open_ips:
+            arp_now = self._get_arp_table()
+            if arp_now.get(ip) == target_mac:
+                logger.info(f"[FIRE_TV_IP_DISCOVERED] Discovered Fire TV MAC {target_mac} at {ip}:5555 via subnet scan.")
+                self._apply_new_ip(ip)
+                return ip
+
+        for ip in open_ips:
+            try:
+                code, out, _ = self._run_adb(["-s", f"{ip}:5555", "shell", "getprop ro.product.model"], timeout=2.0)
+                if code == 0 and ("aft" in out.lower() or "fire" in out.lower() or "sheldon" in out.lower()):
+                    logger.info(f"[FIRE_TV_IP_VERIFIED] Verified Amazon Fire TV at {ip}:5555.")
+                    self._apply_new_ip(ip)
+                    return ip
+            except Exception:
+                pass
+
+        return None
+
+    def connect(self) -> bool:
+        """Connects to the Fire TV Stick via ADB over Wi-Fi."""
+        code, stdout, stderr = self._run_adb(["connect", self.target], timeout=5.0)
+        logger.info(f"adb connect {self.target}: code={code}, stdout={stdout}, stderr={stderr}")
+        return "connected to" in stdout.lower() or "already connected to" in stdout.lower()
+
+    def disconnect(self) -> bool:
+        """Disconnects from the Fire TV Stick ADB session."""
+        code, stdout, stderr = self._run_adb(["disconnect", self.target], timeout=3.0)
+        logger.info(f"adb disconnect {self.target}: code={code}, stdout={stdout}")
+        return code == 0
 
     def _run_adb(self, args: list[str], timeout: Optional[float] = None) -> tuple[int, str, str]:
         cmd = [self.adb_path] + args
@@ -80,7 +219,7 @@ class FireTvController:
         code, stdout, _ = self._run_adb(["devices", "-l"], timeout=4.0)
         if code != 0:
             if auto_connect:
-                self._run_adb(["connect", self.target], timeout=4.0)
+                self.connect()
                 code, stdout, _ = self._run_adb(["devices", "-l"], timeout=4.0)
             if code != 0:
                 return False, "error"
@@ -92,7 +231,8 @@ class FireTvController:
                 return state == "device", state
 
         if auto_connect:
-            self._run_adb(["connect", self.target], timeout=4.0)
+            self.discover_and_update_ip()
+            self.connect()
             code, stdout, _ = self._run_adb(["devices", "-l"], timeout=4.0)
             for line in stdout.splitlines():
                 parts = line.strip().split()

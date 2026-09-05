@@ -29,7 +29,7 @@ class AgentMemoryStore:
 
     def _initialize_default_knowledge(self) -> None:
         """Populates baseline authoritative facts and preferences."""
-        self.record_fact("preferred_address", "buddy", source="USER_EXPLICIT_SPECIFICATION")
+        self.record_fact("preferred_address", "Sir", source="USER_EXPLICIT_SPECIFICATION")
         self.record_fact("user_full_name", "Sayan Halder", source="USER_EXPLICIT_SPECIFICATION")
         self.record_fact("location_pin", "741235", source="USER_EXPLICIT_SPECIFICATION")
 

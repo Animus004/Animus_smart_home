@@ -1,7 +1,7 @@
 """
 Physical Acceptance & Command Routing Test Runner for Phase E.3.3.
 Executes all 46 Real-World Natural Language Projector Commands against the live hardware
-at 192.168.1.11:5555.
+at 192.168.1.10:5555.
 Measures dispatch latency, verification latency, total roundtrip latency,
 truthful physical state confirmation, safety invariants, and idempotency.
 Outputs structured JSON and Markdown acceptance matrices.
@@ -87,10 +87,10 @@ TEST_COMMANDS = [
 def run_full_acceptance():
     print("=" * 100)
     print("   ANIMUS SMART ROOM — PHASE E.3.3 REAL-WORLD PROJECTOR COMMAND ACCEPTANCE MATRIX")
-    print("   Target: Zebronics PixaPlay 25 (192.168.1.11:5555)")
+    print("   Target: Zebronics PixaPlay 25 (192.168.1.10:5555)")
     print("=" * 100)
 
-    controller = ProjectorController(target="192.168.1.11:5555")
+    controller = ProjectorController(target="192.168.1.10:5555")
     router = ProjectorCommandRouter(controller=controller)
 
     # Initial physical connectivity check
@@ -166,7 +166,7 @@ def run_full_acceptance():
 
     summary = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "target": "192.168.1.11:5555",
+        "target": "192.168.1.10:5555",
         "model": "Zebronics PixaPlay 25 (NL5H00X)",
         "total_commands_tested": total_count,
         "passed": passed_count,

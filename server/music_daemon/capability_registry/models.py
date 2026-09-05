@@ -17,6 +17,7 @@ class Subsystem(str, Enum):
     FIRE_TV = "FIRE_TV"
     PC = "PC"
     SOUNDBAR = "SOUNDBAR"
+    LIGHTING = "LIGHTING"
     ENVIRONMENT = "ENVIRONMENT"
 
 

@@ -40,46 +40,46 @@ class AgentFeedbackGenerator:
             if result.response_reason:
                 return f"{result.response_reason}"
             if result.target_device == "PROJECTOR":
-                return f"It's already on, {addr}."
+                return f"Projector's already running, {addr} — we're good to go."
             if result.target_device == "AC":
-                return f"Good — looks comfortable in here, {addr}."
-            return f"That's already set up, {addr}."
+                return f"Room's already nice and comfortable at the target temperature, {addr}."
+            return f"That's already set up for you, {addr}."
 
         # 2. Safety / Unsupported Device Rejection
         if result.decision_type in (DecisionType.REJECT_UNSAFE, "REJECT_UNSAFE"):
-            return f"That's outside safe operating bounds, {addr}."
+            return f"That's outside safe operating limits, {addr}. Keeping things within safe parameters."
 
         if result.decision_type in (DecisionType.REJECT_UNSUPPORTED, "REJECT_UNSUPPORTED"):
-            return f"I don't have control over that device in this room, {addr}."
+            return f"I can't control that device directly just yet, {addr}."
 
         # 3. Cancellation & Rejection
         if result.decision_type in (DecisionType.CANCEL_THREAD, DecisionType.CANCEL, "CANCEL_THREAD", "CANCEL"):
-            return result.human_response or f"Okay {addr}, leaving it as it is."
+            return result.human_response or f"No worries {addr}, leaving everything just as it is."
 
         if result.decision_type in (DecisionType.SUGGESTION_REJECTED, "SUGGESTION_REJECTED"):
-            return result.human_response or f"Okay {addr}, leaving it as it is."
+            return result.human_response or f"Understood {addr}, leaving it as is."
 
         # 4. Proactive Suggestion
         if result.decision_type in (DecisionType.PROACTIVE_SUGGESTION, "PROACTIVE_SUGGESTION"):
-            return result.human_response or f"The room is getting warmer. Want me to adjust the AC, {addr}?"
+            return result.human_response or f"Room's warming up a bit. Want me to cool it down, {addr}?"
 
         # 5. Modes & Transitions
         if result.decision_type in (DecisionType.MODE_ENTERED, "MODE_ENTERED"):
-            return result.human_response or f"We're in mode, {addr}."
+            return result.human_response or f"Switched over to your mode, {addr}."
 
         if result.decision_type in (DecisionType.MODE_EXITED, "MODE_EXITED"):
-            return result.human_response or f"Exited mode, {addr}."
+            return result.human_response or f"Wrapped that mode up, {addr}."
 
         # 6. Media & Comfort
         if result.decision_type in (DecisionType.MEDIA_ACTION, DecisionType.MEDIA_STATUS, "MEDIA_ACTION", "MEDIA_STATUS"):
-            return result.human_response or f"Media updated, {addr}."
+            return result.human_response or f"Got your media updated, {addr}."
 
         if result.decision_type in (DecisionType.COMFORT_ADJUSTMENT, "COMFORT_ADJUSTMENT"):
-            return result.human_response or f"Adjusted comfort, {addr}."
+            return result.human_response or f"Adjusted the room climate for you, {addr}."
 
         # 7. Recovery
         if result.decision_type in (DecisionType.RECOVERY_STARTED, DecisionType.RECOVERY_COMPLETED, DecisionType.RECOVERY_FAILED, "RECOVERY_STARTED", "RECOVERY_COMPLETED", "RECOVERY_FAILED"):
-            return result.human_response or f"Recovery status updated, {addr}."
+            return result.human_response or f"Device connection refreshed, {addr}."
 
         # 8. Introspection / External Diff / Goal Superseded / Schedules / Situations
         if result.decision_type in (
@@ -92,7 +92,7 @@ class AgentFeedbackGenerator:
             "SCHEDULE_CREATED", "SCHEDULE_CANCELLED", "SCHEDULE_EXPIRED", "MODE_DIVERGENCE",
             "EXTERNAL_CHANGE_DETECTED", "SITUATION_CHANGED", "PREFERENCE_UPDATED", "PREFERENCE_FORGOTTEN", "ROOM_STATUS"
         ):
-            return result.human_response or f"All set, {addr}."
+            return result.human_response or f"All good and taken care of, {addr}."
 
 
 

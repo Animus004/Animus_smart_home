@@ -189,6 +189,16 @@ class MpvPlayer:
                         line = pipe.readline().decode("utf-8").strip()
                         if line:
                             return json.loads(line)
+                except FileNotFoundError:
+                    if attempt == 2:
+                        logger.debug(f"[PC_MUSIC_IPC_PIPE_MISSING] Named pipe {self.PIPE_NAME} not found. Cleaning up mpv process.")
+                        try:
+                            self.process.terminate()
+                        except Exception:
+                            pass
+                        self.process = None
+                        self._playback_status = "IDLE"
+                    time.sleep(0.1)
                 except Exception as e:
                     if attempt == 2:
                         logger.warning(f"[PC_MUSIC_IPC_WARNING] IPC command {command} error: {e}")
@@ -230,6 +240,7 @@ class MpvPlayer:
                 "started_at": time.time()
             }
             self._playback_status = "PLAYING"
+            self._send_ipc_command(["set_property", "mute", False])
             self._send_ipc_command(["set_property", "volume", 100])
             self._send_ipc_command(["set_property", "pause", False])
             return True, None

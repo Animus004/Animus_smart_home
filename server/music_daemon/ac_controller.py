@@ -174,31 +174,38 @@ class LocalTuyaTransport:
                 pass
 
     def send_dps_command(self, dps_dict: Dict[str, Any]) -> bool:
-        """Sends cmd 0x07 local control packet with DPS payload."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(self.timeout)
-        try:
-            sock.connect((self.ip, self.port))
-            data_payload = {
-                "devId": self.dev_id,
-                "gwId": self.dev_id,
-                "uid": self.dev_id,
-                "t": str(int(time.time())),
-                "dps": dps_dict
-            }
-            pkt = self._pack_message(0x07, data_payload)
-            sock.sendall(pkt)
-            resp = sock.recv(1024)
-            _, ret_code, note = self._unpack_response(resp)
-            return ret_code == 0
-        except Exception as e:
-            logger.warning(f"[LAN_CONTROL_FAIL] Error sending DPS {dps_dict}: {e}")
-            return False
-        finally:
+        """Sends cmd 0x07 local control packet with DPS payload, with retry on transient socket reset."""
+        for attempt in range(2):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self.timeout)
             try:
-                sock.close()
-            except Exception:
-                pass
+                sock.connect((self.ip, self.port))
+                data_payload = {
+                    "devId": self.dev_id,
+                    "gwId": self.dev_id,
+                    "uid": self.dev_id,
+                    "t": str(int(time.time())),
+                    "dps": dps_dict
+                }
+                pkt = self._pack_message(0x07, data_payload)
+                sock.sendall(pkt)
+                resp = sock.recv(1024)
+                _, ret_code, note = self._unpack_response(resp)
+                if ret_code == 0:
+                    return True
+            except Exception as e:
+                if attempt == 0:
+                    logger.debug(f"[LAN_CONTROL_RETRY] Retry after transient error sending DPS {dps_dict}: {e}")
+                    time.sleep(0.15)
+                    continue
+                logger.warning(f"[LAN_CONTROL_FAIL] Error sending DPS {dps_dict}: {e}")
+                return False
+            finally:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+        return False
 
 
 class CloudTuyaTransport:
@@ -350,25 +357,41 @@ class AcController:
         "auto": AcFanSpeed.AUTO.value
     }
 
+    DEFAULT_AC_MAC = "a4-e5-7c-0a-2c-a4"
+    DEFAULT_AC_PORT = 6668
+
     def __init__(
         self,
-        lan_ip: str = "192.168.1.4",
+        lan_ip: str = "192.168.1.3",
         lan_port: int = 6668,
         dev_id: Optional[str] = None,
         local_key: Optional[str] = None,
         access_id: Optional[str] = None,
         access_secret: Optional[str] = None,
-        endpoint: Optional[str] = None
+        endpoint: Optional[str] = None,
+        strict_zero_cloud: Optional[bool] = None,
+        mac_address: Optional[str] = None
     ):
         props = _read_local_properties()
         self.dev_id = dev_id or props.get("tuya.device.id", "76776532a4e57c0a2ca4")
-        self.local_key = local_key or props.get("tuya.local.key", "&:bT!eBYARSX0q.'")
-        self.lan_ip = lan_ip or props.get("tuya.local.ip", "192.168.1.4")
+        self.local_key = local_key or props.get("tuya.local.key", "]VMHXOqTJHw:.jr@")
+        self.lan_ip = lan_ip or props.get("tuya.local.ip", "192.168.1.3")
         self.lan_port = lan_port
+        raw_mac = mac_address or os.environ.get("TUYA_AC_MAC", props.get("tuya.ac.mac", self.DEFAULT_AC_MAC))
+        self.mac_address = raw_mac.lower().replace(":", "-")
         
         self.access_id = access_id or props.get("tuya.access.id", "x9dwt4jhpvuuduv8aq7m")
         self.access_secret = access_secret or props.get("tuya.access.secret", "4a0a1fb84e414dec9d7d80ae5f0a777b")
         self.endpoint = endpoint or props.get("tuya.region.endpoint", "https://openapi.tuyain.com")
+
+        if strict_zero_cloud is not None:
+            self.strict_zero_cloud = strict_zero_cloud
+        else:
+            self.strict_zero_cloud = os.environ.get("STRICT_ZERO_CLOUD", props.get("tuya.strict_zero_cloud", "true")).strip().lower() == "true"
+
+        # Dynamically discover / verify physical AC IP before socket binding
+        if not self._test_tcp_port(self.lan_ip, self.lan_port, timeout=0.3):
+            self.resolve_ac_ip()
 
         self.lan_transport = LocalTuyaTransport(
             ip=self.lan_ip,
@@ -385,10 +408,113 @@ class AcController:
         self._last_known_status: Dict[str, Any] = {}
         self._lan_degraded_until: float = 0.0
 
+    def _test_tcp_port(self, ip: str, port: int = 6668, timeout: float = 0.3) -> bool:
+        """Fast non-blocking TCP check to verify Tuya port 6668 responsiveness."""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            res = sock.connect_ex((ip, port))
+            sock.close()
+            return res == 0
+        except Exception:
+            return False
+
+    def _get_arp_table(self) -> Dict[str, str]:
+        """Parses Windows ARP table into {ip: normalized_mac}."""
+        import subprocess, re
+        try:
+            out = subprocess.check_output("arp -a", shell=True, text=True)
+            entries = {}
+            for line in out.splitlines():
+                line = line.strip()
+                m = re.search(r'(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2})', line)
+                if m:
+                    ip = m.group(1)
+                    mac = m.group(2).lower().replace(":", "-")
+                    entries[ip] = mac
+            return entries
+        except Exception as e:
+            logger.debug(f"[AC_ARP_ERR] {e}")
+            return {}
+
+    def resolve_ac_ip(self, force_rescan: bool = False) -> Optional[str]:
+        """
+        Dynamically locates the physical AC on the local network using its permanent MAC address
+        and Tuya port 6668. Tolerates dynamic DHCP leasing where IP changes across router reboots.
+        """
+        curr_ip = self.lan_ip
+
+        # 1. Quick check if current target IP still has port 6668 open
+        if not force_rescan and self._test_tcp_port(curr_ip, self.lan_port, timeout=0.25):
+            return curr_ip
+
+        # 2. Check ARP table for known AC MAC address
+        target_mac = self.mac_address.lower().replace(":", "-")
+        arp_entries = self._get_arp_table()
+        for ip, mac in arp_entries.items():
+            if mac == target_mac:
+                if self._test_tcp_port(ip, self.lan_port, timeout=0.4):
+                    if ip != curr_ip:
+                        logger.info(f"[AC_IP_MIGRATION] AC MAC {target_mac} moved from {curr_ip} -> {ip}. Updating target.")
+                        self._apply_new_ip(ip)
+                    return ip
+
+        # 3. Fast parallel scan of local subnet on port 6668
+        prefix = ".".join(curr_ip.split(".")[:3])
+        if not prefix or len(prefix.split(".")) != 3:
+            prefix = "192.168.1"
+        candidates = [f"{prefix}.{i}" for i in range(2, 35)]
+
+        from concurrent.futures import ThreadPoolExecutor
+        open_ips = []
+        try:
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                results = executor.map(lambda ip: (ip, self._test_tcp_port(ip, self.lan_port, timeout=0.35)), candidates)
+                for ip, is_open in results:
+                    if is_open:
+                        open_ips.append(ip)
+        except Exception as e:
+            logger.debug(f"[AC_SCAN_ERR] {e}")
+
+        for ip in open_ips:
+            arp_now = self._get_arp_table()
+            if arp_now.get(ip) == target_mac:
+                logger.info(f"[AC_IP_DISCOVERED] Discovered AC MAC {target_mac} at {ip}:{self.lan_port} via subnet scan.")
+                self._apply_new_ip(ip)
+                return ip
+
+        return None
+
+    def _apply_new_ip(self, new_ip: str) -> None:
+        """Updates internal target and caches to local.properties."""
+        self.lan_ip = new_ip
+        if hasattr(self, "lan_transport") and self.lan_transport:
+            self.lan_transport.ip = new_ip
+        try:
+            from pathlib import Path
+            p_file = Path("d:/AnimusSmartRoom/local.properties")
+            if p_file.exists():
+                lines = p_file.read_text(encoding="utf-8").splitlines()
+                new_lines = []
+                replaced = False
+                for line in lines:
+                    if line.startswith("tuya.local.ip="):
+                        new_lines.append(f"tuya.local.ip={new_ip}")
+                        replaced = True
+                    else:
+                        new_lines.append(line)
+                if not replaced:
+                    new_lines.append(f"tuya.local.ip={new_ip}")
+                p_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                logger.info(f"[AC_CACHE_UPDATE] Saved new AC IP {new_ip} to local.properties")
+        except Exception as e:
+            logger.debug(f"[AC_CACHE_UPDATE_ERR] {e}")
+
     def get_status(self) -> Dict[str, Any]:
         """
         Queries authoritative physical status.
         Reads live status from Local LAN TCP (Local Key) first with Cloud OpenAPI fallback.
+        In Strict Zero-Cloud Mode, never queries Tuya Cloud OpenAPI.
         """
         # 1. Attempt Local LAN Read First (Zero Cloud Quota)
         if time.time() >= self._lan_degraded_until:
@@ -422,7 +548,23 @@ class AcController:
             except Exception as e:
                 logger.debug(f"[LOCAL_LAN_STATUS_FALLBACK] {e}")
 
-        # 2. Fallback to Cloud OpenAPI
+        # In Strict Zero-Cloud Mode, NEVER hit Tuya Cloud OpenAPI on status queries / background polls
+        if self.strict_zero_cloud:
+            logger.debug("[STRICT_ZERO_CLOUD] Local LAN read unverified, returning offline status without cloud query.")
+            return {
+                "power": self._last_known_status.get("power", False),
+                "target_temperature": self._last_known_status.get("target_temperature", 24),
+                "ambient_temperature": self._last_known_status.get("ambient_temperature"),
+                "mode": self._last_known_status.get("mode", "UNKNOWN"),
+                "fan_speed": self._last_known_status.get("fan_speed", "UNKNOWN"),
+                "connectivity": "OFFLINE",
+                "transport_used": TransportType.NONE.value,
+                "timestamp": time.time(),
+                "verified": False,
+                "error": "Failed to read physical AC status over local LAN (Strict Zero-Cloud Mode active)."
+            }
+
+        # 2. Fallback to Cloud OpenAPI (Only when strict_zero_cloud is False)
         status_items = self.cloud_transport.fetch_status()
         if not status_items:
             # If offline or failed
@@ -503,12 +645,20 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until:
+            if not self._test_tcp_port(self.lan_ip, self.lan_port, timeout=0.2):
+                self.resolve_ac_ip()
             if self.lan_transport.send_dps_command({"1": on}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
             else:
-                self._lan_degraded_until = time.time() + 60.0
+                # Dynamic IP recovery attempt on command failure
+                new_ip = self.resolve_ac_ip(force_rescan=True)
+                if new_ip and self.lan_transport.send_dps_command({"1": on}):
+                    lan_ok = True
+                    transport_used = TransportType.LAN.value
+                else:
+                    self._lan_degraded_until = time.time() + 5.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -517,9 +667,18 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN command unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
-                self._lan_degraded_until = time.time() + 60.0
+                self._lan_degraded_until = time.time() + 5.0
 
         if not lan_ok:
+            if self.strict_zero_cloud:
+                logger.warning("[STRICT_ZERO_CLOUD] Local LAN power command failed, cloud fallback blocked.")
+                return False, {
+                    "success": False,
+                    "power": on,
+                    "error": "Failed to dispatch power command over local LAN (Strict Zero-Cloud Mode active).",
+                    "verified": False,
+                    "transport": TransportType.LAN.value
+                }
             transport_used = TransportType.CLOUD.value
             cloud_ok = self.cloud_transport.send_commands([{"code": "switch", "value": on}])
             if not cloud_ok:
@@ -566,12 +725,19 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until:
+            if not self._test_tcp_port(self.lan_ip, self.lan_port, timeout=0.2):
+                self.resolve_ac_ip()
             if self.lan_transport.send_dps_command({"2": temp_celsius}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
             else:
-                self._lan_degraded_until = time.time() + 60.0
+                new_ip = self.resolve_ac_ip(force_rescan=True)
+                if new_ip and self.lan_transport.send_dps_command({"2": temp_celsius}):
+                    lan_ok = True
+                    transport_used = TransportType.LAN.value
+                else:
+                    self._lan_degraded_until = time.time() + 5.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -580,9 +746,18 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN temperature unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
-                self._lan_degraded_until = time.time() + 60.0
+                self._lan_degraded_until = time.time() + 5.0
 
         if not lan_ok:
+            if self.strict_zero_cloud:
+                logger.warning("[STRICT_ZERO_CLOUD] Local LAN temperature command failed, cloud fallback blocked.")
+                return False, {
+                    "success": False,
+                    "requested_temperature": temp_celsius,
+                    "error": f"Failed to dispatch temperature {temp_celsius}°C over local LAN (Strict Zero-Cloud Mode active).",
+                    "verified": False,
+                    "transport": TransportType.LAN.value
+                }
             transport_used = TransportType.CLOUD.value
             cloud_ok = self.cloud_transport.send_commands([{"code": "temp_set", "value": temp_celsius}])
             if not cloud_ok:
@@ -651,12 +826,19 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until:
+            if not self._test_tcp_port(self.lan_ip, self.lan_port, timeout=0.2):
+                self.resolve_ac_ip()
             if self.lan_transport.send_dps_command({"4": tuya_mode}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
             else:
-                self._lan_degraded_until = time.time() + 60.0
+                new_ip = self.resolve_ac_ip(force_rescan=True)
+                if new_ip and self.lan_transport.send_dps_command({"4": tuya_mode}):
+                    lan_ok = True
+                    transport_used = TransportType.LAN.value
+                else:
+                    self._lan_degraded_until = time.time() + 5.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -665,9 +847,18 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN mode unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
-                self._lan_degraded_until = time.time() + 60.0
+                self._lan_degraded_until = time.time() + 5.0
 
         if not lan_ok:
+            if self.strict_zero_cloud:
+                logger.warning("[STRICT_ZERO_CLOUD] Local LAN mode command failed, cloud fallback blocked.")
+                return False, {
+                    "success": False,
+                    "requested_mode": target_animus,
+                    "error": f"Failed to dispatch mode '{target_animus}' over local LAN (Strict Zero-Cloud Mode active).",
+                    "verified": False,
+                    "transport": TransportType.LAN.value
+                }
             transport_used = TransportType.CLOUD.value
             cloud_ok = self.cloud_transport.send_commands([{"code": "mode", "value": tuya_mode}])
             if not cloud_ok:
@@ -725,12 +916,19 @@ class AcController:
 
         lan_ok = False
         transport_used = TransportType.CLOUD.value
-        if time.time() >= self._lan_degraded_until and self.lan_transport.send_heartbeat():
+        if time.time() >= self._lan_degraded_until:
+            if not self._test_tcp_port(self.lan_ip, self.lan_port, timeout=0.2):
+                self.resolve_ac_ip()
             if self.lan_transport.send_dps_command({"5": tuya_speed}):
                 lan_ok = True
                 transport_used = TransportType.LAN.value
             else:
-                self._lan_degraded_until = time.time() + 60.0
+                new_ip = self.resolve_ac_ip(force_rescan=True)
+                if new_ip and self.lan_transport.send_dps_command({"5": tuya_speed}):
+                    lan_ok = True
+                    transport_used = TransportType.LAN.value
+                else:
+                    self._lan_degraded_until = time.time() + 5.0
 
         verified = False
         after: Dict[str, Any] = {}
@@ -739,9 +937,18 @@ class AcController:
             if not verified:
                 logger.info("[LAN_FALLBACK] LAN fan speed unverified on readback, falling back to Cloud OpenAPI.")
                 lan_ok = False
-                self._lan_degraded_until = time.time() + 60.0
+                self._lan_degraded_until = time.time() + 5.0
 
         if not lan_ok:
+            if self.strict_zero_cloud:
+                logger.warning("[STRICT_ZERO_CLOUD] Local LAN fan speed command failed, cloud fallback blocked.")
+                return False, {
+                    "success": False,
+                    "requested_fan_speed": target_animus,
+                    "error": f"Failed to dispatch fan speed '{target_animus}' over local LAN (Strict Zero-Cloud Mode active).",
+                    "verified": False,
+                    "transport": TransportType.LAN.value
+                }
             transport_used = TransportType.CLOUD.value
             cloud_ok = self.cloud_transport.send_commands([{"code": "fan_speed_enum", "value": tuya_speed}])
             if not cloud_ok:

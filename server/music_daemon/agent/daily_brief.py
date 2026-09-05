@@ -97,6 +97,6 @@ class DailyBriefEngine:
         else:
             lines.append("All tasks were completed today. Great job!")
 
-        lines.append("Sleep well, buddy.")
+        lines.append(f"Sleep well, {addr}.")
         self.memory.record_observation("evening_brief_generated", time.time())
         return "\n".join(lines)

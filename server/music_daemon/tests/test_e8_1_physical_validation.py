@@ -46,7 +46,7 @@ def physical_system():
     registry = UnifiedCapabilityRegistry()
     validator = PlanValidator(registry=registry)
 
-    proj = ProjectorController(target="192.168.1.11:5555")
+    proj = ProjectorController(target="192.168.1.10:5555")
     ac = AcController()
     pc = PcController()
     ftv_ctrl = FireTvController(target="192.168.1.5:5555")

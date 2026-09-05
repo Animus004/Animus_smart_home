@@ -1,6 +1,6 @@
 """
 Physical Acceptance Suite for Phase E.3.2: Zebronics PixaPlay 25 Projector Capabilities.
-Runs against real hardware at 192.168.1.11:5555.
+Runs against real hardware at 192.168.1.10:5555.
 Measures latency, validates physical invariants, tests read-back verification,
 and outputs a structured results artifact.
 """
@@ -26,10 +26,10 @@ from projector_controller import (
 def run_acceptance_suite() -> Dict[str, Any]:
     print("=" * 80)
     print("   ANIMUS SMART ROOM — PHASE E.3.2 PROJECTOR PHYSICAL ACCEPTANCE SUITE")
-    print("   Target: Zebronics PixaPlay 25 (192.168.1.11:5555)")
+    print("   Target: Zebronics PixaPlay 25 (192.168.1.10:5555)")
     print("=" * 80)
 
-    proj = ProjectorController(target="192.168.1.11:5555")
+    proj = ProjectorController(target="192.168.1.10:5555")
 
     # Step 1: Connect to physical hardware
     t0 = time.time()
@@ -229,7 +229,7 @@ def run_acceptance_suite() -> Dict[str, Any]:
 
     summary = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "target": "192.168.1.11:5555",
+        "target": "192.168.1.10:5555",
         "model": "Zebronics PixaPlay 25 (NL5H00X)",
         "total_capabilities_tested": len(results),
         "passed": sum(1 for r in results if r["passed"]),

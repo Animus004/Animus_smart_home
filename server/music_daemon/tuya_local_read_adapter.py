@@ -104,7 +104,7 @@ def load_tuya_local_config() -> Dict[str, str]:
     # 2. Environment variables override local.properties
     device_id = os.environ.get("TUYA_DEVICE_ID", props.get("tuya.device.id", "")).strip()
     local_key = os.environ.get("TUYA_LOCAL_KEY", props.get("tuya.local.key", "")).strip()
-    local_ip = os.environ.get("TUYA_LOCAL_IP", props.get("tuya.local.ip", "192.168.1.4")).strip()
+    local_ip = os.environ.get("TUYA_LOCAL_IP", props.get("tuya.local.ip", "192.168.1.3")).strip()
     local_port = int(os.environ.get("TUYA_LOCAL_PORT", props.get("tuya.local.port", "6668")).strip())
 
     return {
@@ -299,8 +299,8 @@ class TuyaLocalAcReadAdapter:
         except (ValueError, TypeError):
             target_temp = 24
 
-        # DP 3: Current Ambient Temperature
-        raw_temp_curr = dps.get("3", dps.get("temp_current"))
+        # DP 3 / DP 109: Current Ambient Temperature
+        raw_temp_curr = dps.get("3", dps.get("temp_current", dps.get("109")))
         if raw_temp_curr is not None:
             try:
                 current_temp: Optional[int] = int(raw_temp_curr)

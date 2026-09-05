@@ -55,7 +55,7 @@ fun DeviceStatusPanel(
     val projectorStatusText = if (roomState?.projector != null) {
         if (roomState.projector.isPowerOn) "ON (${roomState.projector.inputSource})" else "STANDBY (${roomState.projector.powerState})"
     } else {
-        "HDMI 1 (192.168.1.11:5555)"
+        "HDMI 1 (192.168.1.10:5555)"
     }
     val projectorDetails = if (roomState?.projector != null) {
         "Source: ${roomState.projector.inputSource} • Signal: ${if (roomState.projector.hasSignal) "ACTIVE" else "IDLE"}"

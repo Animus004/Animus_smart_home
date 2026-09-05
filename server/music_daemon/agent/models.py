@@ -53,13 +53,61 @@ class MemoryItem(BaseModel):
 
 
 # =============================================================================
+# 1.1 Astra-Style Structured Personal Memory & Expression Models
+# =============================================================================
+
+class MemoryType(str, Enum):
+    PREFERENCE = "preference"
+    FACT = "fact"
+    ROUTINE = "routine"
+    PROJECT_KNOWLEDGE = "project_knowledge"
+    DEVICE_KNOWLEDGE = "device_knowledge"
+    CONSTRAINT = "constraint"
+    INTERACTION = "interaction"
+
+
+class StructuredMemoryItem(BaseModel):
+    """
+    Strongly typed personal epistemic memory unit for Astra-like Animus.
+    Enables contextual associative retrieval, personal reasoning, and
+    continual learning without context flooding.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    type: MemoryType
+    subject: str                    # e.g. 'lighting', 'work', 'projector', 'guitar', 'career'
+    context: Optional[str] = None   # e.g. 'movie', 'SQL/data analytics', 'afternoon', 'general'
+    value: Any                      # e.g. 'low brightness', 'quiet environment', 'Zebronics PixaPlay 25'
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    source: str = "user"            # 'user', 'verified_hardware', 'observation', 'inference'
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+    last_accessed_at: float = Field(default_factory=time.time)
+    access_count: int = 0
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentExpressionPayload(BaseModel):
+    """
+    Unified multi-channel output for Animus: Voice + Actions + Physical Expression
+    (Light state + UI/Screen state + Sound cues).
+    """
+    voice: str = ""
+    actions: List[Dict[str, Any]] = Field(default_factory=list)
+    expression: Dict[str, Any] = Field(default_factory=lambda: {
+        "light_cue": "NEUTRAL",
+        "ui_state": {"mode": "IDLE"},
+        "sound_cue": "SILENT"
+    })
+
+
+# =============================================================================
 # 2. User Identity & Preferences
 # =============================================================================
 
 class UserIdentity(BaseModel):
     """Authoritative user identity profile."""
     name: str = "Sayan Halder"
-    preferred_address: str = "buddy"
+    preferred_address: str = "Sir"
     location_pin: str = "741235"
     privacy_mode: str = "STANDARD_SAFEGUARDS"
 

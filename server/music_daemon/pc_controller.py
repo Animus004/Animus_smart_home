@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import socket
+import re
 import logging
 import platform
 import subprocess
@@ -212,6 +213,12 @@ class SYSTEM_POWER_STATUS(Structure):
         ("BatteryFullLifeTime", wintypes.DWORD),
     ]
 
+class LASTINPUTINFO(Structure):
+    _fields_ = [
+        ("cbSize", wintypes.UINT),
+        ("dwTime", wintypes.DWORD)
+    ]
+
 
 # Virtual Key Codes for Media Transport
 class MediaVirtualKey(int, Enum):
@@ -236,7 +243,27 @@ class PcController:
         "notepad": ["notepad.exe"],
         "calc": ["calc.exe"],
         "calculator": ["calc.exe"],
-        "explorer": ["explorer.exe"]
+        "explorer": ["explorer.exe"],
+        "sql": [
+            r"C:\Program Files\MySQL\MySQL Workbench 8.0\MySQLWorkbench.exe",
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MySQL\MySQL Workbench 8.0 CE.lnk",
+            "MySQLWorkbench.exe"
+        ],
+        "workbench": [
+            r"C:\Program Files\MySQL\MySQL Workbench 8.0\MySQLWorkbench.exe",
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MySQL\MySQL Workbench 8.0 CE.lnk",
+            "MySQLWorkbench.exe"
+        ],
+        "mysql": [
+            r"C:\Program Files\MySQL\MySQL Workbench 8.0\MySQLWorkbench.exe",
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MySQL\MySQL Workbench 8.0 CE.lnk",
+            "MySQLWorkbench.exe"
+        ],
+        "word": [
+            r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE",
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Word.lnk",
+            "winword.exe"
+        ]
     }
 
     def __init__(self):
@@ -244,6 +271,9 @@ class PcController:
             ole32.CoInitialize(None)
         except Exception:
             pass
+        self._work_session_start_time: Optional[float] = None
+        self._work_session_active: bool = False
+
 
     # =========================================================================
     # 1. AUDIO SUBSYSTEM (Windows CoreAudio MMDevices)
@@ -620,10 +650,36 @@ class PcController:
     # 4. POWER & SYSTEM MANAGEMENT
     # =========================================================================
 
+    def get_user_idle_seconds(self) -> float:
+        """Returns the elapsed seconds since last keyboard or mouse input."""
+        try:
+            lii = LASTINPUTINFO()
+            lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+            if user32.GetLastInputInfo(byref(lii)):
+                current_tick = kernel32.GetTickCount()
+                elapsed_ms = (current_tick - lii.dwTime) & 0xFFFFFFFF
+                return round(elapsed_ms / 1000.0, 1)
+        except Exception as e:
+            logger.debug(f"[PC_CONTROLLER] Failed to read last input info: {e}")
+        return 0.0
+
+    def is_workstation_locked(self) -> bool:
+        """Detects if the Windows workstation desktop session is currently locked."""
+        try:
+            desk = user32.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
+            if not desk:
+                return True
+            user32.CloseDesktop(desk)
+            return False
+        except Exception:
+            return False
+
     def get_power_state(self) -> Dict[str, Any]:
-        """Returns system uptime, power source, battery status, and OS build."""
+        """Returns system uptime, power source, battery status, idle time, lock status, and OS build."""
         uptime_ms = kernel32.GetTickCount64()
         uptime_hrs = round(uptime_ms / (1000 * 3600), 2)
+        idle_sec = self.get_user_idle_seconds()
+        is_locked = self.is_workstation_locked()
 
         sps = SYSTEM_POWER_STATUS()
         power_source = "Unknown"
@@ -644,6 +700,8 @@ class PcController:
             "battery_percent": battery_pct,
             "uptime_hours": uptime_hrs,
             "uptime_ms": uptime_ms,
+            "user_idle_seconds": idle_sec,
+            "is_locked": is_locked,
             "hostname": socket.gethostname(),
             "os": f"{platform.system()} {platform.release()} ({platform.version()})",
             "verified": True
@@ -680,8 +738,68 @@ class PcController:
     # 5. SAFE ALLOWLISTED APPLICATION LAUNCHING
     # =========================================================================
 
+    def _launch_interactive_desktop_app(self, task_name: str, command_line: str) -> bool:
+        """
+        Launches a GUI application directly on the user's interactive desktop ('WinSta0\\Default')
+        via Windows Task Scheduler. Bypasses session/desktop sandbox isolation.
+        """
+        try:
+            safe_tn = re.sub(r'[^a-zA-Z0-9_]', '_', task_name)
+            cmd_create = [
+                "schtasks", "/create",
+                "/tn", f"Animus_{safe_tn}",
+                "/tr", command_line,
+                "/sc", "once",
+                "/st", "23:59",
+                "/it",
+                "/f"
+            ]
+            subprocess.run(cmd_create, capture_output=True, text=True, check=True)
+            cmd_run = ["schtasks", "/run", "/tn", f"Animus_{safe_tn}"]
+            subprocess.run(cmd_run, capture_output=True, text=True, check=True)
+            logger.info(f"[PC_CONTROLLER] Successfully triggered interactive desktop launch for '{task_name}': {command_line}")
+            return True
+        except Exception as e:
+            logger.error(f"[PC_CONTROLLER] Error launching interactive desktop app via schtasks: {e}")
+            return False
+
+    def bring_work_windows_to_foreground(self) -> None:
+        """Brings open MySQL Workbench and Word windows into active foreground focus on the Default desktop."""
+        try:
+            target_keywords = ["mysql workbench", "word", ".docx", ".sql"]
+            found_hwnds = []
+
+            def enum_proc(hwnd, lparam):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buf, length + 1)
+                        title = buf.value.strip().lower()
+                        if any(k in title for k in target_keywords):
+                            found_hwnds.append(hwnd)
+                return True
+
+            WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+            # Check Default desktop first to reach interactive monitor
+            hdesk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
+            if hdesk:
+                user32.EnumDesktopWindows(hdesk, WNDENUMPROC(enum_proc), 0)
+                user32.CloseDesktop(hdesk)
+            else:
+                user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
+
+            for hwnd in found_hwnds:
+                user32.ShowWindow(hwnd, 9) # SW_RESTORE
+                if hasattr(user32, "SwitchToThisWindow"):
+                    user32.SwitchToThisWindow(hwnd, True)
+                user32.SetForegroundWindow(hwnd)
+        except Exception as e:
+            logger.debug(f"[PC_CONTROLLER] Error bringing work windows to foreground: {e}")
+
     def launch_allowlisted_app(self, app_key: str) -> Tuple[bool, Dict[str, Any]]:
-        """Launches an allowlisted safe desktop application."""
+        """Launches an allowlisted safe desktop application onto the user's interactive screen."""
         clean_key = app_key.strip().lower()
         if clean_key not in self.ALLOWLISTED_APPS:
             return False, {
@@ -692,18 +810,326 @@ class PcController:
                 "verified": False
             }
 
-        target_exe = self.ALLOWLISTED_APPS[clean_key][0]
+        target_exes = self.ALLOWLISTED_APPS[clean_key]
+        target_exe = target_exes[0]
+        for candidate in target_exes:
+            if os.path.isabs(candidate):
+                if os.path.exists(candidate):
+                    target_exe = candidate
+                    break
+            else:
+                target_exe = candidate
+                break
+
+        # Build full command line with project files if applicable
+        extra_args_str = ""
+        project_doc = None
+        if clean_key == "word":
+            project_doc = r"C:\Users\sayan\Documents\Codex\2026-09-02\referenced-chatgpt-conversation-this-is-an\outputs\Project 4 - Blinkit Dark Store Intelligence - Revised Stakeholder Question Framework.docx"
+            if os.path.exists(project_doc):
+                extra_args_str = f' "{project_doc}"'
+
+        command_line = f'"{target_exe}"{extra_args_str}'
+
+        # 1. Primary method: Windows Task Scheduler interactive launch (bypasses sandbox desktop isolation)
+        ok_sch = self._launch_interactive_desktop_app(clean_key, command_line)
+        if ok_sch:
+            time.sleep(1.0)
+            if clean_key in ("sql", "word", "workbench", "mysql"):
+                if not self._work_session_active:
+                    self._work_session_start_time = time.time()
+                self._work_session_active = True
+            self.bring_work_windows_to_foreground()
+            return True, {
+                "success": True,
+                "app": clean_key,
+                "target": target_exe,
+                "method": "schtasks_interactive",
+                "message": f"Launched allowlisted application '{clean_key}' onto interactive desktop.",
+                "verified": True
+            }
+
+        # 2. Fallback method: direct subprocess launch
         try:
-            proc = subprocess.Popen([target_exe], shell=False)
+            work_dir = os.path.dirname(target_exe) if os.path.isabs(target_exe) and os.path.isdir(os.path.dirname(target_exe)) else None
+            cmd = [target_exe] + ([project_doc] if project_doc and os.path.exists(project_doc) else [])
+            proc = subprocess.Popen(cmd, cwd=work_dir, shell=False)
+            logger.info(f"[PC_CONTROLLER] Fallback launch for '{clean_key}' via subprocess (PID: {proc.pid})")
+            time.sleep(0.6)
+            self.bring_work_windows_to_foreground()
             return True, {
                 "success": True,
                 "app": clean_key,
                 "pid": proc.pid,
+                "target": target_exe,
+                "method": "subprocess",
                 "message": f"Launched allowlisted application '{clean_key}' (PID: {proc.pid}).",
                 "verified": True
             }
         except Exception as e:
-            return False, {"success": False, "error": f"Failed to launch '{clean_key}': {e}", "verified": False}
+            try:
+                if hasattr(os, "startfile") and os.path.exists(target_exe):
+                    os.startfile(target_exe)
+                    logger.info(f"[PC_CONTROLLER] Fallback launch via os.startfile for '{clean_key}': {target_exe}")
+                    time.sleep(0.5)
+                    self.bring_work_windows_to_foreground()
+                    return True, {
+                        "success": True,
+                        "app": clean_key,
+                        "target": target_exe,
+                        "method": "startfile",
+                        "message": f"Launched allowlisted application '{clean_key}'.",
+                        "verified": True
+                    }
+                else:
+                    raise e
+            except Exception as e2:
+                logger.error(f"[PC_CONTROLLER] Failed to launch '{clean_key}': {e2}")
+                return False, {"success": False, "error": f"Failed to launch '{clean_key}': {e2}", "verified": False}
+
+    def get_work_session_duration(self) -> float:
+        """Returns the duration in seconds of the active work session, or 0.0 if not active."""
+        if self._work_session_start_time and self._work_session_active:
+            return round(time.time() - self._work_session_start_time, 1)
+        return 0.0
+
+    def bring_work_windows_to_foreground(self) -> List[int]:
+        """
+        Locates open work application windows (Word, MySQL Workbench) on the user's
+        interactive desktop, restores them if minimized, and brings them to the foreground.
+        Returns list of target HWNDs.
+        """
+        targeted_hwnds: List[int] = []
+        try:
+            hdesk = user32.OpenDesktopW("Default", 0, False, 0x0100)
+            work_titles = ["mysql workbench", "word", ".docx", ".sql"]
+
+            def enum_proc(hwnd, lparam):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buff = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buff, length + 1)
+                        title = buff.value
+                        lower = title.lower()
+                        if any(k in lower for k in work_titles):
+                            targeted_hwnds.append(hwnd)
+                return True
+
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+            if hdesk:
+                user32.EnumDesktopWindows(hdesk, WNDENUMPROC(enum_proc), 0)
+                user32.CloseDesktop(hdesk)
+            else:
+                user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
+        except Exception as e:
+            logger.debug(f"[PC_CONTROLLER] Error enumerating work windows: {e}")
+
+        # Bring each window to foreground with thread attachment
+        cur_tid = kernel32.GetCurrentThreadId()
+        for hwnd in targeted_hwnds:
+            try:
+                wnd_tid = user32.GetWindowThreadProcessId(hwnd, None)
+                user32.AttachThreadInput(cur_tid, wnd_tid, True)
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+                user32.AttachThreadInput(cur_tid, wnd_tid, False)
+            except Exception as e:
+                logger.debug(f"[PC_CONTROLLER] Error focusing hwnd {hwnd}: {e}")
+
+        return targeted_hwnds
+
+    def send_save_keystrokes(self) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Brings open work windows to focus, sends Ctrl+S keystroke to save unsaved documents,
+        and verifies physical file modifications on disk (Word .docx and MySQL autosaves).
+        """
+        target_doc_path = r"C:\Users\sayan\Documents\Codex\2026-09-02\referenced-chatgpt-conversation-this-is-an\outputs\Project 4 - Blinkit Dark Store Intelligence - Revised Stakeholder Question Framework.docx"
+        mysql_autosave_dir = os.path.expandvars(r"%APPDATA%\MySQL\Workbench\sql_workspaces")
+
+        mtime_doc_before = os.path.getmtime(target_doc_path) if os.path.exists(target_doc_path) else 0.0
+
+        # Check latest autosave before save
+        latest_sql_mtime_before = 0.0
+        if os.path.isdir(mysql_autosave_dir):
+            try:
+                for f in os.listdir(mysql_autosave_dir):
+                    if f.endswith(".autosave"):
+                        fp = os.path.join(mysql_autosave_dir, f)
+                        latest_sql_mtime_before = max(latest_sql_mtime_before, os.path.getmtime(fp))
+            except Exception:
+                pass
+
+        # 1. Bring work windows to foreground
+        hwnds = self.bring_work_windows_to_foreground()
+        time.sleep(0.15)
+
+        VK_CONTROL = 0x11
+        VK_S = 0x53
+        KEYEVENTF_KEYUP = 0x0002
+
+        # 2. Dispatch Ctrl+S to each work window
+        cur_tid = kernel32.GetCurrentThreadId()
+        targets = hwnds if hwnds else [user32.GetForegroundWindow()]
+        for hwnd in targets:
+            try:
+                wnd_tid = user32.GetWindowThreadProcessId(hwnd, None)
+                user32.AttachThreadInput(cur_tid, wnd_tid, True)
+                user32.SetForegroundWindow(hwnd)
+                time.sleep(0.05)
+                user32.keybd_event(VK_CONTROL, 0, 0, 0)
+                user32.keybd_event(VK_S, 0, 0, 0)
+                time.sleep(0.05)
+                user32.keybd_event(VK_S, 0, KEYEVENTF_KEYUP, 0)
+                user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+                time.sleep(0.1)
+                user32.AttachThreadInput(cur_tid, wnd_tid, False)
+            except Exception as e:
+                logger.debug(f"[PC_CONTROLLER] Error sending save to hwnd {hwnd}: {e}")
+
+        # If no specific hwnds found, broadcast Ctrl+S to active foreground
+        if not hwnds:
+            user32.keybd_event(VK_CONTROL, 0, 0, 0)
+            user32.keybd_event(VK_S, 0, 0, 0)
+            time.sleep(0.05)
+            user32.keybd_event(VK_S, 0, KEYEVENTF_KEYUP, 0)
+            user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+
+        time.sleep(0.2)
+
+        # 3. Post-save disk verification
+        mtime_doc_after = os.path.getmtime(target_doc_path) if os.path.exists(target_doc_path) else 0.0
+        latest_sql_mtime_after = 0.0
+        if os.path.isdir(mysql_autosave_dir):
+            try:
+                for f in os.listdir(mysql_autosave_dir):
+                    if f.endswith(".autosave"):
+                        fp = os.path.join(mysql_autosave_dir, f)
+                        latest_sql_mtime_after = max(latest_sql_mtime_after, os.path.getmtime(fp))
+            except Exception:
+                pass
+
+        doc_saved = (mtime_doc_after > mtime_doc_before)
+        sql_saved = (latest_sql_mtime_after > latest_sql_mtime_before)
+        files_modified = doc_saved or sql_saved
+
+        logger.info(f"[PC_CONTROLLER] send_save_keystrokes complete: target_windows={len(hwnds)}, doc_saved={doc_saved}, sql_saved={sql_saved}")
+
+        return True, {
+            "success": True,
+            "action": "SEND_SAVE_KEYSTROKE",
+            "windows_targeted": len(hwnds),
+            "doc_path": target_doc_path,
+            "doc_modified_on_disk": doc_saved,
+            "sql_autosave_dir": mysql_autosave_dir,
+            "sql_autosave_updated": sql_saved,
+            "any_files_modified": files_modified,
+            "message": "Dispatched Ctrl+S keystroke to safeguard progress.",
+            "verified": True
+        }
+
+    def close_apps(self, process_names: Optional[List[str]] = None) -> Tuple[bool, Dict[str, Any]]:
+        """Gracefully closes specified work processes, with fallback force-close to ensure windows close."""
+        if process_names is None:
+            process_names = ["MySQLWorkbench.exe", "WINWORD.EXE"]
+
+        self._work_session_active = False
+
+        closed = []
+        for proc_name in process_names:
+            try:
+                # 1. Attempt graceful close
+                res = subprocess.run(["taskkill", "/IM", proc_name], capture_output=True, text=True)
+                time.sleep(0.3)
+                # 2. Check if process is still lingering
+                check = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {proc_name}"], capture_output=True, text=True)
+                if proc_name.lower() in check.stdout.lower():
+                    subprocess.run(["taskkill", "/F", "/IM", proc_name], capture_output=True, text=True)
+                    closed.append(proc_name)
+                    logger.info(f"[PC_CONTROLLER] Force closed lingering application: {proc_name}")
+                elif res.returncode == 0:
+                    closed.append(proc_name)
+                    logger.info(f"[PC_CONTROLLER] Gracefully closed application: {proc_name}")
+                else:
+                    logger.debug(f"[PC_CONTROLLER] Process not running or closed: {proc_name}")
+            except Exception as e:
+                logger.debug(f"[PC_CONTROLLER] Error closing {proc_name}: {e}")
+
+        return True, {
+            "success": True,
+            "action": "CLOSE_APPS",
+            "closed": closed,
+            "message": f"Closed work applications: {closed or 'none were active'}",
+            "verified": True
+        }
+
+    def get_active_work_context(self) -> Dict[str, Any]:
+        """
+        Inspects active foreground window and open top-level windows to identify
+        active projects, SQL scripts, and Word documents on the workstation.
+        """
+        foreground_title = ""
+        try:
+            hwnd = user32.GetForegroundWindow()
+            if hwnd:
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    foreground_title = buf.value.strip()
+        except Exception as e:
+            logger.debug(f"[PC_CONTROLLER] Error reading foreground window: {e}")
+
+        work_windows = []
+        sql_files = []
+        word_docs = []
+
+        try:
+            WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+            def enum_proc(hwnd, lparam):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buf, length + 1)
+                        title = buf.value.strip()
+                        if title:
+                            # Check for MySQL Workbench or .sql
+                            if "MySQL Workbench" in title or ".sql" in title.lower():
+                                work_windows.append(title)
+                                m = re.search(r'([a-zA-Z0-9_\-\.]+\.sql)', title, re.IGNORECASE)
+                                if m and m.group(1) not in sql_files:
+                                    sql_files.append(m.group(1))
+                            # Check for Word or .docx
+                            elif "Word" in title or ".docx" in title.lower():
+                                work_windows.append(title)
+                                m = re.search(r'([a-zA-Z0-9_\-\.]+\.docx?)', title, re.IGNORECASE)
+                                if m and m.group(1) not in word_docs:
+                                    word_docs.append(m.group(1))
+                return True
+
+            hdesk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
+            if hdesk:
+                user32.EnumDesktopWindows(hdesk, WNDENUMPROC(enum_proc), 0)
+                user32.CloseDesktop(hdesk)
+            else:
+                user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
+        except Exception as e:
+            logger.debug(f"[PC_CONTROLLER] Error enumerating windows: {e}")
+
+        is_blinkit = any("blinkit" in w.lower() for w in [foreground_title] + work_windows)
+
+        return {
+            "foreground_window": foreground_title,
+            "work_windows": work_windows,
+            "sql_files": sql_files,
+            "word_docs": word_docs,
+            "active_project": "Blinkit Stock-Out SQL Analysis" if is_blinkit else "Data Analytics",
+            "session_duration_seconds": self.get_work_session_duration(),
+            "timestamp": time.time()
+        }
 
     # =========================================================================
     # 6. UNIFIED PC STATUS

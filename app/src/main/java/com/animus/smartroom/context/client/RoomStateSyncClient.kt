@@ -24,15 +24,17 @@ import kotlinx.coroutines.withContext
  * Periodically polls GET /api/room/state to hydrate physical telemetry into the UI.
  */
 class RoomStateSyncClient(
-    private val hostProvider: () -> String = { "192.168.1.9" },
+    private val hostProvider: () -> String = { "192.168.1.4" },
     private val port: Int = 8095,
     private val pollIntervalMs: Long = 4000L,
     private val connectTimeoutMs: Int = 5000,
-    private val readTimeoutMs: Int = 15000
+    private val readTimeoutMs: Int = 15000,
+    var onHostAutoDiscovered: ((String) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "RoomStateSyncClient"
         private const val ROOM_STATE_PATH = "/api/room/state"
+        private const val DEFAULT_PC_HOST = "192.168.1.4"
     }
 
     private val isRunning = AtomicBoolean(false)
@@ -44,6 +46,7 @@ class RoomStateSyncClient(
 
     private val clientScope = CoroutineScope(Dispatchers.IO)
     private var syncJob: Job? = null
+    private var consecutiveFailures = 0
 
     val baseUrl: String
         get() = "http://${hostProvider()}:$port"
@@ -62,15 +65,50 @@ class RoomStateSyncClient(
                     if (state != null) {
                         _roomStateFlow.value = state
                         _isConnectedFlow.value = true
+                        consecutiveFailures = 0
                     } else {
                         _isConnectedFlow.value = false
+                        consecutiveFailures++
+                        checkAutoDiscoveryFallback()
                     }
                 } catch (e: Exception) {
                     Log.d(TAG, "RoomState polling error: ${e.message}")
                     _isConnectedFlow.value = false
+                    consecutiveFailures++
+                    checkAutoDiscoveryFallback()
                 }
                 delay(pollIntervalMs)
             }
+        }
+    }
+
+    private suspend fun checkAutoDiscoveryFallback() {
+        // If current host is unresponsive and is not DEFAULT_PC_HOST, test DEFAULT_PC_HOST
+        val currentHost = hostProvider()
+        if (consecutiveFailures >= 2 && currentHost != DEFAULT_PC_HOST) {
+            Log.w(TAG, "[auto-discovery] Current host $currentHost unresponsive, probing default $DEFAULT_PC_HOST:8095")
+            if (probeHost(DEFAULT_PC_HOST)) {
+                Log.i(TAG, "[auto-discovery] Successfully discovered Animus backend at $DEFAULT_PC_HOST! Updating host.")
+                consecutiveFailures = 0
+                onHostAutoDiscovered?.invoke(DEFAULT_PC_HOST)
+            }
+        }
+    }
+
+    fun probeHost(testHost: String): Boolean {
+        var connection: HttpURLConnection? = null
+        return try {
+            val url = URL("http://$testHost:$port$ROOM_STATE_PATH")
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 1500
+                readTimeout = 2500
+            }
+            connection.responseCode == HttpURLConnection.HTTP_OK
+        } catch (_: Exception) {
+            false
+        } finally {
+            try { connection?.disconnect() } catch (_: Exception) {}
         }
     }
 

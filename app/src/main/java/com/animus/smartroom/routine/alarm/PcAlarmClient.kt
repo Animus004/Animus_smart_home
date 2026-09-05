@@ -16,7 +16,7 @@ sealed interface PcAlarmResult {
 }
 
 class PcAlarmClient(
-    private val host: String = "192.168.1.9",
+    private val host: String = "192.168.1.4",
     private val port: Int = 8095,
     private val connectTimeoutMs: Int = 1500,
     private val readTimeoutMs: Int = 3000,

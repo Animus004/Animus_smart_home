@@ -1,3 +1,4 @@
+import os
 import subprocess
 import shutil
 import logging
@@ -12,7 +13,8 @@ from enum import Enum
 logger = logging.getLogger("projector_controller")
 
 DEFAULT_ADB_PATH = r"C:\platform-tools\platform-tools-latest-windows\platform-tools\adb.exe"
-DEFAULT_TARGET = "192.168.1.11:5555"
+DEFAULT_TARGET = "192.168.1.9:5555"
+DEFAULT_PROJECTOR_MAC = "a8-4f-a4-26-cd-6b"
 
 class ProjectorError(Exception):
     pass
@@ -257,7 +259,7 @@ class ProjectorController:
     """
     Authoritative Projector Controller for Zebronics PixaPlay 25 (Android 12, NL5H00X).
     Enforces truthful physical telemetry, optical safety, single HDMI port hardware limit,
-    and sub-100ms ADB command dispatch over Wi-Fi (192.168.1.11:5555).
+    and sub-100ms ADB command dispatch over Wi-Fi (192.168.1.10:5555).
     """
     def __init__(
         self,
@@ -267,9 +269,25 @@ class ProjectorController:
         use_ir_power: Optional[bool] = None,
         ir_transport: Optional[IrProjectorTransport] = None
     ):
+        if target == DEFAULT_TARGET:
+            try:
+                from ac_controller import _read_local_properties
+                props = _read_local_properties()
+                target = os.environ.get("PROJECTOR_ADB_TARGET", props.get("projector.adb.target", DEFAULT_TARGET))
+            except Exception:
+                pass
         self.target = target
+        self.mac_address = DEFAULT_PROJECTOR_MAC
+        try:
+            from ac_controller import _read_local_properties
+            props = _read_local_properties()
+            self.mac_address = os.environ.get("PROJECTOR_MAC", props.get("projector.adb.mac", DEFAULT_PROJECTOR_MAC)).lower().replace(":", "-")
+        except Exception:
+            pass
+
         self.adb_path = adb_path or shutil.which("adb") or DEFAULT_ADB_PATH
         self.timeout = timeout
+        self._boot_thread: Optional[threading.Thread] = None
         
         if ir_transport is None and use_ir_power is not False:
             try:
@@ -297,6 +315,127 @@ class ProjectorController:
             self.use_ir_power = bool(use_ir_power)
 
         self.ir_transport = ir_transport
+
+    def _test_tcp_port(self, ip: str, port: int = 5555, timeout: float = 0.3) -> bool:
+        """Fast non-blocking TCP socket check to test if ADB port 5555 is open."""
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            res = sock.connect_ex((ip, port))
+            sock.close()
+            return res == 0
+        except Exception:
+            return False
+
+    def _get_arp_table(self) -> Dict[str, str]:
+        """Parses Windows ARP table into {ip: normalized_mac}."""
+        try:
+            out = subprocess.check_output("arp -a", shell=True, text=True)
+            entries = {}
+            for line in out.splitlines():
+                line = line.strip()
+                m = re.search(r'(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2})', line)
+                if m:
+                    ip = m.group(1)
+                    mac = m.group(2).lower().replace(":", "-")
+                    entries[ip] = mac
+            return entries
+        except Exception as e:
+            logger.debug(f"[PROJECTOR_ARP_ERR] {e}")
+            return {}
+
+    def discover_and_update_ip(self, force_rescan: bool = False) -> Optional[str]:
+        """
+        Dynamically locates the projector on the local network using its permanent MAC address
+        and ADB port 5555. Tolerates dynamic DHCP leasing where IP changes across power cycles.
+        """
+        curr_ip = self.target.split(":")[0] if ":" in self.target else self.target
+
+        # 1. Quick check if current target IP still has port 5555 open
+        if not force_rescan and self._test_tcp_port(curr_ip, 5555, timeout=0.25):
+            return curr_ip
+
+        # 2. Check ARP table for known projector MAC address
+        target_mac = self.mac_address.lower().replace(":", "-")
+        arp_entries = self._get_arp_table()
+        for ip, mac in arp_entries.items():
+            if mac == target_mac:
+                if self._test_tcp_port(ip, 5555, timeout=0.4):
+                    if ip != curr_ip:
+                        logger.info(f"[PROJECTOR_IP_MIGRATION] Projector MAC {target_mac} moved from {curr_ip} -> {ip}. Updating target.")
+                        self._apply_new_ip(ip)
+                    return ip
+
+        # 3. Fast parallel scan of local subnet on port 5555
+        prefix = ".".join(curr_ip.split(".")[:3])
+        if not prefix or len(prefix.split(".")) != 3:
+            prefix = "192.168.1"
+        candidates = [f"{prefix}.{i}" for i in range(2, 35)]
+
+        from concurrent.futures import ThreadPoolExecutor
+        open_ips = []
+        try:
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                results = executor.map(lambda ip: (ip, self._test_tcp_port(ip, 5555, timeout=0.35)), candidates)
+                for ip, is_open in results:
+                    if is_open:
+                        open_ips.append(ip)
+        except Exception as e:
+            logger.debug(f"[PROJECTOR_SCAN_ERR] {e}")
+
+        for ip in open_ips:
+            arp_now = self._get_arp_table()
+            if arp_now.get(ip) == target_mac:
+                logger.info(f"[PROJECTOR_IP_DISCOVERED] Discovered projector MAC {target_mac} at {ip}:5555 via subnet scan.")
+                self._apply_new_ip(ip)
+                return ip
+
+        for ip in open_ips:
+            try:
+                code, out, _ = self._run_adb(["-s", f"{ip}:5555", "shell", "getprop ro.product.manufacturer"], timeout=2.0)
+                if code == 0 and "hisilicon" in out.lower():
+                    logger.info(f"[PROJECTOR_IP_VERIFIED] Verified Hisilicon projector at {ip}:5555.")
+                    self._apply_new_ip(ip)
+                    return ip
+            except Exception:
+                pass
+
+        return None
+
+    def _apply_new_ip(self, new_ip: str) -> None:
+        """Updates internal target and caches to local.properties."""
+        self.target = f"{new_ip}:5555"
+        try:
+            from pathlib import Path
+            p_file = Path("d:/AnimusSmartRoom/local.properties")
+            if p_file.exists():
+                lines = p_file.read_text(encoding="utf-8").splitlines()
+                new_lines = []
+                replaced = False
+                for line in lines:
+                    if line.startswith("projector.adb.target="):
+                        new_lines.append(f"projector.adb.target={self.target}")
+                        replaced = True
+                    else:
+                        new_lines.append(line)
+                if not replaced:
+                    new_lines.append(f"projector.adb.target={self.target}")
+                p_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                logger.info(f"[PROJECTOR_CACHE_UPDATE] Saved new target {self.target} to local.properties")
+        except Exception as e:
+            logger.debug(f"[PROJECTOR_CACHE_UPDATE_ERR] {e}")
+
+    def is_physically_on(self) -> Tuple[bool, Optional[str]]:
+        """
+        True physical ground truth check.
+        Because Zebronics PixaPlay 25 cuts out of Wi-Fi completely when off,
+        its network availability directly mirrors its physical power state.
+        """
+        found_ip = self.discover_and_update_ip()
+        if found_ip:
+            return True, found_ip
+        return False, None
 
     def _run_adb(self, args: list[str], timeout: Optional[float] = None) -> tuple[int, str, str]:
         """Runs a raw ADB command without device serial targeting."""
@@ -354,6 +493,7 @@ class ProjectorController:
                 return state == "device", state
 
         if auto_connect:
+            self.discover_and_update_ip()
             self.connect()
             code, stdout, stderr = self._run_adb(["devices", "-l"], timeout=3.0)
             for line in stdout.splitlines():
@@ -536,9 +676,16 @@ class ProjectorController:
 
     def wake(self, timeout_seconds: float = 120.0) -> bool:
         """
-        Wakes the projector display from standby/sleep.
-        If use_ir_power is enabled and ADB is offline, dispatches 1x IR Power pulse
-        and performs bounded readiness polling (tolerating 60–120s physical boot and Wi-Fi connection time).
+        Wakes the projector from standby/sleep.
+        Physical Ground Truth:
+        - If ADB is already connected and device is awake/interactive: already awake!
+        - If use_ir_power is enabled:
+          - If the projector is ALREADY ONLINE on the network (port 5555 open / on Wi-Fi),
+            suppress IR pulse and connect ADB / set HDMI 1.
+          - If OFFLINE (cold standby), fire 1x IR Power pulse to wake hardware,
+            and monitor boot in background.
+        - Pure ADB fallback (when use_ir_power is False):
+          Sends KEYCODE_WAKEUP (224).
         """
         is_ready, state = self.is_connected(auto_connect=False)
         if is_ready:
@@ -546,91 +693,117 @@ class ProjectorController:
             if cur_st.get("interactive") and cur_st.get("power_state") == ProjectorPowerState.ON.value:
                 logger.info("[PROJECTOR_WAKE] Projector is already awake and interactive.")
                 return True
-        elif self.use_ir_power:
-            # Probe network / ADB connection to see if it's already running before assuming cold standby
-            logger.info("[PROJECTOR_WAKE_PROBE] Projector not in active device table. Probing ADB connection...")
-            is_ready, state = self.is_connected(auto_connect=True)
-            if is_ready:
-                cur_st = self.get_power_state()
-                if cur_st.get("interactive") and cur_st.get("power_state") in (ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value):
-                    logger.info("[PROJECTOR_WAKE_IR_SUPPRESSED] Projector is online over ADB Wi-Fi and awake. IR pulse suppressed.")
-                    return True
 
         if self.use_ir_power and self.ir_transport:
-            if not is_ready:
-                logger.info("[PROJECTOR_WAKE] ADB offline (deep standby). Dispatching 1x IR Power pulse...")
+            physically_on, current_ip = self.is_physically_on()
+            if physically_on:
+                logger.info(f"[PROJECTOR_WAKE] Projector is already physically ON at {current_ip}. Suppressing IR pulse.")
+                self.connect()
                 try:
-                    self.ir_transport.send_power_wake()
-                except IrDebounceException:
-                    logger.info("[PROJECTOR_WAKE] IR pulse recently dispatched (debounce window active). Proceeding to readiness polling.")
-                except Exception as e:
-                    logger.error(f"[PROJECTOR_WAKE_IR_FAIL] Failed dispatching IR wake: {e}")
-                    return False
+                    self.set_source("HDMI_1")
+                except Exception:
+                    pass
+                return True
 
-                # Bounded poll for ADB boot connection and Wi-Fi readiness (default 120s physical boot & Wi-Fi connection time)
-                eff_timeout = timeout_seconds
-                t_end = time.time() + eff_timeout
-                logger.info(f"[PROJECTOR_WAKE_POLL] Polling for projector boot readiness (bounded timeout={eff_timeout:.1f}s)...")
-                while time.time() < t_end:
-                    time.sleep(2.0)
-                    ready, _ = self.is_connected(auto_connect=True)
-                    if ready:
-                        st = self.get_power_state()
-                        if st.get("power_state") in [ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value]:
-                            logger.info("[PROJECTOR_WAKE] Projector wake verified after IR pulse and boot completion.")
-                            return True
-                logger.warning(f"[PROJECTOR_WAKE_TIMEOUT] Projector wake not verified after {eff_timeout:.1f}s.")
+            logger.info("[PROJECTOR_WAKE] Projector confirmed OFF / offline. Dispatching 1x IR Power pulse to wake hardware...")
+            try:
+                self.ir_transport.send_power_wake()
+            except IrDebounceException:
+                logger.info("[PROJECTOR_WAKE] IR pulse recently dispatched (debounce window active).")
+            except Exception as e:
+                logger.error(f"[PROJECTOR_WAKE_IR_FAIL] Failed dispatching IR wake: {e}")
                 return False
+
+            # Asynchronously monitor boot and lock on once Wi-Fi connects
+            self._start_boot_monitor_async()
+            return True
 
         # Pure ADB fallback path
         if not is_ready:
-            eff_timeout = timeout_seconds
-            t_end = time.time() + eff_timeout
-            while time.time() < t_end:
-                self.connect()
-                ready, _ = self.is_connected(auto_connect=False)
-                if ready:
-                    is_ready = True
-                    break
-                time.sleep(2.0)
+            self.connect()
+            is_ready, _ = self.is_connected(auto_connect=False)
             if not is_ready:
                 return False
 
         logger.info("[PROJECTOR_WAKE] Sending KEYCODE_WAKEUP (224) to projector...")
-        self.send_key(224)
+        return self.send_key(224)
 
-        t_end = time.time() + timeout_seconds
-        while time.time() < t_end:
-            time.sleep(0.25)
-            st = self.get_power_state()
-            if st.get("power_state") in [ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value]:
-                logger.info("[PROJECTOR_WAKE] Projector wake verified.")
-                return True
-        return self.get_power_state().get("power_state") in [ProjectorPowerState.ON.value, ProjectorPowerState.AWAKE.value]
+    def _start_boot_monitor_async(self) -> None:
+        """Starts background thread to lock onto the projector when it joins Wi-Fi after boot."""
+        if self._boot_thread and self._boot_thread.is_alive():
+            logger.info("[PROJECTOR_BOOT_WORKER] Boot monitor thread is already active.")
+            return
+
+        def _boot_worker():
+            logger.info("[PROJECTOR_BOOT_WORKER] Started waiting for projector to join Wi-Fi...")
+            start_t = time.time()
+            max_wait = 90.0
+            while time.time() - start_t < max_wait:
+                time.sleep(3.0)
+                ip = self.discover_and_update_ip()
+                if ip:
+                    logger.info(f"[PROJECTOR_BOOT_WORKER] Projector online at {ip}:5555 in {time.time()-start_t:.1f}s! Connecting ADB and selecting HDMI 1...")
+                    time.sleep(2.0)  # allow Android boot services to stabilize
+                    self.connect()
+                    try:
+                        self.set_source("HDMI_1")
+                        logger.info("[PROJECTOR_BOOT_WORKER] HDMI 1 selected.")
+                    except Exception as e:
+                        logger.debug(f"[PROJECTOR_BOOT_WORKER_HDMI_ERR] {e}")
+                    break
+            else:
+                logger.warning("[PROJECTOR_BOOT_WORKER] Timed out waiting for projector to join Wi-Fi.")
+
+        self._boot_thread = threading.Thread(target=_boot_worker, daemon=True, name="ProjectorBootMonitor")
+        self._boot_thread.start()
 
     def sleep(self, timeout_seconds: float = 3.0) -> bool:
         """
-        Puts the projector display to standby/sleep via KEYCODE_SLEEP (223) or IR power.
-        If use_ir_power is enabled, dispatches 2x IR Power pulses for clean immediate shutdown.
+        Puts the projector display to standby/off.
+        Physical Ground Truth:
+        - When use_ir_power is enabled:
+          - When the projector is turned OFF, its Wi-Fi chip depowers completely.
+          - If the projector is already OFFLINE on the network, it is ALREADY OFF.
+            Firing IR pulses when the projector is off would TOGGLE IT BACK ON.
+            Therefore, if offline, we cleanly suppress the IR pulse and return True!
+          - If the projector is ONLINE, we dispatch 2x IR Power pulses for immediate shutdown,
+            disconnect ADB, and return True.
+        - Pure ADB fallback path (use_ir_power is False):
+          Sends KEYCODE_SLEEP (223).
         """
-        is_ready, _ = self.is_connected(auto_connect=False)
-        if not is_ready:
-            logger.info("[PROJECTOR_SLEEP] Projector is already disconnected/in standby.")
-            return True if self.use_ir_power else False
-
         if self.use_ir_power and self.ir_transport:
-            logger.info("[PROJECTOR_SLEEP] Dispatching 2x IR Power pulses for immediate shutdown...")
+            physically_on, current_ip = self.is_physically_on()
+            if not physically_on:
+                logger.info("[PROJECTOR_SLEEP] Projector is already physically OFF / disconnected from Wi-Fi. Suppressing IR pulses to prevent turning it ON.")
+                try:
+                    self.disconnect()
+                except Exception:
+                    pass
+                return True
+
+            logger.info(f"[PROJECTOR_SLEEP] Projector is confirmed ON at {current_ip}. Dispatching 2x IR Power pulses for immediate shutdown...")
             try:
                 ok, _ = self.ir_transport.send_power_off_immediate(inter_pulse_delay=1.0)
-                self.disconnect()
+                try:
+                    self.disconnect()
+                except Exception:
+                    pass
                 return ok
             except Exception as e:
                 logger.error(f"[PROJECTOR_SLEEP_IR_FAIL] Failed dispatching IR sleep: {e}")
-                return False
 
         # Pure ADB fallback path
+        is_ready, _ = self.is_connected(auto_connect=False)
+        if not is_ready:
+            logger.info("[PROJECTOR_SLEEP] Projector is already disconnected/in standby.")
+            return True
+
         logger.info("[PROJECTOR_SLEEP] Sending KEYCODE_SLEEP (223) to projector...")
         return self.send_key(223)
+
+    def turn_off(self) -> bool:
+        """Convenience alias to put projector to sleep / standby."""
+        return self.sleep()
 
 
     def power_off(self) -> bool:

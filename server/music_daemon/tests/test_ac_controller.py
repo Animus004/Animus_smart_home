@@ -32,8 +32,10 @@ def controller(mock_ac_status_cloud):
         local_key="dummy_key_123456",
         access_id="dummy_access_id",
         access_secret="dummy_access_sec",
-        endpoint="https://openapi.tuyain.com"
+        endpoint="https://openapi.tuyain.com",
+        strict_zero_cloud=False
     )
+    ctrl._lan_degraded_until = 9999999999.0
     # Mock transports by default
     ctrl.cloud_transport.fetch_status = MagicMock(return_value=mock_ac_status_cloud)
     ctrl.cloud_transport.send_commands = MagicMock(return_value=True)
@@ -222,6 +224,7 @@ def test_ac_swing_rejection(controller):
 # =========================================================================
 
 def test_ac_lan_transport_used_when_available(controller):
+    controller._lan_degraded_until = 0.0
     controller.lan_transport.send_heartbeat = MagicMock(return_value=True)
     controller.lan_transport.send_dps_command = MagicMock(return_value=True)
     controller.cloud_transport.fetch_status.side_effect = [
@@ -358,3 +361,48 @@ def test_fastapi_ac_endpoints(client):
         # POST /api/ac/command
         r_cmd = client.post("/api/ac/command", json={"query": "Turn on the AC."})
         assert r_cmd.status_code == 200
+
+# =========================================================================
+# 10. Strict Zero-Cloud Mode Tests
+# =========================================================================
+
+def test_strict_zero_cloud_blocks_cloud_status_fallback():
+    ctrl = AcController(
+        lan_ip="192.168.1.4",
+        lan_port=6668,
+        dev_id="dummy_dev_id",
+        local_key="dummy_key_123456",
+        strict_zero_cloud=True
+    )
+    ctrl._lan_degraded_until = 9999999999.0
+    ctrl.cloud_transport.fetch_status = MagicMock()
+    
+    st = ctrl.get_status()
+    assert st["connectivity"] == "OFFLINE"
+    assert st["verified"] is False
+    assert "Strict Zero-Cloud Mode" in st["error"]
+    # Cloud fetch status must NEVER be called
+    ctrl.cloud_transport.fetch_status.assert_not_called()
+
+def test_strict_zero_cloud_blocks_cloud_command_fallback():
+    ctrl = AcController(
+        lan_ip="192.168.1.4",
+        lan_port=6668,
+        dev_id="dummy_dev_id",
+        local_key="dummy_key_123456",
+        strict_zero_cloud=True
+    )
+    ctrl.lan_transport.send_heartbeat = MagicMock(return_value=False)
+    ctrl.cloud_transport.send_commands = MagicMock()
+    ctrl._last_known_status = {"verified": True, "power": False, "target_temperature": 20, "mode": "COOL", "fan_speed": "LOW"}
+    
+    ok_pwr, res_pwr = ctrl.set_power(True)
+    assert ok_pwr is False
+    assert "Strict Zero-Cloud Mode" in res_pwr["error"]
+    ctrl.cloud_transport.send_commands.assert_not_called()
+
+    ok_temp, res_temp = ctrl.set_temperature(24)
+    assert ok_temp is False
+    assert "Strict Zero-Cloud Mode" in res_temp["error"]
+    ctrl.cloud_transport.send_commands.assert_not_called()
+

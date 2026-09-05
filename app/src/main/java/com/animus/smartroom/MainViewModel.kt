@@ -193,9 +193,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _maskedApiKey = MutableStateFlow(apiKeyStorage.getMaskedApiKey())
     val maskedApiKey: StateFlow<String?> = _maskedApiKey.asStateFlow()
 
+    val localBrainConfigStorage = com.animus.smartroom.brain.provider.LocalBrainConfigStorage(application.applicationContext)
+    private val _brainHost = MutableStateFlow(localBrainConfigStorage.getConfig().host)
+    val brainHost: StateFlow<String> = _brainHost.asStateFlow()
+
     private val pcAlarmClient = com.animus.smartroom.routine.alarm.PcAlarmClient(
-        hostProvider = { com.animus.smartroom.brain.provider.LocalBrainConfigStorage(application.applicationContext).getConfig().host }
+        hostProvider = { localBrainConfigStorage.getConfig().host }
     )
+
+    fun onUpdateBrainHost(newHost: String) {
+        val trimmed = newHost.trim()
+        if (trimmed.isBlank()) return
+        localBrainConfigStorage.setHost(trimmed)
+        _brainHost.value = trimmed
+        Log.i("MainViewModel", "[host-config] Updated Animus host to $trimmed; triggering sync check")
+        viewModelScope.launch {
+            app.roomStateSyncClient.pollOnce()
+        }
+    }
 
     private val _activeRequestId = MutableStateFlow<String?>(null)
     val activeRequestId: StateFlow<String?> = _activeRequestId.asStateFlow()

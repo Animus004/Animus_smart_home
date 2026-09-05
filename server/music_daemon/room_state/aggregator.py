@@ -434,9 +434,14 @@ class RoomStateAggregator:
         mode_val = "IDLE"
         if self.orchestrator:
             try:
-                orch_state_fn = getattr(self.orchestrator, "get_room_state", None)
-                if callable(orch_state_fn):
-                    mode_val = str(getattr(orch_state_fn(), "value", orch_state_fn()))
+                if hasattr(self.orchestrator, "current_mode"):
+                    mode_val = str(self.orchestrator.current_mode)
+                elif hasattr(self.orchestrator, "get_room_state"):
+                    r_st = self.orchestrator.get_room_state()
+                    if isinstance(r_st, dict):
+                        mode_val = str(r_st.get("room_state") or r_st.get("room_mode", "IDLE"))
+                    else:
+                        mode_val = str(getattr(r_st, "value", r_st))
             except Exception:
                 pass
 

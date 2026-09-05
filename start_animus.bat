@@ -7,7 +7,7 @@ echo =====================================================
 echo.
 echo [1/3] Connecting ADB targets...
 adb connect 192.168.1.5:5555
-adb connect 192.168.1.11:5555
+adb connect 192.168.1.10:5555
 
 echo.
 echo [2/3] Starting Animus Daemon...

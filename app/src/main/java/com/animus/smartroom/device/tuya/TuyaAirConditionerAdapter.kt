@@ -31,7 +31,7 @@ class TuyaAirConditionerAdapter(
     private val apiClient: TuyaApiClient? = null,
     val allowWriteCommands: Boolean = true,
     private val hostProvider: (() -> String)? = null,
-    private val backendAcClient: BackendAcClient = BackendAcClient(hostProvider = hostProvider ?: { "192.168.1.9" })
+    private val backendAcClient: BackendAcClient = BackendAcClient(hostProvider = hostProvider ?: { "192.168.1.4" })
 ) : AirConditionerAdapter {
 
     override val deviceType: com.animus.smartroom.device.model.DeviceType get() = com.animus.smartroom.device.model.DeviceType.AIR_CONDITIONER
@@ -146,6 +146,26 @@ class TuyaAirConditionerAdapter(
         val targetStateStr = if (on) "ON" else "OFF"
         DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.REQUESTED, message = "Set power = $targetStateStr")
 
+        if (!allowWriteCommands) {
+            val errMsg = "Direct cloud writes disabled"
+            DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = errMsg)
+            return DeviceCommandResult(success = false, message = errMsg)
+        }
+
+        if (apiClient != null) {
+            val cmd = mapOf("code" to CODE_SWITCH, "value" to on)
+            val res = apiClient.sendCommands(device.id, listOf(cmd))
+            return if (res.isSuccess) {
+                applyTuyaStatus(listOf(TuyaDeviceStatusItem(CODE_SWITCH, on)))
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.COMPLETED, message = "power=$targetStateStr verified")
+                DeviceCommandResult(success = true, message = "${device.displayName} is now turned $targetStateStr.")
+            } else {
+                val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = "Failed to set power: $errMsg")
+                DeviceCommandResult(success = false, message = "Failed to set ${device.displayName} power: $errMsg")
+            }
+        }
+
         val result = backendAcClient.setPower(on)
         return if (result.isSuccess) {
             val json = result.getOrNull()
@@ -168,6 +188,12 @@ class TuyaAirConditionerAdapter(
     override suspend fun setTemperature(device: RoomDevice, celsius: Int): DeviceCommandResult {
         DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.REQUESTED, message = "Set temperature = $celsius°C")
 
+        if (!allowWriteCommands) {
+            val errMsg = "Direct cloud writes disabled"
+            DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = errMsg)
+            return DeviceCommandResult(success = false, message = errMsg)
+        }
+
         if (celsius < MIN_TEMPERATURE || celsius > MAX_TEMPERATURE) {
             val errMsg = "Temperature $celsius°C is outside supported range $MIN_TEMPERATURE–$MAX_TEMPERATURE°C"
             DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = errMsg)
@@ -175,6 +201,20 @@ class TuyaAirConditionerAdapter(
                 success = false,
                 message = "Invalid temperature: $celsius°C. ${device.displayName} only supports $MIN_TEMPERATURE°C to $MAX_TEMPERATURE°C."
             )
+        }
+
+        if (apiClient != null) {
+            val cmd = mapOf("code" to CODE_TEMP_SET, "value" to celsius)
+            val res = apiClient.sendCommands(device.id, listOf(cmd))
+            return if (res.isSuccess) {
+                applyTuyaStatus(listOf(TuyaDeviceStatusItem(CODE_TEMP_SET, celsius)))
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.COMPLETED, message = "targetTemperature=$celsius°C verified")
+                DeviceCommandResult(success = true, message = "${device.displayName} temperature set to $celsius°C.")
+            } else {
+                val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = "Failed to set temperature: $errMsg")
+                DeviceCommandResult(success = false, message = "Failed to set ${device.displayName} temperature: $errMsg")
+            }
         }
 
         val result = backendAcClient.setTemperature(celsius)
@@ -199,10 +239,31 @@ class TuyaAirConditionerAdapter(
     override suspend fun setMode(device: RoomDevice, mode: AcMode): DeviceCommandResult {
         DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.REQUESTED, message = "Set mode = ${mode.name}")
 
+        if (!allowWriteCommands) {
+            val errMsg = "Direct cloud writes disabled"
+            DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = errMsg)
+            return DeviceCommandResult(success = false, message = errMsg)
+        }
+
         if (mode == AcMode.HEAT) {
             val errMsg = "${device.displayName} is an inverter cooling unit and does not support heating mode"
             DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = errMsg)
             return DeviceCommandResult(success = false, message = "$errMsg.")
+        }
+
+        if (apiClient != null) {
+            val tuyaMode = MODE_ANIMUS_TO_TUYA[mode] ?: "cold"
+            val cmd = mapOf("code" to CODE_MODE, "value" to tuyaMode)
+            val res = apiClient.sendCommands(device.id, listOf(cmd))
+            return if (res.isSuccess) {
+                applyTuyaStatus(listOf(TuyaDeviceStatusItem(CODE_MODE, tuyaMode)))
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.COMPLETED, message = "mode=${mode.name} verified")
+                DeviceCommandResult(success = true, message = "${device.displayName} mode set to ${mode.name}.")
+            } else {
+                val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = "Failed to set mode: $errMsg")
+                DeviceCommandResult(success = false, message = "Failed to set ${device.displayName} mode: $errMsg")
+            }
         }
 
         val result = backendAcClient.setMode(mode.name)
@@ -226,6 +287,27 @@ class TuyaAirConditionerAdapter(
 
     override suspend fun setFanSpeed(device: RoomDevice, speed: AcFanSpeed): DeviceCommandResult {
         DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.REQUESTED, message = "Set fan speed = ${speed.name}")
+
+        if (!allowWriteCommands) {
+            val errMsg = "Direct cloud writes disabled"
+            DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = errMsg)
+            return DeviceCommandResult(success = false, message = errMsg)
+        }
+
+        if (apiClient != null) {
+            val tuyaSpeed = FAN_ANIMUS_TO_TUYA[speed] ?: "auto"
+            val cmd = mapOf("code" to CODE_FAN_SPEED, "value" to tuyaSpeed)
+            val res = apiClient.sendCommands(device.id, listOf(cmd))
+            return if (res.isSuccess) {
+                applyTuyaStatus(listOf(TuyaDeviceStatusItem(CODE_FAN_SPEED, tuyaSpeed)))
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.COMPLETED, message = "fanSpeed=${speed.name} verified")
+                DeviceCommandResult(success = true, message = "${device.displayName} fan speed set to ${speed.name}.")
+            } else {
+                val errMsg = res.exceptionOrNull()?.message ?: "Unknown error"
+                DiagnosticBus.log(tag = "ac", stage = DiagnosticStage.FAILED, message = "Failed to set fan speed: $errMsg")
+                DeviceCommandResult(success = false, message = "Failed to set ${device.displayName} fan speed: $errMsg")
+            }
+        }
 
         val result = backendAcClient.setFanSpeed(speed.name)
         return if (result.isSuccess) {
@@ -257,6 +339,15 @@ class TuyaAirConditionerAdapter(
      * Queries authoritative AC state from backend.
      */
     suspend fun refreshState(deviceId: String = ""): Result<TuyaAcState> {
+        if (apiClient != null) {
+            val res = apiClient.fetchStatus(deviceId)
+            return if (res.isSuccess) {
+                val state = applyTuyaStatus(res.getOrDefault(emptyList()))
+                Result.success(state)
+            } else {
+                Result.failure(res.exceptionOrNull() ?: Exception("API client failed"))
+            }
+        }
         val statusRes = backendAcClient.getStatus()
         return if (statusRes.isSuccess) {
             val json = statusRes.getOrNull()

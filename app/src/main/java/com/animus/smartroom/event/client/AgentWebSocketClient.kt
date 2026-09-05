@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
  * zero-external-dependency fallback transport on Android, and submits ACKs.
  */
 class AgentWebSocketClient(
-    private val hostProvider: () -> String = { "192.168.1.9" },
+    private val hostProvider: () -> String = { "192.168.1.4" },
     private val port: Int = 8095,
     private val pollIntervalMs: Long = 3000L,
     private val maxSeenEventCache: Int = 100

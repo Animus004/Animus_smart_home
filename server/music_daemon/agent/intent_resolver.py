@@ -275,7 +275,7 @@ class IntentResolver:
                             explanation="User confirmed agent proposal to warm up the room."
                         )
 
-        # Multi-Domain Empathic Reasoning Check (Headache, Going to Work, Chill Vibe, Focus Mode, Party Mode, Too Cold, Too Hot)
+        # Multi-Domain Empathic Reasoning Check (Headache, Going to Work, Chill Vibe, Focus Mode, Party Mode, Too Cold, Too Hot, Work Done, Dim Lights)
         try:
             from agent.empathic_engine import get_empathic_engine
             user_addr = getattr(getattr(self.user_profile, 'identity', None), 'preferred_address', 'buddy')
@@ -285,7 +285,7 @@ class IntentResolver:
                     raw_query=clean_text,
                     category=IntentCategory.CLEAR_EXECUTABLE,
                     primary_intent=f"EMPATHIC_{empathic_plan.scenario}",
-                    target_subsystems=["AC", "PROJECTOR", "SOUNDBAR", "PC"],
+                    target_subsystems=["AC", "PROJECTOR", "SOUNDBAR", "PC", "LIGHTING"],
                     extracted_parameters={
                         "scenario": empathic_plan.scenario,
                         "empathy_speech": empathic_plan.empathy_speech,
@@ -294,6 +294,7 @@ class IntentResolver:
                         "fire_tv_action": empathic_plan.fire_tv_action,
                         "audio_action": empathic_plan.audio_action,
                         "pc_action": empathic_plan.pc_action,
+                        "light_action": empathic_plan.light_action,
                         "scheduled_followup_minutes": empathic_plan.scheduled_followup_minutes,
                         "followup_question": empathic_plan.followup_question
                     },

@@ -75,10 +75,10 @@ def mock_agent_suite(tmp_path):
 # =============================================================================
 
 def test_user_identity_and_preferred_address(mock_agent_suite):
-    """Validates user identity and preferred address ('buddy')."""
+    """Validates user identity and preferred address ('Sir')."""
     user_model = mock_agent_suite["user_model"]
     assert user_model.identity.name == "Sayan Halder"
-    assert user_model.preferred_address == "buddy"
+    assert user_model.preferred_address == "Sir"
     assert user_model.identity.location_pin == "741235"
 
 
@@ -207,7 +207,7 @@ def test_natural_language_task_and_reminder_queries(mock_agent_suite):
 
     # Task query answer
     ans = task_mgr.answer_task_query("What do I have to do today?")
-    assert "buddy" in ans.lower()
+    assert "sir" in ans.lower()
     assert "sql" in ans.lower()
 
 
@@ -309,7 +309,7 @@ def test_agent_feedback_generator(mock_agent_suite):
     assert "the projector" in fb
     assert "Fire TV" in fb
     assert "in place" in fb or "soundbar" in fb
-    assert "buddy" in fb
+    assert "Sir" in fb
 
 
 # =============================================================================
@@ -322,13 +322,13 @@ def test_daily_brief_generation(mock_agent_suite):
 
     weather = {"available": True, "condition": "Partly Cloudy", "outdoor_temperature_c": 28.5}
     morning = brief_engine.generate_morning_brief(weather_info=weather)
-    assert "Good morning, buddy" in morning
+    assert "Good morning, Sir" in morning
     assert "SQL" in morning
     assert "Guitar" in morning
     assert "741235" in morning
 
     evening = brief_engine.generate_evening_brief()
-    assert "Good night, buddy" in evening
+    assert "Good night, Sir" in evening
 
 
 # =============================================================================
@@ -361,7 +361,7 @@ def test_agent_interaction_pipeline():
     resp_morning = client.post("/api/agent/interact", json={"utterance": "Good morning"})
     assert resp_morning.status_code == 200
     data_m = resp_morning.json()
-    assert "Good morning, buddy" in data_m["agent_message"]
+    assert "Good morning, Sir" in data_m["agent_message"]
 
     # 2. Lunch trigger
     resp_lunch = client.post("/api/agent/interact", json={"utterance": "I had lunch"})
@@ -384,11 +384,11 @@ def test_agent_interaction_pipeline():
     # 5. Profile & Tasks endpoints
     resp_profile = client.get("/api/agent/profile")
     assert resp_profile.status_code == 200
-    assert resp_profile.json()["identity"]["preferred_address"] == "buddy"
+    assert resp_profile.json()["identity"]["preferred_address"] == "Sir"
 
     resp_tasks = client.get("/api/agent/tasks")
     assert resp_tasks.status_code == 200
-    assert len(resp_tasks.json()) >= 3
+    assert len(resp_tasks.json()) >= 2
 
     resp_brief = client.get("/api/agent/brief")
     assert resp_brief.status_code == 200

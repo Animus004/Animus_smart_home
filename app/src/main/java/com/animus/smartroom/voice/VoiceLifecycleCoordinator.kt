@@ -1,6 +1,7 @@
 package com.animus.smartroom.voice
 
 import android.util.Log
+import com.animus.smartroom.core.port.VoiceInputPort
 import com.animus.smartroom.core.port.VoiceOutputPort
 import com.animus.smartroom.core.port.VoicePortState
 import com.animus.smartroom.core.runtime.RuntimeControlPort
@@ -28,10 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class VoiceLifecycleCoordinator(
     private val wakeWordEngine: WakeWordEngine,
-    private val speechRecognitionManager: SpeechRecognitionManager,
+    private val speechRecognitionManager: VoiceInputPort,
     private val runtimeControlPort: RuntimeControlPort,
     private val voiceOutputPort: VoiceOutputPort? = null,
-    private val configStorage: VoiceWakeWordConfigStorage? = null
+    private val configStorage: VoiceWakeWordConfigStorage? = null,
+    dispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Main
 ) {
     companion object {
         private const val TAG = "VoiceLifecycleCoord"
@@ -41,7 +43,7 @@ class VoiceLifecycleCoordinator(
     private val _currentState = MutableStateFlow(WakeWordState.IDLE)
     val currentState: StateFlow<WakeWordState> = _currentState.asStateFlow()
 
-    private val coordinatorScope = CoroutineScope(Dispatchers.Main)
+    private val coordinatorScope = CoroutineScope(dispatcher)
     private var activeCycleJob: Job? = null
     private val isCycleActive = AtomicBoolean(false)
     private var lastWakeTimestamp = 0L

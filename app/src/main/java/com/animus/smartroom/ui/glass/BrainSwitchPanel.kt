@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -33,10 +34,14 @@ fun BrainSwitchPanel(
     maskedApiKey: String?,
     onSaveApiKey: (String?) -> Unit,
     onTestApiKey: (String?, (Boolean, String) -> Unit) -> Unit,
+    brainHost: String = "192.168.1.4",
+    isBackendConnected: Boolean = false,
+    onUpdateBrainHost: (String) -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var apiKeyInput by remember { mutableStateOf("") }
+    var hostInput by remember(brainHost) { mutableStateOf(brainHost) }
     var testResultMsg by remember { mutableStateOf<String?>(null) }
     var isTesting by remember { mutableStateOf(false) }
 
@@ -222,6 +227,103 @@ fun BrainSwitchPanel(
                             fontSize = 11.sp
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // SECTION 2.5: ANIMUS SERVER HOST CONFIGURATION
+            Text(
+                text = "ANIMUS PC SERVER HOST (PORT 8095)",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Status Badge & Reset Action
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (isBackendConnected) GlassTokens.AccentGreen else GlassTokens.AccentRed)
+                    )
+                    Text(
+                        text = if (isBackendConnected) "ONLINE: $brainHost:8095" else "OFFLINE: $brainHost:8095",
+                        color = if (isBackendConnected) GlassTokens.AccentGreen else GlassTokens.AccentRed,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                TextButton(
+                    onClick = {
+                        hostInput = "192.168.1.4"
+                        onUpdateBrainHost("192.168.1.4")
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "Reset Default",
+                        color = GlassTokens.AccentCyan,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(GlassTokens.CornerRadiusMedium)
+                    .background(GlassTokens.GlassSurface)
+                    .border(1.dp, GlassTokens.BorderLight, GlassTokens.CornerRadiusMedium)
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextField(
+                    value = hostInput,
+                    onValueChange = { hostInput = it },
+                    placeholder = {
+                        Text("e.g. 192.168.1.4", color = Color.White.copy(alpha = 0.35f), fontSize = 12.sp)
+                    },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = GlassTokens.AccentGreen,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                TextButton(
+                    onClick = {
+                        val host = hostInput.trim()
+                        if (host.isNotBlank()) {
+                            onUpdateBrainHost(host)
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "Save IP",
+                        color = GlassTokens.AccentGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
                 }
             }
 

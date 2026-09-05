@@ -315,7 +315,11 @@ class AnimusApplication : Application() {
 
         roomStateSyncClient = com.animus.smartroom.context.client.RoomStateSyncClient(
             hostProvider = { localBrainConfigStorage.getConfig().host },
-            port = 8095
+            port = 8095,
+            onHostAutoDiscovered = { newHost ->
+                Log.i(TAG, "[auto-discovery] Persisting newly discovered Animus host: $newHost")
+                localBrainConfigStorage.setHost(newHost)
+            }
         )
         roomStateSyncClient.start()
     }

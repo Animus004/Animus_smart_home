@@ -24,9 +24,16 @@ class LocalBrainConfigStorage(context: Context) {
     fun getConfig(): LocalBrainConfig {
         val storedWarmup = prefs.getInt(KEY_WARMUP_TIMEOUT_MS, 300_000)
         val effectiveWarmup = if (storedWarmup < 180_000) 300_000 else storedWarmup
+        val rawHost = prefs.getString(KEY_HOST, "192.168.1.4") ?: "192.168.1.4"
+        val effectiveHost = if (rawHost == "192.168.1.9" || rawHost.isBlank()) {
+            prefs.edit().putString(KEY_HOST, "192.168.1.4").apply()
+            "192.168.1.4"
+        } else {
+            rawHost
+        }
         return LocalBrainConfig(
             enabled = prefs.getBoolean(KEY_ENABLED, true),
-            host = prefs.getString(KEY_HOST, "192.168.1.9") ?: "192.168.1.9",
+            host = effectiveHost,
             port = prefs.getInt(KEY_PORT, 11434),
             model = prefs.getString(KEY_MODEL, "qwen3:4b-instruct") ?: "qwen3:4b-instruct",
             timeoutMs = prefs.getInt(KEY_TIMEOUT_MS, 30_000),

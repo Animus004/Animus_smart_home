@@ -12,17 +12,21 @@ import requests
 # Add server/music_daemon to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "server", "music_daemon")))
 
+from datetime import datetime
+
 API_BASE_URL = os.getenv("ANIMUS_API_URL", "http://127.0.0.1:8095")
 
 
 def print_banner():
-    print("=" * 65)
-    print("   ★ ANIMUS PERSONAL ROOM INTELLIGENCE CONSOLE ★   ")
-    print("   Deterministic Physical Room Agent | Phase 2 Production   ")
-    print("=" * 65)
+    now_str = datetime.now().astimezone().strftime("%A, %d %B %Y, %I:%M %p (%Z)")
+    print("=" * 68)
+    print("      ★ ANIMUS COGNITIVE SMART ROOM ORCHESTRATOR CONSOLE ★      ")
+    print("   Agent-Centric Cognition | Local Qwen 4B + Gemini Hybrid Cloud   ")
+    print("=" * 68)
+    print(f"Current Local Time: {now_str}")
     print(f"Connecting to Animus Daemon at: {API_BASE_URL}")
-    print("Type your request naturally (e.g. 'Movie time', 'Make it 24', 'What's happening?')")
-    print("Commands: 'status' (room summary), 'clear' (reset context), 'exit' / 'quit'\n")
+    print("Type your request naturally (e.g. 'Movie time', 'What are my active goals?', 'Make it 22')")
+    print("Special Commands: 'goals' (active tasks), 'memory' (facts), 'status', 'clear', 'exit'\n")
 
 
 def check_daemon_health() -> bool:
@@ -31,17 +35,6 @@ def check_daemon_health() -> bool:
         return resp.status_code == 200
     except Exception:
         return False
-
-
-def get_room_summary():
-    try:
-        resp = requests.post(f"{API_BASE_URL}/api/agent/interact", json={"utterance": "What's happening?"}, timeout=5.0)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get("agent_message", "No response from room.")
-    except Exception as e:
-        return f"Could not fetch room summary: {e}"
-    return "Room status unavailable."
 
 
 def main():
@@ -81,10 +74,39 @@ def main():
                 print("[CONTEXT] Conversation history cleared.\n")
                 continue
 
+            if user_input.lower() in ("time", "/time"):
+                now_str = datetime.now().astimezone().strftime("%A, %d %B %Y, %I:%M:%S %p (%Z)")
+                print(f"[TIME] {now_str}\n")
+                continue
+
+            if user_input.lower() in ("goals", "/goals", "goal", "/goal"):
+                from agent.long_term_memory import get_long_term_memory
+                lt_mem = get_long_term_memory()
+                active = lt_mem.get_active_goal()
+                if active:
+                    print(f"\n[ACTIVE GOAL] {active['title']} (Status: {active['status']})")
+                    for sg in active.get("subgoals", []):
+                        mark = "[✓]" if sg.get("completed") else ("[→]" if sg.get("is_current") else "[ ]")
+                        print(f"  {mark} {sg.get('title', '')}")
+                    print()
+                else:
+                    print("\n[GOALS] No active continuous goal. Give Animus an objective!\n")
+                continue
+
+            if user_input.lower() in ("memory", "/memory"):
+                from agent.long_term_memory import get_long_term_memory
+                facts = get_long_term_memory().get_all_facts()
+                print("\n[EPITEMIC MEMORY FACTS]")
+                for k, v in list(facts.items())[:12]:
+                    print(f"  • {k}: {v}")
+                print()
+                continue
+
             if user_input.lower() == "status":
-                user_input = "What's happening?"
+                user_input = "What's happening in the room right now?"
 
             # Send turn
+            t0 = time.time()
             if use_embedded:
                 resp = agent.interact(user_input)
                 agent_msg = resp.agent_message
@@ -94,7 +116,6 @@ def main():
                 r = requests.post(f"{API_BASE_URL}/api/agent/interact", json={"utterance": user_input}, timeout=120.0)
                 if r.status_code == 200:
                     data = r.json()
-
                     agent_msg = data.get("agent_message", "")
                     action_taken = data.get("action_taken", False)
                     intent = data.get("understood_intent", "")
@@ -102,9 +123,12 @@ def main():
                     print(f"[ERROR] HTTP {r.status_code}: {r.text}")
                     continue
 
+            dur = round(time.time() - t0, 2)
             print(f"\nAnimus > {agent_msg}")
             if action_taken:
-                print(f"         [Verified Physical Action Executed | Intent: {intent}]")
+                print(f"         [Physical Execution Verified | Intent: {intent} | Latency: {dur}s]")
+            else:
+                print(f"         [Response Latency: {dur}s]")
             print()
 
         except KeyboardInterrupt:
@@ -116,3 +140,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

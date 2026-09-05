@@ -12,10 +12,10 @@ import java.net.URL
 
 /**
  * PC-local music provider that delegates audio search, playback, pause, resume,
- * and volume control to the Animus Music Daemon running on the home PC (http://192.168.1.9:8095).
+ * and volume control to the Animus Music Daemon running on the home PC (http://192.168.1.4:8095).
  */
 open class PcLocalMusicProvider(
-    private val host: String = "192.168.1.9",
+    private val host: String = "192.168.1.4",
     private val port: Int = 8095,
     private val connectTimeoutMs: Int = 2000,
     private val readTimeoutMs: Int = 30000,
@@ -104,6 +104,13 @@ open class PcLocalMusicProvider(
     }
 
     data class MovieModeResult(
+        val success: Boolean,
+        val status: String,
+        val message: String,
+        val spokenResponse: String? = null
+    )
+
+    data class WorkModeResult(
         val success: Boolean,
         val status: String,
         val message: String,
@@ -244,6 +251,98 @@ open class PcLocalMusicProvider(
 
     open fun stopMovieMode(): Boolean {
         return stopMovieModeWithFeedback().success
+    }
+
+    open fun startWorkModeWithFeedback(): WorkModeResult = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/agent/work/start"
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending start work mode request to $url")
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 30000
+                doOutput = true
+                doInput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write("{}")
+                writer.flush()
+            }
+            val code = connection.responseCode
+            val responseText = if (code in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                val err = connection.errorStream
+                if (err != null) BufferedReader(InputStreamReader(err, Charsets.UTF_8)).use { it.readText() } else "HTTP $code"
+            }
+            Log.i(TAG, "[PC_WORK_MODE_RESPONSE] $url HTTP $code: $responseText")
+            if (code in 200..299) {
+                val jsonResponse = JSONObject(responseText)
+                val isSuccess = jsonResponse.optBoolean("success", true)
+                val msg = jsonResponse.optString("message", "Work Mode engaged.")
+                WorkModeResult(success = isSuccess, status = "SUCCESS", message = msg, spokenResponse = msg)
+            } else {
+                WorkModeResult(success = false, status = "HTTP_$code", message = "PC daemon error: $responseText", spokenResponse = "Failed to launch Work Mode.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PC_WORK_MODE_ERROR] Error starting work mode: ${e.message}", e)
+            WorkModeResult(success = false, status = "NETWORK_ERROR", message = e.message ?: "Network error", spokenResponse = "Cannot connect to PC daemon.")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    open fun stopWorkModeWithFeedback(): WorkModeResult = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+        val url = "$baseUrl/api/agent/work/wrapup"
+        Log.i(TAG, "[PC_ROOM_CONTROL] Sending wrap up work mode request to $url")
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = 30000
+                doOutput = true
+                doInput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write("{}")
+                writer.flush()
+            }
+            val code = connection.responseCode
+            val responseText = if (code in 200..299) {
+                BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8)).use { it.readText() }
+            } else {
+                val err = connection.errorStream
+                if (err != null) BufferedReader(InputStreamReader(err, Charsets.UTF_8)).use { it.readText() } else "HTTP $code"
+            }
+            Log.i(TAG, "[PC_WORK_WRAPUP_RESPONSE] $url HTTP $code: $responseText")
+            if (code in 200..299) {
+                val jsonResponse = JSONObject(responseText)
+                val isSuccess = jsonResponse.optBoolean("success", true)
+                val msg = jsonResponse.optString("message", "Work wrap-up completed.")
+                WorkModeResult(success = isSuccess, status = "SUCCESS", message = msg, spokenResponse = msg)
+            } else {
+                WorkModeResult(success = false, status = "HTTP_$code", message = "PC daemon error: $responseText", spokenResponse = "Failed to wrap up work.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PC_WORK_WRAPUP_ERROR] Error wrapping up work mode: ${e.message}", e)
+            WorkModeResult(success = false, status = "NETWORK_ERROR", message = e.message ?: "Network error", spokenResponse = "Cannot connect to PC daemon.")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    open fun startWorkMode(): Boolean {
+        return startWorkModeWithFeedback().success
+    }
+
+    open fun stopWorkMode(): Boolean {
+        return stopWorkModeWithFeedback().success
     }
 
     open fun setProjectorPower(on: Boolean): Pair<Boolean, String> = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {

@@ -92,6 +92,8 @@ class MainActivity : ComponentActivity() {
                     val chatHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
                     val actionFeedback by viewModel.actionFeedbackState.collectAsStateWithLifecycle()
                     val roomState by viewModel.roomState.collectAsStateWithLifecycle()
+                    val brainHost by viewModel.brainHost.collectAsStateWithLifecycle()
+                    val isBackendConnected by viewModel.isBackendConnected.collectAsStateWithLifecycle()
 
                     ImmersiveGlassScreen(
                         visualBrainState = visualBrainState,
@@ -106,6 +108,9 @@ class MainActivity : ComponentActivity() {
                         maskedApiKey = maskedApiKey,
                         onSaveApiKey = { viewModel.onSaveGeminiApiKey(it) },
                         onTestApiKey = { key, callback -> viewModel.onTestGeminiConnection(key, callback) },
+                        brainHost = brainHost,
+                        isBackendConnected = isBackendConnected,
+                        onUpdateBrainHost = { viewModel.onUpdateBrainHost(it) },
                         widgetSettings = widgetSettings,
                         onToggleClock = { viewModel.toggleWidgetClock(it) },
                         onToggleWeather = { viewModel.toggleWidgetWeather(it) },

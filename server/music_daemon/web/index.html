@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animus — Data Analyst Career & Smart Room Interface</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-darkest: #090b10;
+      --bg-surface: #10141e;
+      --bg-card: #151a27;
+      --bg-card-hover: #1c2333;
+      --bg-input: #121722;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(99, 102, 241, 0.4);
+      --primary: #6366f1;
+      --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --gemini-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%);
+      --cyan: #06b6d4;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-sub: #6b7280;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+      --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.4);
+      --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-darkest);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── TOP NAVBAR ─── */
+    header {
+      height: 64px;
+      background-color: rgba(16, 20, 30, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 100;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--gemini-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .brand-icon svg {
+      width: 20px;
+      height: 20px;
+      fill: #fff;
+    }
+
+    .brand-text {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .system-status-pills {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-pill {
+      font-size: 0.75rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-full);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .status-green { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
+    .status-purple { background: #c084fc; box-shadow: 0 0 8px #c084fc; }
+    .status-cyan { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+    .status-amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+
+    .interactive-btn-pill {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .interactive-btn-pill:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* ─── MAIN APP LAYOUT ─── */
+    .app-body {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 64px);
+      overflow: hidden;
+    }
+
+    /* ─── LEFT SIDEBAR (ROADMAP & CONTEXT) ─── */
+    .sidebar {
+      width: 380px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    .panel-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .panel-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #e2e8f0;
+    }
+
+    .card-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    /* Roadmap Progress Bar */
+    .progress-track {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--gemini-gradient);
+      width: 38%;
+      border-radius: var(--radius-full);
+      transition: width 0.5s ease;
+    }
+
+    .subgoals-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .subgoal-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .subgoal-item.completed {
+      color: var(--text-sub);
+      text-decoration: line-through;
+    }
+    .subgoal-item.current {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.3);
+      color: #e0e7ff;
+      font-weight: 500;
+    }
+
+    .check-icon {
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .check-done { color: var(--emerald); }
+    .check-current { color: #818cf8; animation: pulse 2s infinite; }
+    .check-pending { color: var(--text-sub); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.92); }
+    }
+
+    /* Tasks Section */
+    .task-card-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+    }
+    .task-name {
+      font-size: 0.82rem;
+      color: var(--text-main);
+      font-weight: 500;
+    }
+    .task-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: var(--radius-full);
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--rose);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+    }
+
+    /* Work Context Display */
+    .context-file-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      background: rgba(6, 182, 212, 0.1);
+      color: #22d3ee;
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      word-break: break-all;
+    }
+
+    .quick-actions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .action-btn {
+      padding: 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .action-btn:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-1px);
+    }
+    .action-btn-primary {
+      background: var(--primary-gradient);
+      border: none;
+      box-shadow: var(--shadow-glow);
+    }
+    .action-btn-primary:hover {
+      opacity: 0.95;
+    }
+
+    /* ─── RIGHT MAIN CHAT AREA (GEMINI STYLE) ─── */
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background-color: var(--bg-darkest);
+    }
+
+    .messages-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 30px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .messages-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .messages-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    /* Welcome Hero Card */
+    .welcome-hero {
+      margin: 40px auto 20px auto;
+      max-width: 680px;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .welcome-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: var(--gemini-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .welcome-desc {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .chips-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .starter-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-full);
+      padding: 8px 16px;
+      font-size: 0.82rem;
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .starter-chip:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(99, 102, 241, 0.4);
+      transform: translateY(-2px);
+    }
+
+    /* Chat Messages */
+    .message-row {
+      display: flex;
+      gap: 16px;
+      max-width: 820px;
+      width: 100%;
+      margin: 0 auto;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-row.user {
+      justify-content: flex-end;
+    }
+
+    .msg-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .user-avatar {
+      background: #334155;
+      color: #fff;
+    }
+    .agent-avatar {
+      background: var(--gemini-gradient);
+      color: #fff;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .msg-bubble {
+      padding: 16px 20px;
+      border-radius: var(--radius-lg);
+      font-size: 0.92rem;
+      line-height: 1.6;
+      max-width: 720px;
+    }
+
+    .message-row.user .msg-bubble {
+      background: #1e293b;
+      color: #f8fafc;
+      border-bottom-right-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      white-space: pre-wrap;
+    }
+
+    .message-row.agent .msg-bubble {
+      background: var(--bg-card);
+      color: #f1f5f9;
+      border-bottom-left-radius: 4px;
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .msg-bubble p {
+      margin-bottom: 10px;
+    }
+    .msg-bubble p:last-child {
+      margin-bottom: 0;
+    }
+
+    .msg-bubble code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      color: #38bdf8;
+    }
+
+    .msg-bubble pre {
+      font-family: 'JetBrains Mono', monospace;
+      background: #090c15;
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      overflow-x: auto;
+      margin: 12px 0;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: #e2e8f0;
+      font-size: 0.85rem;
+    }
+
+    .meta-tag {
+      font-size: 0.7rem;
+      color: var(--text-sub);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ─── INPUT AREA (BOTTOM BAR) ─── */
+    .input-bar-container {
+      padding: 20px 40px;
+      background: linear-gradient(to top, var(--bg-darkest) 70%, transparent);
+      z-index: 50;
+    }
+
+    .input-box-wrapper {
+      max-width: 820px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .input-box-wrapper:focus-within {
+      border-color: #6366f1;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.25);
+    }
+
+    textarea#user-input {
+      width: 100%;
+      min-height: 48px;
+      max-height: 180px;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+    }
+    textarea#user-input::placeholder {
+      color: var(--text-sub);
+    }
+
+    .input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .input-hints {
+      font-size: 0.72rem;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .input-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+    }
+
+    .send-btn {
+      background: var(--primary-gradient);
+      color: #fff;
+      border: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-glow);
+      transition: transform 0.2s ease;
+    }
+    .send-btn:hover {
+      transform: scale(1.08);
+    }
+    .send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Loading indicator */
+    .typing-dots {
+      display: flex;
+      gap: 4px;
+      padding: 4px 0;
+    }
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #818cf8;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+    .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="brand-group">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+      </div>
+      <div class="brand-text">ANIMUS COGNITIVE OS</div>
+      <span class="brand-badge">Executive Core</span>
+    </div>
+
+    <div class="system-status-pills">
+      <div class="status-pill" id="pill-vision" title="Physical Camera Perception (Zero-Cloud In-RAM)">
+        <span class="status-indicator status-cyan" id="vision-indicator"></span>
+        <span id="vision-text">📷 Desk: Clear</span>
+      </div>
+      <div class="status-pill" id="pill-model">
+        <span class="status-indicator status-green"></span>
+        <span>Local Qwen 4B (Ready)</span>
+      </div>
+      <div class="status-pill" id="pill-cloud">
+        <span class="status-indicator status-purple"></span>
+        <span>Zero-Cloud Strict (LAN)</span>
+      </div>
+      <div class="status-pill interactive-btn-pill" id="pill-mode" onclick="toggleWorkMode()">
+        <span class="status-indicator status-cyan"></span>
+        <span id="label-mode">Mode: WORK</span>
+      </div>
+      <div class="status-pill" id="pill-ac">
+        <span class="status-indicator status-cyan"></span>
+        <span>AC: 24°C COOL</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- APP BODY -->
+  <div class="app-body">
+    
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      
+      <!-- Career Roadmap Card -->
+      <div class="panel-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🎯</span> Career Target: Data Analyst
+          </div>
+          <span class="brand-badge" id="roadmap-pct">38% Complete</span>
+        </div>
+        <div class="card-subtitle">
+          Primary Objective: Land Data Analyst Job via SQL & Business Portfolio.
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-bar-fill"></div>
+        </div>
+        <div class="subgoals-list" id="subgoals-container">
+          <!-- Populated via API -->
+          <div class="subgoal-item completed">
+            <span class="check-icon check-done">✓</span>
+            <span>Completed 3 Excel Portfolio Projects</span>
+          </div>
+          <div class="subgoal-item completed">
+            <span class="check-icon check-done">✓</span>
+            <span>Blinkit Stock-Out SQL: Schema design & modeling</span>
+          </div>
+          <div class="subgoal-item current">
+            <span class="check-icon check-current">➔</span>
+            <span>Blinkit SQL: Calculate OOS duration with LAG() & CTEs</span>
+          </div>
+          <div class="subgoal-item">
+            <span class="check-icon check-pending">○</span>
+            <span>Blinkit SQL: Estimate lost revenue & SKU penalties</span>
+          </div>
+          <div class="subgoal-item">
+            <span class="check-icon check-pending">○</span>
+            <span>Blinkit SQL: Executive report & replenishment advice</span>
+          </div>
+          <div class="subgoal-item">
+            <span class="check-icon check-pending">○</span>
+            <span>Power BI / Tableau Interactive Dashboard</span>
+          </div>
+          <div class="subgoal-item">
+            <span class="check-icon check-pending">○</span>
+            <span>Resume & GitHub portfolio case study write-up</span>
+          </div>
+          <div class="subgoal-item">
+            <span class="check-icon check-pending">○</span>
+            <span>SQL technical mock interview challenges</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Physical Perception & Hardware Card -->
+      <div class="panel-card" id="perception-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>👁️</span> Physical Perception & Peripherals
+          </div>
+          <span class="brand-badge" id="vision-badge" style="color:var(--emerald);">LIVE</span>
+        </div>
+        
+        <div class="card-subtitle" id="vision-hardware-subtitle">
+          HD Camera (DirectShow Index 2) & HP Ink Tank 310
+        </div>
+
+        <!-- Optical Telemetry Grid -->
+        <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+          
+          <!-- Desk Occupancy Row -->
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+            <span style="color: var(--text-muted);">Desk Status:</span>
+            <span id="vision-occupancy" style="font-weight: 600; color: #38bdf8;">○ EMPTY</span>
+          </div>
+
+          <!-- Focus Timer Row -->
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+            <span style="color: var(--text-muted);">Seated Focus:</span>
+            <span id="vision-focus-timer" style="font-family: 'JetBrains Mono', monospace; color: #a855f7;">00:00:00</span>
+          </div>
+
+          <!-- Ambient Lux & Lighting -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+              <span style="color: var(--text-muted);">Ambient Light:</span>
+              <span id="vision-lux-label" style="color: #f59e0b; font-weight: 500;">45.7 Lux (DIM / AMBIENT)</span>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+              <div id="vision-lux-bar" style="height: 100%; width: 18%; background: linear-gradient(90deg, #38bdf8, #f59e0b); border-radius: 4px; transition: width 0.4s ease;"></div>
+            </div>
+          </div>
+
+          <!-- Motion Energy Flux -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+              <span style="color: var(--text-muted);">Motion Activity:</span>
+              <span id="vision-motion-label" style="color: #10b981; font-weight: 500;">0.0% Stable</span>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+              <div id="vision-motion-bar" style="height: 100%; width: 0%; background: var(--emerald); border-radius: 4px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Quick Physical Actions Grid -->
+        <div class="quick-actions-grid" style="margin-top: 14px;">
+          <button class="action-btn action-btn-primary" id="btn-print-briefing" onclick="printDailyBriefing()" title="Print Executive Briefing Sheet on HP Ink Tank 310">
+            <span>🖨️</span> Print Daily Sheet
+          </button>
+          <button class="action-btn" id="btn-show-briefing" onclick="fetchMorningBriefing()" title="Display Morning Briefing in Chat Feed">
+            <span>📋</span> Morning Briefing
+          </button>
+        </div>
+      </div>
+
+      <!-- Active Work Windows Card -->
+      <div class="panel-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>💻</span> Workstation Context
+          </div>
+          <span class="status-indicator status-green"></span>
+        </div>
+        <div class="card-subtitle">
+          Auto-detected open script & document headers on PC:
+        </div>
+        <div id="detected-files-list">
+          <div class="context-file-pill">
+            <span>📄</span> blinkit_stock_out.sql (MySQL Workbench)
+          </div>
+        </div>
+        
+        <div class="quick-actions-grid">
+          <button class="action-btn action-btn-primary" id="btn-start-work" onclick="startWorkMode()">
+            <span>⚡</span> Start Work
+          </button>
+          <button class="action-btn" id="btn-wrapup-work" onclick="wrapupWorkMode()">
+            <span>💾</span> Wrap Up Work
+          </button>
+        </div>
+      </div>
+
+      <!-- Prioritized Tasks Card -->
+      <div class="panel-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📋</span> Tomorrow's Priorities
+          </div>
+        </div>
+        <div id="tasks-container">
+          <div class="task-card-item">
+            <span class="task-name">Blinkit SQL: Calculate OOS duration per store</span>
+            <span class="task-badge">HIGH</span>
+          </div>
+          <div class="task-card-item">
+            <span class="task-name">Blinkit SQL: Draft lost revenue estimation</span>
+            <span class="task-badge">HIGH</span>
+          </div>
+          <div class="task-card-item">
+            <span class="task-name">Guitar practice session (30 mins)</span>
+            <span class="task-badge" style="color:#eab308; background:rgba(234,179,8,0.15); border-color:rgba(234,179,8,0.3);">MED</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- CHAT FEED -->
+    <main class="chat-container">
+      
+      <div class="messages-scroll" id="messages-stream">
+        
+        <!-- Welcome Hero -->
+        <div class="welcome-hero" id="welcome-hero">
+          <div class="welcome-title">Good day, Sir.</div>
+          <div class="welcome-desc">
+            Your personal AI Executive Assistant and Data Analyst mentor is ready. Paste your daily ChatGPT work summary or code below, and Animus will analyze your progress, update your career roadmap, and schedule tomorrow's milestones automatically.
+          </div>
+
+          <div class="chips-container">
+            <button class="starter-chip" onclick="pasteSampleSummary()">
+              <span>📋</span> Paste Sample ChatGPT Summary
+            </button>
+            <button class="starter-chip" onclick="sendQuickMessage('What is my priority task for tomorrow on the Blinkit project?')">
+              <span>🎯</span> Tomorrow's Priority
+            </button>
+            <button class="starter-chip" onclick="sendQuickMessage('Animus, what SQL window functions are essential for quick-commerce interviews?')">
+              <span>💡</span> Interview Insights
+            </button>
+            <button class="starter-chip" onclick="startWorkMode()">
+              <span>🚀</span> Start Work Mode
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- INPUT BAR -->
+      <div class="input-bar-container">
+        <div class="input-box-wrapper">
+          <textarea 
+            id="user-input" 
+            placeholder="Paste your ChatGPT work summary or ask Animus anything, Sir..."
+            rows="1"
+            onkeydown="handleKeyDown(event)"
+          ></textarea>
+          
+          <div class="input-footer">
+            <div class="input-hints">
+              <span>Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for newline</span>
+            </div>
+            
+            <div class="input-buttons">
+              <button class="icon-btn" id="btn-tts" title="Toggle Neural Speech" onclick="toggleTts()">
+                <span id="tts-icon">🔊</span>
+              </button>
+              <button class="send-btn" id="btn-send" onclick="sendMessage()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script>
+    let ttsEnabled = true;
+    let lastSeenTurnTimestamp = 0;
+
+    // Load initial roadmap, context & chat history on startup
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchRoadmap();
+      fetchWorkContext();
+      fetchVisionPresence();
+      loadChatHistory();
+
+      // Periodically sync cross-device chat history & context every 2.5s
+      setInterval(syncChatHistory, 2500);
+      setInterval(fetchWorkContext, 3500);
+      setInterval(fetchRoadmap, 5000);
+      setInterval(fetchVisionPresence, 2000);
+    });
+
+    async function loadChatHistory() {
+      try {
+        const res = await fetch('/api/agent/chat/history?limit=30');
+        if (!res.ok) return;
+        const data = await res.json();
+        const turns = data.turns || [];
+        if (turns.length > 0) {
+          const hero = document.getElementById('welcome-hero');
+          if (hero) hero.style.display = 'none';
+          for (const turn of turns) {
+            appendMessage('user', turn.user);
+            appendMessage('agent', turn.agent, turn.intent);
+            if (turn.timestamp > lastSeenTurnTimestamp) {
+              lastSeenTurnTimestamp = turn.timestamp;
+            }
+          }
+        }
+      } catch (err) {
+        console.log('Error loading chat history:', err);
+      }
+    }
+
+    async function syncChatHistory() {
+      if (lastSeenTurnTimestamp <= 0) return;
+      try {
+        const res = await fetch(`/api/agent/chat/history?since=${lastSeenTurnTimestamp}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const turns = data.turns || [];
+        if (turns.length > 0) {
+          const hero = document.getElementById('welcome-hero');
+          if (hero) hero.style.display = 'none';
+          for (const turn of turns) {
+            if (turn.timestamp > lastSeenTurnTimestamp) {
+              lastSeenTurnTimestamp = turn.timestamp;
+              appendMessage('user', turn.user);
+              appendMessage('agent', turn.agent, turn.intent);
+
+              if (turn.agent && turn.agent.toLowerCase().includes('work mode activated')) {
+                document.getElementById('label-mode').innerText = 'Mode: WORK';
+              } else if (turn.agent && (turn.agent.toLowerCase().includes('applications closed') || turn.agent.toLowerCase().includes('wrap up') || turn.agent.toLowerCase().includes('progress saved'))) {
+                document.getElementById('label-mode').innerText = 'Mode: RELAX';
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // quiet background sync
+      }
+    }
+
+    async function fetchRoadmap() {
+      try {
+        const res = await fetch('/api/agent/career_roadmap');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderRoadmap(data);
+      } catch (err) {
+        console.log('Error fetching roadmap:', err);
+      }
+    }
+
+    async function fetchWorkContext() {
+      try {
+        const res = await fetch('/api/pc/work_context');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderWorkContext(data);
+      } catch (err) {
+        console.log('Error fetching work context:', err);
+      }
+    }
+
+    async function fetchVisionPresence() {
+      try {
+        const res = await fetch('/api/vision/presence');
+        if (!res.ok) return;
+        const d = await res.json();
+        renderVisionPresence(d);
+      } catch (err) {
+        // quiet background poll
+      }
+    }
+
+    function renderVisionPresence(d) {
+      if (!d) return;
+      const indicator = document.getElementById('vision-indicator');
+      const visionText = document.getElementById('vision-text');
+      const occLabel = document.getElementById('vision-occupancy');
+      const focusTimer = document.getElementById('vision-focus-timer');
+      const luxLabel = document.getElementById('vision-lux-label');
+      const luxBar = document.getElementById('vision-lux-bar');
+      const motionLabel = document.getElementById('vision-motion-label');
+      const motionBar = document.getElementById('vision-motion-bar');
+      const badge = document.getElementById('vision-badge');
+
+      const isPresent = d.is_present;
+      const state = d.state || 'EMPTY';
+      const lux = (d.ambient_luminance || 0).toFixed(1);
+      const motion = (d.motion_score || 0).toFixed(1);
+      const cond = d.lighting_condition || 'NORMAL';
+      const seatedSec = Math.floor(d.seated_duration_seconds || 0);
+
+      // Format duration
+      const s = seatedSec % 60;
+      const m = Math.floor(seatedSec / 60) % 60;
+      const h = Math.floor(seatedSec / 3600);
+      const durStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+
+      if (indicator) {
+        indicator.className = `status-indicator ${isPresent ? 'status-green' : 'status-purple'}`;
+      }
+      if (visionText) {
+        visionText.innerText = isPresent ? `Desk: Sir Present (${cond})` : `Desk: Clear (${lux} Lux)`;
+      }
+      if (occLabel) {
+        occLabel.innerText = isPresent ? `● ${state} (Sir at Desk)` : `○ ${state}`;
+        occLabel.style.color = isPresent ? 'var(--emerald)' : 'var(--text-sub)';
+      }
+      if (badge) {
+        badge.innerText = d.camera_online ? 'ONLINE' : 'OFFLINE';
+        badge.style.color = d.camera_online ? 'var(--emerald)' : 'var(--rose)';
+      }
+      if (focusTimer) {
+        focusTimer.innerText = durStr;
+      }
+      if (luxLabel) {
+        luxLabel.innerText = `${lux} / 255 Lux (${cond})`;
+      }
+      if (luxBar) {
+        const pct = Math.min(100, Math.round(((d.ambient_luminance || 0) / 255) * 100));
+        luxBar.style.width = `${pct}%`;
+      }
+      if (motionLabel) {
+        motionLabel.innerText = `${motion}% Flux`;
+      }
+      if (motionBar) {
+        const mPct = Math.min(100, Math.round(d.motion_score || 0));
+        motionBar.style.width = `${mPct}%`;
+      }
+    }
+
+    async function printDailyBriefing() {
+      appendMessage('agent', 'Connecting to physical HP Ink Tank 310 over USB001... spooling Executive Daily Briefing sheet.');
+      try {
+        const res = await fetch('/api/briefing/print', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success' || data.success) {
+          appendMessage('agent', `🖨️ **Briefing Printed Successfully, Sir!**\n\nJob sent to **${data.printer || 'HP Ink Tank 310 series'}** (${data.bytes_written || 0} bytes). Your physical desk briefing sheet is ready.`);
+        } else {
+          appendMessage('agent', `Print request status: ${data.message || JSON.stringify(data)}`);
+        }
+      } catch (err) {
+        appendMessage('agent', `Failed to contact printer service: ${err.message}`);
+      }
+    }
+
+    async function fetchMorningBriefing() {
+      appendMessage('user', 'Animus, give me my executive morning briefing.');
+      const typingId = appendTypingIndicator();
+      try {
+        const res = await fetch('/api/briefing/morning');
+        removeTypingIndicator(typingId);
+        if (res.ok) {
+          const data = await res.json();
+          appendMessage('agent', data.briefing || 'Executive briefing unavailable.', 'Physical Perception & Executive Brain');
+        } else {
+          appendMessage('agent', 'Could not generate morning briefing at this time, Sir.');
+        }
+      } catch (err) {
+        removeTypingIndicator(typingId);
+        appendMessage('agent', `Briefing error: ${err.message}`);
+      }
+    }
+
+    function renderRoadmap(data) {
+      if (!data || !data.active_goal) return;
+      const goal = data.active_goal;
+      const subgoals = goal.subgoals || [];
+      const completedCount = subgoals.filter(s => s.completed).length;
+      const totalCount = subgoals.length || 1;
+      const pct = Math.round((completedCount / totalCount) * 100);
+
+      document.getElementById('roadmap-pct').innerText = `${pct}% Complete`;
+      document.getElementById('progress-bar-fill').style.width = `${pct}%`;
+
+      const listElem = document.getElementById('subgoals-container');
+      listElem.innerHTML = subgoals.map(s => {
+        let cls = '';
+        let icon = '<span class="check-icon check-pending">○</span>';
+        if (s.completed) {
+          cls = 'completed';
+          icon = '<span class="check-icon check-done">✓</span>';
+        } else if (s.is_current) {
+          cls = 'current';
+          icon = '<span class="check-icon check-current">➔</span>';
+        }
+        return `<div class="subgoal-item ${cls}">${icon}<span>${escapeHtml(s.title)}</span></div>`;
+      }).join('');
+
+      // Tasks
+      if (data.tasks) {
+        const tasksElem = document.getElementById('tasks-container');
+        tasksElem.innerHTML = data.tasks.slice(0, 8).map(t => {
+          const isHigh = t.priority === 'HIGH' || t.priority === 'CRITICAL';
+          const badgeStyle = isHigh ? 'background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);' : '';
+          return `<div class="task-card-item">
+            <span class="task-name">${escapeHtml(t.title)}</span>
+            <span class="task-badge" style="${badgeStyle}">${t.priority || 'MED'}</span>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    function renderWorkContext(ctx) {
+      if (!ctx) return;
+      const filesElem = document.getElementById('detected-files-list');
+      const files = [...(ctx.sql_files || []), ...(ctx.word_docs || [])];
+      if (files.length === 0 && ctx.foreground_window) {
+        filesElem.innerHTML = `<div class="context-file-pill"><span>🖥️</span> ${escapeHtml(ctx.foreground_window.slice(0, 35))}...</div>`;
+      } else if (files.length > 0) {
+        filesElem.innerHTML = files.map(f => `<div class="context-file-pill"><span>📄</span> ${escapeHtml(f)}</div>`).join('');
+      } else {
+        filesElem.innerHTML = `<div class="context-file-pill" style="color:var(--text-sub); border-color:var(--border-color);"><span>💤</span> No active work windows open</div>`;
+      }
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    async function sendMessage() {
+      const inputElem = document.getElementById('user-input');
+      const text = inputElem.value.trim();
+      if (!text) return;
+
+      inputElem.value = '';
+      inputElem.style.height = '48px';
+
+      // Hide hero
+      const hero = document.getElementById('welcome-hero');
+      if (hero) hero.style.display = 'none';
+
+      // Append User message
+      appendMessage('user', text);
+
+      // Append typing indicator
+      const typingId = appendTypingIndicator();
+
+      try {
+        const res = await fetch('/api/agent/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, active_mode: 'WORK' })
+        });
+
+        removeTypingIndicator(typingId);
+
+        if (!res.ok) {
+          appendMessage('agent', 'Error connecting to Animus cognitive daemon.');
+          return;
+        }
+
+        const data = await res.json();
+        lastSeenTurnTimestamp = Date.now() / 1000;
+        appendMessage('agent', data.response, data.source, data.latency_seconds, data.relevant_memories);
+
+        // Multi-modal expression handling (light, UI state)
+        if (data.expression) {
+          const expr = data.expression;
+          const pillMode = document.getElementById('pill-mode');
+          if (expr.ui_state && expr.ui_state.mode) {
+            document.getElementById('label-mode').innerText = `Mode: ${expr.ui_state.mode}`;
+          }
+          if (expr.light_cue && pillMode) {
+            pillMode.title = `Physical Expression: Light=${expr.light_cue}, Sound=${expr.sound_cue || 'SILENT'}`;
+          }
+        } else {
+          if (data.response && data.response.toLowerCase().includes('work mode activated')) {
+            document.getElementById('label-mode').innerText = 'Mode: WORK';
+          } else if (data.response && (data.response.toLowerCase().includes('applications closed') || data.response.toLowerCase().includes('wrap up') || data.response.toLowerCase().includes('milestone as completed') || data.response.toLowerCase().includes('no milestone changes recorded') || data.response.toLowerCase().includes('progress saved'))) {
+            document.getElementById('label-mode').innerText = 'Mode: RELAX';
+          }
+        }
+
+        // Re-render roadmap if updated
+        if (data.roadmap) {
+          renderRoadmap(data.roadmap);
+        }
+        if (data.work_context) {
+          renderWorkContext(data.work_context);
+        }
+      } catch (err) {
+        removeTypingIndicator(typingId);
+        appendMessage('agent', `Communication failure: ${err.message}`);
+      }
+    }
+
+    function sendQuickMessage(msg) {
+      document.getElementById('user-input').value = msg;
+      sendMessage();
+    }
+
+    function pasteSampleSummary() {
+      const sample = "Today I completed the SQL stock out analysis for Blinkit. I created a CTE using LAG() to calculate stock-out duration in minutes for each store. Tomorrow I will calculate lost revenue by joining with the products catalog.";
+      document.getElementById('user-input').value = sample;
+      sendMessage();
+    }
+
+    function appendMessage(sender, text, source = null, latency = null, relevantMemories = null) {
+      const stream = document.getElementById('messages-stream');
+      const row = document.createElement('div');
+      row.className = `message-row ${sender}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = `msg-avatar ${sender}-avatar`;
+      avatar.innerText = sender === 'user' ? 'SIR' : 'AI';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+
+      // Simple markdown formatting
+      let formatted = escapeHtml(text)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+
+      bubble.innerHTML = `<p>${formatted}</p>`;
+
+      if (sender === 'agent') {
+        const meta = document.createElement('div');
+        meta.className = 'meta-tag';
+        let metaHtml = '';
+        if (source) metaHtml += `<span>⚡ ${escapeHtml(source)}</span>`;
+        if (latency) metaHtml += `<span>• ${latency}s</span>`;
+        if (relevantMemories && relevantMemories.length > 0) {
+          const memSubjects = relevantMemories.map(m => m.subject || m.type).filter(Boolean).slice(0, 3).join(', ');
+          metaHtml += `<span title="${escapeHtml(relevantMemories.map(m => `[${m.type}] ${m.subject}: ${m.value}`).join('\n'))}" style="color:var(--cyan); cursor:help;">• 🧠 ${relevantMemories.length} memories (${escapeHtml(memSubjects)})</span>`;
+        }
+        if (metaHtml) {
+          meta.innerHTML = metaHtml;
+          bubble.appendChild(meta);
+        }
+      }
+
+      if (sender === 'user') {
+        row.appendChild(bubble);
+        row.appendChild(avatar);
+      } else {
+        row.appendChild(avatar);
+        row.appendChild(bubble);
+      }
+
+      stream.appendChild(row);
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendTypingIndicator() {
+      const stream = document.getElementById('messages-stream');
+      const id = 'typing-' + Date.now();
+      const row = document.createElement('div');
+      row.id = id;
+      row.className = 'message-row agent';
+      row.innerHTML = `
+        <div class="msg-avatar agent-avatar">AI</div>
+        <div class="msg-bubble" style="padding: 12px 18px;">
+          <div class="typing-dots"><span></span><span></span><span></span></div>
+        </div>
+      `;
+      stream.appendChild(row);
+      stream.scrollTop = stream.scrollHeight;
+      return id;
+    }
+
+    function removeTypingIndicator(id) {
+      const elem = document.getElementById(id);
+      if (elem) elem.remove();
+    }
+
+    async function startWorkMode() {
+      try {
+        const res = await fetch('/api/agent/work/start', { method: 'POST' });
+        const data = await res.json();
+        document.getElementById('label-mode').innerText = 'Mode: WORK';
+        appendMessage('agent', data.message || 'Work mode engaged, Sir. MySQL Workbench and Word have been launched on your PC, volume is set to 15%, focus music is queued, and the AC is at 24°C.');
+        if (data.work_context) {
+          renderWorkContext(data.work_context);
+        }
+        setTimeout(fetchWorkContext, 2500);
+      } catch (err) {
+        appendMessage('agent', `Failed to activate work mode: ${err.message}`);
+      }
+    }
+
+    async function wrapupWorkMode() {
+      try {
+        const res = await fetch('/api/agent/work/wrapup', { method: 'POST' });
+        const data = await res.json();
+        document.getElementById('label-mode').innerText = 'Mode: RELAX';
+        appendMessage('agent', data.message || 'Progress safely saved with Ctrl+S and work applications closed, Sir. Room is transitioned to relax mode.');
+        if (data.roadmap) {
+          renderRoadmap(data.roadmap);
+        } else {
+          fetchRoadmap();
+        }
+        if (data.work_context) {
+          renderWorkContext(data.work_context);
+        }
+        setTimeout(fetchWorkContext, 1500);
+      } catch (err) {
+        appendMessage('agent', `Failed to wrap up work mode: ${err.message}`);
+      }
+    }
+
+    function toggleWorkMode() {
+      const current = document.getElementById('label-mode').innerText;
+      if (current.includes('WORK')) {
+        wrapupWorkMode();
+      } else {
+        startWorkMode();
+      }
+    }
+
+    function toggleTts() {
+      ttsEnabled = !ttsEnabled;
+      document.getElementById('tts-icon').innerText = ttsEnabled ? '🔊' : '🔇';
+    }
+
+    function escapeHtml(text) {
+      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+      return text.replace(/[&<>"']/g, m => map[m]);
+    }
+  </script>
+</body>
+</html>

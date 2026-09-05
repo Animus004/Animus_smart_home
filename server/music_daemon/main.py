@@ -16,6 +16,7 @@ from typing import Optional, Dict, Any, List
 
 
 from fastapi import FastAPI, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -149,6 +150,10 @@ from reminder_scheduler import ReminderScheduler
 
 agent_event_bus = AgentEventBus()
 animus_personal_agent.event_bus = agent_event_bus
+if hasattr(animus_personal_agent, "decision_engine") and animus_personal_agent.decision_engine:
+    animus_personal_agent.decision_engine.orchestrator = orchestrator
+    animus_personal_agent.decision_engine.pc_controller = pc_controller
+    animus_personal_agent.decision_engine.task_manager = animus_personal_agent.task_manager
 reminder_scheduler = ReminderScheduler(
     task_manager=animus_personal_agent.task_manager,
     event_bus=agent_event_bus,
@@ -161,7 +166,39 @@ reminder_scheduler = ReminderScheduler(
 from agent.proactive_orchestrator import ProactiveOrchestrator
 proactive_orchestrator = ProactiveOrchestrator(
     tts_service=room_tts_service,
+    followup_engine=animus_personal_agent.followup_engine if hasattr(animus_personal_agent, "followup_engine") else None,
+    memory_store=animus_personal_agent.decision_engine.memory_store if hasattr(animus_personal_agent, "decision_engine") and animus_personal_agent.decision_engine else None,
+    decision_engine=animus_personal_agent.decision_engine if hasattr(animus_personal_agent, "decision_engine") else None,
+    event_bus=agent_event_bus,
+    orchestrator=orchestrator,
+    pc_controller=pc_controller,
+    check_interval=2.0,
     enable_speech=os.getenv("ANIMUS_PROACTIVE_ENABLED", "true").lower() in ("true", "1", "yes")
+)
+orchestrator.proactive_orchestrator = proactive_orchestrator
+
+from vision_observer import VisionObserver
+vision_observer = VisionObserver(
+    camera_index=int(os.getenv("ANIMUS_CAMERA_INDEX", "0")),
+    event_bus=agent_event_bus
+)
+from room_state.perception_collector import get_perception_collector
+perception_collector = get_perception_collector(
+    projector_controller=projector,
+    fire_tv_controller=fire_tv,
+    pc_controller=pc_controller,
+    orchestrator=orchestrator,
+    vision_observer=vision_observer
+)
+
+from printer_controller import get_printer_controller
+printer_controller = get_printer_controller()
+
+from agent.briefing_service import BriefingService
+briefing_service = BriefingService(
+    memory_store=animus_personal_agent.decision_engine.memory_store if hasattr(animus_personal_agent, "decision_engine") and animus_personal_agent.decision_engine else None,
+    task_manager=animus_personal_agent.task_manager if hasattr(animus_personal_agent, "task_manager") else None,
+    printer_controller=printer_controller
 )
 
 @asynccontextmanager
@@ -177,6 +214,9 @@ async def lifespan(app: FastAPI):
 
     # Start autonomous ambient proactive orchestrator
     proactive_orchestrator.start()
+
+    # Start zero-cloud desk presence vision observer
+    vision_observer.start()
 
     # Pre-warm local Qwen LLM in dedicated GPU VRAM (keep_alive: 24h)
     threading.Thread(target=ollama_mgr.ensure_model_ready, name="OllamaPrewarm", daemon=True).start()
@@ -206,6 +246,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("[PC_MUSIC_DAEMON_STOP] Shutting down orchestrator and releasing resources...")
     proactive_orchestrator.stop()
+    vision_observer.stop()
     animus_personal_agent.stop_scheduler_loop()
     reminder_scheduler.stop()
     room_tts_service.shutdown()
@@ -462,6 +503,7 @@ def get_room_soundbar_status() -> Dict[str, Any]:
 @app.post("/api/music/play", response_model=PlayResponse)
 def play_music(req: PlayRequest):
     logger.info(f"[PC_MUSIC_REQUEST] Play request received: title='{req.title}', artist='{req.artist}', direct_id='{req.direct_video_id}'")
+    proactive_orchestrator.notify_manual_playback_started()
 
     if not req.title.strip():
         raise HTTPException(
@@ -1425,15 +1467,45 @@ def agent_interact_endpoint(req: AgentInteractRequest) -> Dict[str, Any]:
 
     # Additive Proactive Follow-up Event Dispatch (if follow-up question is active)
     if resp.followup_required and resp.followup_question:
+        already_spoken = bool(resp.agent_message and resp.followup_question in resp.agent_message)
         try:
             agent_event_bus.publish(AgentEvent(
                 event_type=AgentEventType.FOLLOWUP_REQUIRED,
                 priority=AgentEventPriority.NORMAL,
                 message=resp.followup_question,
-                payload={"followup_question": resp.followup_question}
+                payload={
+                    "followup_question": resp.followup_question,
+                    "already_spoken": already_spoken
+                }
             ))
         except Exception as e:
             logger.error(f"[EVENT_BUS_FOLLOWUP_FAIL] Failed to publish follow-up event: {e}")
+
+    # Cross-Device Chat Sync: publish turn to EventBus for WebSocket / Android / PC Sync
+    try:
+        agent_event_bus.publish(AgentEvent(
+            event_type=AgentEventType.AGENT_PROACTIVE_MESSAGE,
+            priority=AgentEventPriority.NORMAL,
+            message=resp.agent_message or "",
+            payload={
+                "user_utterance": req.utterance,
+                "agent_response": resp.agent_message or "",
+                "source": "MOBILE"
+            }
+        ))
+    except Exception as e:
+        logger.debug(f"[EVENT_BUS_SYNC_FAIL] {e}")
+
+    # Ensure conversation turn is stored in episodic memory for cross-client history
+    try:
+        if hasattr(animus_personal_agent, "decision_engine") and animus_personal_agent.decision_engine:
+            animus_personal_agent.decision_engine.memory_store.record_conversation_turn(
+                user_utterance=req.utterance,
+                agent_response=resp.agent_message or "",
+                intent_category=resp.understood_intent or "MOBILE_INTERACT"
+            )
+    except Exception as e:
+        logger.debug(f"[INTERACT_EPISODE_STORE_FAIL] {e}")
 
     return resp.model_dump()
 
@@ -1653,6 +1725,290 @@ def complete_agent_task_endpoint(task_id: str) -> Dict[str, Any]:
 def get_agent_memory_summary() -> Dict[str, Any]:
     """Returns structured 9-category memory summary."""
     return animus_personal_agent.memory.to_dict_summary()
+
+
+# =========================================================================
+# GEMINI-STYLE PC CHAT & CAREER ROADMAP MODULE
+# =========================================================================
+
+class ChatMessageRequest(BaseModel):
+    message: str = Field(..., min_length=1, description="Conversational message, query, or pasted ChatGPT daily summary")
+    active_mode: Optional[str] = Field(default="WORK", description="Active room mode")
+
+
+@app.get("/api/agent/career_roadmap")
+def get_career_roadmap_endpoint() -> Dict[str, Any]:
+    """Returns the structured Data Analyst career roadmap, milestones, and active tasks."""
+    if hasattr(animus_personal_agent, "decision_engine") and animus_personal_agent.decision_engine:
+        mem = animus_personal_agent.decision_engine.memory_store
+        return mem.get_career_roadmap()
+    from agent.long_term_memory import get_long_term_memory
+    return get_long_term_memory().get_career_roadmap()
+
+
+@app.get("/api/pc/work_context")
+def get_pc_work_context_endpoint() -> Dict[str, Any]:
+    """Inspects open windows and returns active .sql scripts and .docx documents."""
+    return pc_controller.get_active_work_context()
+
+
+@app.post("/api/agent/chat")
+def agent_chat_endpoint(req: ChatMessageRequest) -> Dict[str, Any]:
+    """
+    Dedicated Gemini-style PC Chat endpoint.
+    Processes user prompts and pasted ChatGPT work summaries through AgentDecisionEngine.
+    Updates subgoals, creates tomorrow's tasks, and returns executive feedback.
+    """
+    mode_hint = req.active_mode or "WORK"
+    if hasattr(orchestrator, "set_active_mode") and mode_hint:
+        if orchestrator.current_mode != mode_hint:
+            orchestrator.set_active_mode(mode_hint)
+
+    current_state = room_state_aggregator.get_room_state() if room_state_aggregator else None
+    dec_res = animus_personal_agent.decision_engine.decide_and_act(
+        user_utterance=req.message,
+        room_state=current_state,
+        active_mode=mode_hint
+    )
+
+    # Dispatch audio speech if room TTS is active
+    if room_tts_service and room_tts_service.is_enabled() and dec_res.response_message:
+        try:
+            room_tts_service.speak_async(dec_res.response_message)
+        except Exception as e:
+            logger.debug(f"[CHAT_TTS_FAIL] {e}")
+
+    # Cross-Device Chat Sync: publish PC turn to EventBus for WebSocket / Android clients
+    try:
+        agent_event_bus.publish(AgentEvent(
+            event_type=AgentEventType.AGENT_PROACTIVE_MESSAGE,
+            priority=AgentEventPriority.NORMAL,
+            message=dec_res.response_message or "",
+            payload={
+                "user_utterance": req.message,
+                "agent_response": dec_res.response_message or "",
+                "source": "PC_CHAT"
+            }
+        ))
+    except Exception as e:
+        logger.debug(f"[EVENT_BUS_PC_SYNC_FAIL] {e}")
+
+    roadmap = animus_personal_agent.decision_engine.memory_store.get_career_roadmap()
+    work_ctx = pc_controller.get_active_work_context()
+
+    return {
+        "response": dec_res.response_message,
+        "thought": dec_res.thought,
+        "action_type": dec_res.action_type,
+        "source": dec_res.inference_source,
+        "latency_seconds": dec_res.latency_seconds,
+        "roadmap": roadmap,
+        "work_context": work_ctx,
+        "expression": dec_res.expression_payload,
+        "relevant_memories": dec_res.relevant_memories
+    }
+
+
+@app.get("/api/agent/chat/history")
+def get_chat_history_endpoint(since: Optional[float] = None, limit: int = 50) -> Dict[str, Any]:
+    """Returns recent conversational turns across PC and Mobile for cross-device synchronization."""
+    if not hasattr(animus_personal_agent, "decision_engine") or not animus_personal_agent.decision_engine:
+        return {"turns": [], "count": 0}
+    conn = animus_personal_agent.decision_engine.memory_store._get_connection()
+    try:
+        cursor = conn.cursor()
+        if since:
+            cursor.execute("""
+                SELECT id, timestamp, user_utterance, agent_response, intent_category
+                FROM conversation_episodes
+                WHERE timestamp > ?
+                ORDER BY timestamp ASC
+                LIMIT ?
+            """, (since, limit))
+            rows = cursor.fetchall()
+        else:
+            cursor.execute("""
+                SELECT id, timestamp, user_utterance, agent_response, intent_category
+                FROM conversation_episodes
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (limit,))
+            rows = cursor.fetchall()
+            rows = list(reversed(rows))
+        turns = [
+            {
+                "id": r["id"],
+                "timestamp": r["timestamp"],
+                "user": r["user_utterance"],
+                "agent": r["agent_response"],
+                "intent": r["intent_category"]
+            }
+            for r in rows
+        ]
+        return {"turns": turns, "count": len(turns)}
+    finally:
+        conn.close()
+
+
+@app.post("/api/agent/work/start")
+def start_work_mode_endpoint() -> Dict[str, Any]:
+    """Directly engages Work Mode: opens SQL Workbench, Word, sets volume to 15, and AC to 24."""
+    launched = []
+    ok_sql, res_sql = pc_controller.launch_allowlisted_app("sql")
+    if ok_sql:
+        launched.append("MySQL Workbench")
+    else:
+        logger.warning(f"[WORK_START] Failed to launch SQL: {res_sql}")
+
+    ok_word, res_word = pc_controller.launch_allowlisted_app("word")
+    if ok_word:
+        launched.append("Microsoft Word")
+    else:
+        logger.warning(f"[WORK_START] Failed to launch Word: {res_word}")
+
+    # Bring open work windows to active foreground focus
+    pc_controller.bring_work_windows_to_foreground()
+    pc_controller.set_volume(15)
+
+    if hasattr(orchestrator, "play_music"):
+        stat = orchestrator.get_room_status()
+        if stat.get("media_playback_state") != "PLAYING":
+            orchestrator.play_music("soothing lofi focus beats")
+    if hasattr(orchestrator, "set_active_mode"):
+        orchestrator.set_active_mode("WORK")
+
+    try:
+        ac_controller.set_power(True)
+        ac_controller.set_mode("COOL")
+        ac_controller.set_temperature(24)
+    except Exception as e:
+        logger.debug(f"[WORK_AC_FAIL] {e}")
+
+    work_ctx = pc_controller.get_active_work_context()
+
+    return {
+        "status": "SUCCESS",
+        "mode": "WORK",
+        "launched_apps": launched,
+        "volume": 15,
+        "ac_temperature": 24,
+        "message": f"Work mode activated, Sir. Launched {', '.join(launched) if launched else 'desktop apps'}, volume set to 15%, and room at 24°C.",
+        "work_context": work_ctx
+    }
+
+
+@app.post("/api/agent/work/wrapup")
+def wrapup_work_mode_endpoint() -> Dict[str, Any]:
+    """Directly wraps up Work Mode: saves open windows (Ctrl+S with verification), closes apps, safely records progress without fabricating milestones, sets mode to RELAX."""
+    save_res = pc_controller.send_save_keystrokes()
+    close_res = pc_controller.close_apps(["MySQLWorkbench.exe", "WINWORD.EXE"])
+    if hasattr(orchestrator, "set_active_mode"):
+        orchestrator.set_active_mode("RELAX")
+
+    from agent.long_term_memory import get_long_term_memory
+    mem = get_long_term_memory()
+    curr_sg = mem.get_current_work_subgoal()
+    sg_title = curr_sg.get("title", "your milestone") if curr_sg else "your milestone"
+
+    # Inspect physical save verification
+    save_info = save_res[1] if isinstance(save_res, tuple) and len(save_res) > 1 else {}
+    files_modified = save_info.get("any_files_modified", False)
+
+    # Do not fabricate milestone completions on manual wrap-up; maintain active milestone truthfully
+    outcome = "PARTIAL" if files_modified else "NO_PROGRESS"
+    wrapup_data = mem.process_work_session_outcome(outcome_type=outcome)
+
+    # Record work session in SQLite
+    dur = 0.0
+    if hasattr(pc_controller, "get_work_session_duration"):
+        dur = pc_controller.get_work_session_duration()
+    if dur <= 0.0 and hasattr(proactive_orchestrator, "_work_session_started_at") and proactive_orchestrator._work_session_started_at:
+        dur = round(time.time() - proactive_orchestrator._work_session_started_at, 1)
+
+    mem.record_work_session(
+        session_duration_seconds=dur,
+        subgoal_title=sg_title,
+        exit_reason="MANUAL_WRAPUP"
+    )
+
+    # Clear work session tracking state
+    if hasattr(proactive_orchestrator, "_work_session_started_at"):
+        proactive_orchestrator._work_session_started_at = None
+        proactive_orchestrator._time_left_desk = None
+        proactive_orchestrator._music_paused_by_departure = False
+        proactive_orchestrator._pc_locked_by_departure = False
+
+    roadmap = mem.get_career_roadmap()
+    work_ctx = pc_controller.get_active_work_context()
+
+    return {
+        "status": "SUCCESS",
+        "mode": "RELAX",
+        "outcome": outcome,
+        "session_duration_seconds": dur,
+        "message": f"Progress saved and work applications closed, Sir. Your active milestone '{sg_title}' remains in progress. Would you like me to set a reminder for when you want to work tomorrow?",
+        "roadmap": roadmap,
+        "work_context": work_ctx,
+        "save_verification": save_info
+    }
+
+
+@app.get("/api/vision/presence")
+def get_desk_presence():
+    """Returns real-time visual desk presence telemetry."""
+    return vision_observer.get_presence_telemetry()
+
+
+@app.get("/api/printer/status")
+def get_printer_status():
+    """Returns physical printer telemetry and spooler status."""
+    return printer_controller.get_status()
+
+
+@app.get("/api/briefing/morning")
+def get_morning_briefing():
+    """Synthesizes executive morning briefing."""
+    text = briefing_service.generate_morning_briefing()
+    return {"status": "SUCCESS", "briefing": text}
+
+
+@app.get("/api/briefing/evening")
+def get_evening_debrief():
+    """Synthesizes executive nightly debrief."""
+    text = briefing_service.generate_nightly_debrief()
+    return {"status": "SUCCESS", "debrief": text}
+
+
+@app.post("/api/briefing/print")
+def print_briefing_sheet(sheet_type: str = "MORNING_PLAN"):
+    """Generates and dispatches executive briefing sheet to HP Ink Tank 310."""
+    res = briefing_service.print_executive_sheet(sheet_type=sheet_type)
+    return res
+
+
+@app.post("/api/briefing/sql_worksheet/print")
+def print_sql_worksheet_endpoint(problem_title: Optional[str] = None):
+    """Generates and dispatches physical pen-and-paper SQL practice worksheet to HP Ink Tank 310."""
+    res = briefing_service.print_sql_worksheet(problem_title=problem_title)
+    return res
+
+
+@app.get("/api/agent/work/analytics")
+def get_work_analytics_endpoint(days: int = 7):
+    """Returns deep work focus and study analytics over the specified timeframe."""
+    from agent.long_term_memory import get_long_term_memory
+    mem = get_long_term_memory()
+    return mem.get_weekly_work_analytics(days=days)
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/chat", response_class=HTMLResponse)
+def serve_chat_ui():
+    """Serves the Gemini-style PC Chat Web Interface."""
+    web_file = Path(__file__).parent / "web" / "index.html"
+    if web_file.exists():
+        return HTMLResponse(content=web_file.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Animus PC Chat UI Loading...</h1>")
 
 
 if __name__ == "__main__":

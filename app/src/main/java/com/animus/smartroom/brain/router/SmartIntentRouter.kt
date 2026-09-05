@@ -229,6 +229,11 @@ class SmartIntentRouter(
             return BrainIntent.RoutineCommand("WORK_MODE", emptyMap(), correlationId)
         }
 
+        // Work Mode Wrapup
+        if (cleaned.contains("wrap up work") || cleaned.contains("wrap up") || cleaned.contains("done with work") || cleaned.contains("finish work") || cleaned.contains("stop work")) {
+            return BrainIntent.RoutineCommand("WRAPUP_WORK_MODE", emptyMap(), correlationId)
+        }
+
         // Goodnight Mode
         if (cleaned.contains("goodnight") || cleaned.contains("sleep routine") || cleaned.contains("turn everything off") || cleaned.contains("bedtime") || cleaned.contains("all off")) {
             return BrainIntent.RoutineCommand("GOODNIGHT_MODE", emptyMap(), correlationId)

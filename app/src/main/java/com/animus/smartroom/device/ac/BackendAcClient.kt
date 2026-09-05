@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
  * Android never opens TCP 6668 or stores Tuya local_key.
  */
 open class BackendAcClient(
-    private val hostProvider: () -> String = { "192.168.1.9" },
+    private val hostProvider: () -> String = { "192.168.1.4" },
     private val port: Int = 8095,
     private val timeoutMs: Int = 10000
 ) {

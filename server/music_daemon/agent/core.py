@@ -201,10 +201,28 @@ class AnimusPersonalAgent:
             media_session_manager=self.media_session_manager
         )
 
+        # Initialize Agent Cognitive Decision Loop Engine
+        from agent.agent_decision_engine import AgentDecisionEngine
+        from agent.long_term_memory import get_long_term_memory
+        self.decision_engine = AgentDecisionEngine(
+            memory_store=get_long_term_memory(),
+            planner_executor=self.planner_executor,
+            gemini_client=self.planner_client,
+            orchestrator=self.orchestrator,
+            task_manager=self.task_manager
+        )
+
         # Start live room background scheduler loop
         self._scheduler_stop_event = threading.Event()
         self._scheduler_thread: Optional[threading.Thread] = None
         self.start_scheduler_loop()
+
+        # Link followup_engine with ProactiveOrchestrator
+        try:
+            from agent.proactive_orchestrator import get_proactive_orchestrator
+            get_proactive_orchestrator(followup_engine=self.followup_engine)
+        except Exception as e:
+            logger.debug(f"[PROACTIVE_ORCHESTRATOR_LINK_ERR] {e}")
 
     def start_scheduler_loop(self, poll_interval_seconds: float = 2.0):
         """Starts live room background scheduler thread."""
@@ -295,6 +313,67 @@ class AnimusPersonalAgent:
                     return resp
                 utterance = resolved_followup.get("request", utterance)
                 logger.info(f"[AGENT_FOLLOWUP_RESOLVED] Follow-up converted to request: '{utterance}'")
+
+        # Step 1.5: Check if cognitive decision_engine should handle this turn
+        lower_utt = utterance.strip().lower()
+        has_wrapup_state = bool(hasattr(self, "decision_engine") and self.decision_engine and getattr(self.decision_engine, "_wrapup_followup_state", None))
+        has_proactive_state = bool(hasattr(self, "decision_engine") and self.decision_engine and getattr(self.decision_engine, "_proactive_followup_state", None))
+        is_work_intent = any(w in lower_utt for w in [
+            "work mode", "start work", "launch work", "focus mode", "study mode", "time to study", "time to work"
+        ])
+        is_wrapup_intent = any(w in lower_utt for w in [
+            "wrap up", "wrapup", "done with work", "finish work", "stop work", "took a break", "no progress", "did nothing"
+        ])
+        is_reminder_intent = bool(re.search(r'\b(?:remind me|set a reminder|schedule a reminder|set reminder|schedule reminder)\b', lower_utt))
+        is_career_or_summary_intent = any(w in lower_utt for w in [
+            "career", "roadmap", "milestone", "blinkit", "cte", "window function", "lag()", "excel project"
+        ])
+        is_hardware_or_mode_intent = any(w in lower_utt for w in [
+            "projector", "movie", "ac", "air conditioner", "temp", "temperature", "cool", "fan",
+            "volume", "mute", "sound", "pause", "resume", "play", "listen to", "put on",
+            "printer", "print", "sleep mode", "bedtime", "goodnight"
+        ])
+
+        should_delegate = hasattr(self, "decision_engine") and self.decision_engine and (
+            has_wrapup_state or has_proactive_state or is_work_intent or is_wrapup_intent or
+            is_reminder_intent or is_career_or_summary_intent or is_hardware_or_mode_intent
+        )
+
+        if should_delegate:
+            logger.info(f"[CORE_DECISION_ENGINE_DELEGATION] Routing utterance '{utterance}' to AgentDecisionEngine")
+            dec_res = self.decision_engine.decide_and_act(
+                user_utterance=utterance,
+                room_state=current_state,
+                active_mode=getattr(self.mode_manager, "active_mode", None) or "IDLE"
+            )
+            # Sync internal mode manager if work mode was launched or wrapped up, or mode changed
+            if any(tc.get("tool") == "LAUNCH_WORK_MODE" for tc in dec_res.tool_calls):
+                if hasattr(self.mode_manager, "transition_to"):
+                    self.mode_manager.transition_to(BehaviorMode.WORK, utterance=utterance)
+                self.context_buffer.active_mode = "WORK"
+            elif any(tc.get("tool") == "WRAPUP_WORK_SESSION" for tc in dec_res.tool_calls):
+                if hasattr(self.mode_manager, "transition_to"):
+                    self.mode_manager.transition_to(BehaviorMode.COMFORT, utterance=utterance)
+                self.context_buffer.active_mode = "RELAX"
+            else:
+                mode_call = next((tc for tc in dec_res.tool_calls if tc.get("tool") in ["SET_ACTIVE_MODE", "SET_ROOM_MODE", "TRANSITION_MODE"]), None)
+                if mode_call:
+                    t_mode = mode_call.get("params", {}).get("mode", "RELAX")
+                    if hasattr(self.mode_manager, "transition_to"):
+                        try:
+                            b_mode = BehaviorMode[t_mode]
+                            self.mode_manager.transition_to(b_mode, utterance=utterance)
+                        except Exception:
+                            pass
+                    self.context_buffer.active_mode = t_mode
+
+            action_taken = bool(dec_res.tool_calls or dec_res.goal_updated or dec_res.action_type == "TOOL_EXECUTION")
+            self.context_buffer.record_animus_turn(utterance=dec_res.response_message, intent=dec_res.action_type, action_taken=action_taken)
+            return AgentInteractionResponse(
+                understood_intent=dec_res.thought or dec_res.action_type,
+                agent_message=dec_res.response_message,
+                action_taken=action_taken
+            )
 
         # Step 2: Determine Human Intent
         intent = self.intent_resolver.resolve_intent(utterance, room_state=current_state)
@@ -420,6 +499,26 @@ class AnimusPersonalAgent:
                 except Exception as e:
                     logger.error(f"[EMPATHIC_PC_EXEC_ERR] {e}")
 
+            # 6. Lighting Action
+            light_act = params.get("light_action")
+            if light_act:
+                try:
+                    from light_controller import get_light_controller
+                    l_ctrl = get_light_controller()
+                    if light_act.get("action") == "set_scene":
+                        l_ctrl.set_scene(light_act.get("scene", "RELAX"))
+                    elif light_act.get("action") == "set_brightness":
+                        l_ctrl.set_brightness(light_act.get("brightness", 20))
+                    elif light_act.get("action") == "set_power":
+                        l_ctrl.set_power(light_act.get("power", True))
+                except Exception as e:
+                    logger.error(f"[EMPATHIC_LIGHT_EXEC_ERR] {e}")
+
+            # Mode transition if applicable
+            if intent.primary_intent in ("EMPATHIC_WORK_SESSION_COMPLETED", "EMPATHIC_CHILL_VIBE", "EMPATHIC_DIM_LIGHTS_AND_SOOTHING_MEDIA"):
+                self.mode_manager.transition_to(BehaviorMode.COMFORT, utterance=utterance)
+                self.context_buffer.active_mode = "COMFORT"
+
             # Record turn in persistent Long-Term Memory
             try:
                 from agent.long_term_memory import get_long_term_memory
@@ -527,107 +626,34 @@ class AnimusPersonalAgent:
 
     def _query_informational_llm(self, query: str, user_addr: str) -> Optional[str]:
         """
-        Delegates general informational queries to Gemini (or configured local LLM)
-        with a strict informational system prompt.
+        Delegates general informational and conversational queries to AgentDecisionEngine
+        (with full time awareness, SQLite epistemic memory, and Gemini fallback).
         Strict Safety Invariant: Hardware mutations are impossible; returns text only.
         """
-        # Context Injection: Fetch live room physical telemetry
-        room_telemetry_prefix = ""
         try:
-            from room_state.perception_collector import get_perception_collector
-            collector = get_perception_collector()
-            tel = collector.get_live_telemetry()
-            ac_desc = f"AC is {'ON' if tel.get('ac_power') else 'OFF'} (Setpoint: {tel.get('ac_target_temp')}°C, Current Room Ambient: {tel.get('ac_ambient_temp')}°C)"
-            proj_desc = f"Projector is {'ON' if tel.get('projector_power') else 'OFF'}"
-            music_desc = f"Music/Soundbar is {'PLAYING' if tel.get('media_playing') else 'IDLE'}"
-            room_telemetry_prefix = f"Live Smart Room Physical Telemetry: {ac_desc} | {proj_desc} | {music_desc}.\n"
-        except Exception:
-            pass
+            current_state = self.room_state_aggregator.get_room_state() if self.room_state_aggregator else None
+            recent_turns = []
+            if hasattr(self, "context_buffer") and self.context_buffer and hasattr(self.context_buffer, "turns"):
+                u_msg = None
+                for turn in self.context_buffer.turns[-6:]:
+                    if getattr(turn, "speaker", None) == "user":
+                        u_msg = getattr(turn, "utterance", "")
+                    elif getattr(turn, "speaker", None) == "animus" and u_msg:
+                        recent_turns.append({"user": u_msg, "agent": getattr(turn, "utterance", "")})
+                        u_msg = None
 
-        # Context Injection: Fetch live weather telemetry if weather/forecast is requested
-        weather_prefix = ""
-        live_weather_val = None
-        if any(w in query.lower() for w in ["weather", "forecast", "outside temp", "temp outside", "how is it outside", "outside"]):
-            try:
-                import requests
-                w_resp = requests.get("https://wttr.in?format=%C,+%t+(Humidity:+%h)", timeout=2.5)
-                if w_resp.status_code == 200 and w_resp.text:
-                    cleaned_w = w_resp.text.strip()
-                    if cleaned_w and not cleaned_w.startswith("<"):
-                        live_weather_val = cleaned_w
-                        weather_prefix = f"Live Weather Telemetry: Real-time outdoor weather is currently: {cleaned_w}.\n"
-            except Exception:
-                pass
-
-        prompt_text = f"{room_telemetry_prefix}{weather_prefix}You are Animus (Sonia), a helpful smart room assistant speaking to {user_addr}. Answer this query concisely and naturally in 1-2 sentences using the live telemetry context above when relevant without mentioning system internals:\n\n{query}"
-
-        # 1. Try Google GenAI SDK if initialized
-        if self.planner_client and getattr(self.planner_client, "_sdk_client", None):
-            try:
-                resp = self.planner_client._sdk_client.models.generate_content(
-                    model=self.planner_client.model_name or "gemini-2.5-flash",
-                    contents=prompt_text
-                )
-                if resp and getattr(resp, "text", None):
-                    return resp.text.strip()
-            except Exception as e:
-                logger.warning(f"[INFORMATIONAL_GEMINI_SDK_FAILED] {e}")
-
-        # 2. Try direct Google Gemini REST API if API key is present
-        api_key = (
-            (getattr(self.planner_client, "api_key", None) if self.planner_client else None)
-            or os.environ.get("GEMINI_API_KEY")
-            or os.environ.get("GOOGLE_API_KEY")
-        )
-        if api_key:
-            try:
-                import requests
-                model_name = getattr(self.planner_client, "model_name", "gemini-2.5-flash") or "gemini-2.5-flash"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{
-                        "parts": [{
-                            "text": prompt_text
-                        }]
-                    }]
-                }
-                resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=6.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    candidates = data.get("candidates", [])
-                    if candidates and "content" in candidates[0]:
-                        parts = candidates[0]["content"].get("parts", [])
-                        if parts and "text" in parts[0]:
-                            txt = parts[0]["text"].strip()
-                            if txt:
-                                return txt
-            except Exception as e:
-                logger.warning(f"[INFORMATIONAL_GEMINI_REST_FAILED] {e}")
-
-        # 3. Fallback to local Ollama if available on port 11434
-        try:
-            import requests
-            res = requests.post(
-                "http://127.0.0.1:11434/api/generate",
-                json={
-                    "model": "qwen3:4b-instruct",
-                    "prompt": f"{weather_prefix}You are Animus, a helpful smart room assistant speaking to {user_addr}. Answer this query concisely in 1-3 sentences:\n\n{query}",
-                    "stream": False
-                },
-                timeout=4.0
+            dec_res = self.decision_engine.decide_and_act(
+                user_utterance=query,
+                room_state=current_state,
+                active_mode=self.mode_manager.active_mode.value if self.mode_manager else "IDLE",
+                recent_turns=recent_turns
             )
-            if res.status_code == 200:
-                txt = res.json().get("response", "").strip()
-                if txt:
-                    return txt
-        except Exception:
-            pass
+            if dec_res and dec_res.response_message:
+                return dec_res.response_message
+        except Exception as e:
+            logger.warning(f"[INFORMATIONAL_DECISION_ENGINE_ERROR] {e}")
 
-        # 4. Direct weather fallback if LLMs unavailable but weather telemetry succeeded
-        if live_weather_val:
-            return f"It's currently {live_weather_val} outside, {user_addr}."
-
-        return None
+        return f"I'm here with you, {user_addr}. How can I assist you with the room today?"
 
     def _handle_informational_intent(
         self,

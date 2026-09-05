@@ -26,6 +26,7 @@ class EmpathicActionPlan(BaseModel):
     fire_tv_action: Optional[Dict[str, Any]] = None
     audio_action: Optional[Dict[str, Any]] = None
     pc_action: Optional[Dict[str, Any]] = None
+    light_action: Optional[Dict[str, Any]] = None
     scheduled_followup_minutes: Optional[int] = None
     followup_question: Optional[str] = None
 
@@ -38,19 +39,41 @@ class EmpathicReasoningEngine:
     def __init__(self):
         pass
 
-    def evaluate_empathic_intent(self, text: str, user_name: str = "buddy") -> Optional[EmpathicActionPlan]:
+    def evaluate_empathic_intent(self, text: str, user_name: str = "Sir") -> Optional[EmpathicActionPlan]:
         """
         Evaluates utterance for high-level human problem states.
         Returns EmpathicActionPlan if matched, else None.
         """
         lower = text.lower().strip()
 
+        # 0. Work Session Completed / Done Working / Wrapping Up Work
+        if re.search(r'\b(?:i am done with work|i\'m done with work|done working|done with work|finished work|finished working|wrapping up work|wrap up work|work is over|work done|ended work|leaving desk|close work)\b', lower):
+            return EmpathicActionPlan(
+                scenario="WORK_SESSION_COMPLETED",
+                empathy_speech=f"All progress saved and work applications closed, {user_name}. I have set the room to relax mode with comfortable climate.",
+                ac_action={"power": True, "mode": "COOL", "temp": 24, "fan": "AUTO"},
+                light_action={"action": "set_scene", "scene": "RELAX", "brightness": 15, "kelvin": 2700},
+                audio_action={"action": "play_music", "query": "soothing lofi ambient chill beats", "volume": 20},
+                pc_action={"action": "wrapup_work", "save_progress": True, "close_work_apps": True},
+                projector_action={"power": False, "action": "sleep"}
+            )
+
+        # 0b. Dim Lights and Play Something Soothing / Ambient Dimming
+        if re.search(r'\b(?:dim (?:the )?lights? and play|dim lights?|dim lighting|relaxing lighting|soothing track|play something soothing|play soothing music)\b', lower):
+            return EmpathicActionPlan(
+                scenario="DIM_LIGHTS_AND_SOOTHING_MEDIA",
+                empathy_speech=f"Dimming the lights to a warm relaxing glow and playing something soothing on the soundbar, {user_name}.",
+                light_action={"action": "set_scene", "scene": "RELAX", "brightness": 15, "kelvin": 2700},
+                audio_action={"action": "play_music", "query": "soothing relaxing instrumental chill music", "volume": 25}
+            )
+
         # 1. Headache / Migraine / Sick / Unwell
         if re.search(r'\b(?:headache|migraine|head hurts|sick|unwell|fever|not feeling well|dizzy)\b', lower):
             return EmpathicActionPlan(
                 scenario="HEADACHE_RELIEF",
-                empathy_speech=f"I'm sorry you're not feeling well, {user_name}. I've dimmed the screens, set the AC to a quiet 25 degrees, and started gentle rain sounds. Rest up.",
+                empathy_speech=f"I'm sorry you're not feeling well, {user_name}. I've dimmed the screens and lights, set the AC to a quiet 25 degrees, and started gentle rain sounds. Rest up.",
                 ac_action={"power": True, "mode": "COOL", "temp": 25, "fan": "LOW"},
+                light_action={"action": "set_scene", "scene": "NIGHT", "brightness": 5, "kelvin": 2200},
                 projector_action={"power": False, "action": "sleep"},
                 fire_tv_action={"power": False, "action": "sleep"},
                 audio_action={"action": "play_ambient", "query": "gentle rain sounds", "volume": 15},
@@ -99,16 +122,16 @@ class EmpathicReasoningEngine:
                 audio_action={"action": "play_music", "query": "upbeat party dance hits", "volume": 50}
             )
 
-        # 6. Room Too Cold / Chilly / Freezing
-        if re.search(r'\b(?:too cold|chilly|chillig|chilling|freezing|cold in here|feel cold|feeling cold|shivering|really cold|getting cold|room is cold|cold room|so cold)\b', lower) and not re.search(r'\b(?:play|song|music|listen)\b', lower):
+        # 6. Room Too Cold / Chilly / Freezing (exclude explicit temperature commands e.g. "make it chilly at 22")
+        if re.search(r'\b(?:too cold|chilly|chillig|chilling|freezing|cold in here|feel cold|feeling cold|shivering|really cold|getting cold|room is cold|cold room|so cold)\b', lower) and not re.search(r'\b(?:play|song|music|listen)\b', lower) and not re.search(r'\b(?:at|to|set\s+to)\s*\d{1,2}\b', lower):
             return EmpathicActionPlan(
                 scenario="ROOM_TOO_COLD",
                 empathy_speech=f"I've got you, {user_name}. Raising the AC temperature to a cozy 25 degrees so you stay comfortable.",
                 ac_action={"power": True, "mode": "COOL", "temp": 25, "fan": "LOW"}
             )
 
-        # 7. Room Too Hot / Sweating / Stuffy
-        if re.search(r'\b(?:too hot|sweating|burning up|hot in here|feel hot|feeling hot|stuffy|boiling|too warm|getting hot|room is hot|hot room|getting warm|so hot)\b', lower) and not re.search(r'\b(?:play|song|music|listen)\b', lower):
+        # 7. Room Too Hot / Sweating / Stuffy (exclude explicit temperature commands e.g. "set to 22")
+        if re.search(r'\b(?:too hot|sweating|burning up|hot in here|feel hot|feeling hot|stuffy|boiling|too warm|getting hot|room is hot|hot room|getting warm|so hot)\b', lower) and not re.search(r'\b(?:play|song|music|listen)\b', lower) and not re.search(r'\b(?:at|to|set\s+to)\s*\d{1,2}\b', lower):
             return EmpathicActionPlan(
                 scenario="ROOM_TOO_HOT",
                 empathy_speech=f"Cooling things down for you, {user_name}. Turning on the AC to 22 degrees with high airflow.",

@@ -183,4 +183,10 @@ class AgentApiRemoteClientTest {
         currentIp = "192.168.1.15"
         assertEquals("http://192.168.1.15:8095", client.baseUrl)
     }
+
+    @Test
+    fun testDefaultHostProviderResolution() {
+        val client = AgentApiRemoteClient()
+        assertEquals("http://192.168.1.4:8095", client.baseUrl)
+    }
 }

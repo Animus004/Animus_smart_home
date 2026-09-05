@@ -139,6 +139,7 @@ class OllamaManager:
                     if self.model in m.get("name", "") or self.model in m.get("model", ""):
                         return {
                             "name": m.get("name"),
+                            "size": m.get("size", 0),
                             "size_vram": m.get("size_vram", 0),
                             "expires_at": m.get("expires_at"),
                             "details": m.get("details", {})
@@ -216,9 +217,9 @@ class OllamaManager:
             return False
 
         with self._lock:
-            # Check if model is already loaded in /api/ps
+            # Check if model is already loaded in /api/ps (either in VRAM or resident system RAM)
             loaded = self._get_loaded_model_info()
-            if loaded and loaded.get("size_vram", 0) > 0:
+            if loaded and (loaded.get("size_vram", 0) > 0 or loaded.get("size", 0) > 0):
                 self.current_state = OllamaState.READY
                 return True
 
@@ -250,7 +251,7 @@ class OllamaManager:
                     poll_start = time.time()
                     while time.time() - poll_start < 45.0:
                         loaded = self._get_loaded_model_info()
-                        if loaded and loaded.get("size_vram", 0) > 0:
+                        if loaded and (loaded.get("size_vram", 0) > 0 or loaded.get("size", 0) > 0):
                             self.current_state = OllamaState.READY
                             return True
                         time.sleep(1.0)
@@ -278,7 +279,7 @@ class OllamaManager:
             return self.ensure_model_ready(timeout=120.0)
         return False
 
-    def start_watchdog(self, interval_seconds: float = 15.0):
+    def start_watchdog(self, interval_seconds: float = 60.0):
         """Starts the background watchdog monitoring thread."""
         if self._watchdog_thread and self._watchdog_thread.is_alive():
             return
@@ -295,10 +296,10 @@ class OllamaManager:
                             logger.warning("[OLLAMA_WATCHDOG] Server became unreachable. Triggering recovery...")
                             self.recover()
                         else:
-                            # Verify model still resident in VRAM
+                            # Verify model still resident in memory
                             loaded = self._get_loaded_model_info()
-                            if not loaded or loaded.get("size_vram", 0) == 0:
-                                logger.info("[OLLAMA_WATCHDOG] Model unloaded from VRAM. Refreshing keep-alive residency...")
+                            if not loaded or (loaded.get("size_vram", 0) == 0 and loaded.get("size", 0) == 0):
+                                logger.info("[OLLAMA_WATCHDOG] Model unloaded from memory. Refreshing keep-alive residency...")
                                 self.ensure_model_ready()
                 except Exception as e:
                     logger.debug(f"[OLLAMA_WATCHDOG] Loop exception: {e}")

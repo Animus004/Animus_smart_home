@@ -6,6 +6,7 @@ that can be determined from RoomState.
 """
 
 from __future__ import annotations
+import time
 import logging
 from typing import Any, Dict, Optional
 from agent.models import ResolvedIntent, UserProfile, IntentCategory
@@ -27,16 +28,38 @@ class FollowUpEngine:
         self.user_profile = user_profile
         self.context_buffer = context_buffer
         self._pending_context: Optional[Dict[str, Any]] = None
+        self._last_followup_time: float = 0.0
+        self._last_followup_intent: Optional[str] = None
+        self._last_followup_question: Optional[str] = None
 
     @property
     def has_pending_followup(self) -> bool:
         return self._pending_context is not None
 
+    def set_pending_followup(self, context_type: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Explicitly sets a pending proactive or contextual follow-up expectation."""
+        self._pending_context = {
+            "type": context_type,
+            "created_at": time.time(),
+            "metadata": metadata or {}
+        }
+        logger.info(f"[FOLLOWUP_ENGINE] Pending follow-up context set: {context_type}")
+
     def create_followup_for_intent(self, intent: ResolvedIntent) -> str:
         """
         Constructs a tailored follow-up question for an ambiguous or partially resolved intent.
+        Includes single-flight deduplication: prevents duplicate questions within 3.0s.
         """
+        now = time.time()
+        if (self._last_followup_intent == intent.primary_intent and 
+            (now - self._last_followup_time) < 3.0 and 
+            self._last_followup_question):
+            logger.info(f"[FOLLOWUP_ENGINE_DEDUP] Suppressing duplicate follow-up for {intent.primary_intent} within debounce window.")
+            return self._last_followup_question
+
         addr = self.user_profile.identity.preferred_address
+
+        question = f"Could you clarify what you'd like me to do, {addr}?"
 
         if intent.primary_intent in ("RELAXATION_INTENT", "USER_MOOD_STATEMENT"):
             question = f"Want some music, a movie, or just a quiet room, {addr}?"
@@ -46,10 +69,13 @@ class FollowUpEngine:
             }
             if self.context_buffer:
                 self.context_buffer.start_thread("RELAXATION_FLOW", original_intent=intent)
+            self._last_followup_time = now
+            self._last_followup_intent = intent.primary_intent
+            self._last_followup_question = question
             return question
 
 
-        if intent.primary_intent == "START_CINEMA_ENTERTAINMENT":
+        elif intent.primary_intent == "START_CINEMA_ENTERTAINMENT":
             # Preferred streaming providers from user profile
             services = ", ".join([s.replace("_", " ").title() for s in self.user_profile.entertainment.preferred_streaming_services[:3]])
             question = f"Sure {addr} — {services}, or YouTube?"
@@ -59,26 +85,29 @@ class FollowUpEngine:
             }
             if self.context_buffer:
                 self.context_buffer.start_thread("CINEMA_SETUP", original_intent=intent, missing_parameters=["streaming_provider"])
-            return question
 
-
-        if intent.primary_intent == "ADJUST_VOLUME_AMBIGUOUS":
+        elif intent.primary_intent == "ADJUST_VOLUME_AMBIGUOUS":
             question = f"Sure {addr} — are you listening on the Fire TV or the PC?"
             self._pending_context = {
                 "type": "AUDIO_PRODUCER_DISAMBIGUATION",
                 "original_intent": intent.model_dump()
             }
-            return question
 
-        if intent.followup_question:
+        elif intent.followup_question:
+            question = intent.followup_question
             self._pending_context = {
                 "type": "CUSTOM_FOLLOWUP",
                 "original_intent": intent.model_dump()
             }
-            return intent.followup_question
 
-        # Fallback clarification
-        return f"Could you clarify what you'd like me to do, {addr}?"
+        else:
+            # Fallback clarification
+            question = f"Could you clarify what you'd like me to do, {addr}?"
+
+        self._last_followup_time = now
+        self._last_followup_intent = intent.primary_intent
+        self._last_followup_question = question
+        return question
 
     def resolve_followup_response(self, user_response: str) -> Dict[str, Any]:
         """
@@ -103,6 +132,121 @@ class FollowUpEngine:
         if any(trigger in lower for trigger in interrupt_triggers):
             logger.info(f"[FOLLOWUP_INTERRUPTED] Pending follow-up superseded by new utterance: '{user_response}'")
             self._pending_context = None
+            return {"resolved": False, "request": user_response}
+
+        # 0. Proactive Work Fatigue & Wrap-Up Follow-up ("Dim lights and play soothing track")
+        if context_type in ("PROACTIVE_WORK_FATIGUE_TRANSITION", "PROACTIVE_WORK_WRAPUP", "PROACTIVE_FATIGUE"):
+            self._pending_context = None
+
+            # 0a. Check for partial modifier requests first
+            if any(lo in lower for lo in ["just light", "just the light", "lights only", "only lights", "no music", "not music", "without music", "just dim"]):
+                return {
+                    "resolved": True,
+                    "request": "Dim the lights to relax mode",
+                    "intent": "DIM_LIGHTS_ONLY"
+                }
+            if any(mo in lower for mo in ["just music", "just song", "music only", "only music", "leave lights", "keep lights", "no lights", "without dimming"]):
+                return {
+                    "resolved": True,
+                    "request": "Play soothing music on soundbar",
+                    "intent": "PLAY_RELAXING_MUSIC"
+                }
+
+            # 0b. Check for snooze / postponement
+            if any(sn in lower for sn in ["not yet", "later", "give me", "more minutes", "still working", "10 min", "15 min", "20 min", "wait", "working"]):
+                return {
+                    "resolved": True,
+                    "request": "Snooze work fatigue prompt",
+                    "intent": "SNOOZE_WORK_FATIGUE"
+                }
+
+            # 0c. Check for standalone negative / rejection
+            if any(neg in lower for neg in ["nah", "don't", "dont", "never mind", "cancel", "leave it", "leave it off", "stop"]) or lower in ["no", "no thanks", "no don't", "no dont"]:
+                return {
+                    "resolved": True,
+                    "request": "Cancel fatigue relaxation prompt",
+                    "intent": "REJECT_PROACTIVE_SUGGESTION"
+                }
+
+            # 0d. Check for affirmative responses
+            if any(aff in lower for aff in ["yes", "yeah", "sure", "please", "yep", "do it", "go ahead", "dim", "soothing", "relax", "music", "play", "okay", "ok"]):
+                return {
+                    "resolved": True,
+                    "request": "Dim lights to relax mode and play soothing track",
+                    "intent": "DIM_LIGHTS_AND_PLAY_SOOTHING_MEDIA"
+                }
+
+            # Unrecognized response -> fall through to regular processing
+            return {"resolved": False, "request": user_response}
+
+        # 0b. Proactive Morning Briefing Follow-up ("Music" vs "Print" vs "Both" vs "No")
+        if context_type == "PROACTIVE_MORNING_BRIEFING":
+            self._pending_context = None
+            if any(neg in lower for neg in ["no", "nah", "don't", "dont", "not now", "later", "never mind", "cancel"]):
+                return {
+                    "resolved": True,
+                    "request": "Decline morning briefing action",
+                    "intent": "DECLINE_MORNING_ACTION"
+                }
+            if any(p in lower for p in ["print", "paper", "sheet", "checklist", "plan", "sql"]):
+                if any(m in lower for m in ["both", "and music", "music too", "with music"]):
+                    return {
+                        "resolved": True,
+                        "request": "Print daily study plan on HP Ink Tank 310 and start morning focus playlist",
+                        "intent": "MORNING_PRINT_AND_MUSIC"
+                    }
+                return {
+                    "resolved": True,
+                    "request": "Print daily study plan on HP Ink Tank 310",
+                    "intent": "PRINT_MORNING_PLAN"
+                }
+            if any(m in lower for m in ["music", "song", "playlist", "focus"]):
+                return {
+                    "resolved": True,
+                    "request": "Start morning focus playlist",
+                    "intent": "START_MORNING_MUSIC"
+                }
+            if any(aff in lower for aff in ["yes", "yeah", "sure", "please", "yep", "do it", "go ahead", "okay", "ok"]):
+                return {
+                    "resolved": True,
+                    "request": "Start morning focus playlist",
+                    "intent": "START_MORNING_MUSIC"
+                }
+            return {"resolved": False, "request": user_response}
+
+        # 0c. Proactive Evening Debrief Follow-up ("Print" vs "Guitar" vs "Both" vs "No")
+        if context_type == "PROACTIVE_EVENING_DEBRIEF":
+            self._pending_context = None
+            if any(neg in lower for neg in ["no", "nah", "don't", "dont", "not now", "later", "never mind", "cancel"]):
+                return {
+                    "resolved": True,
+                    "request": "Decline evening debrief action",
+                    "intent": "DECLINE_EVENING_ACTION"
+                }
+            if any(p in lower for p in ["print", "paper", "sheet", "checklist", "tomorrow"]):
+                if any(g in lower for g in ["both", "and guitar", "guitar too", "with guitar"]):
+                    return {
+                        "resolved": True,
+                        "request": "Print tomorrow's checklist on HP Ink Tank 310 and cue guitar practice",
+                        "intent": "EVENING_PRINT_AND_GUITAR"
+                    }
+                return {
+                    "resolved": True,
+                    "request": "Print tomorrow's checklist on HP Ink Tank 310",
+                    "intent": "PRINT_EVENING_CHECKLIST"
+                }
+            if any(g in lower for g in ["guitar", "practice", "play"]):
+                return {
+                    "resolved": True,
+                    "request": "Set room to guitar practice mode",
+                    "intent": "START_GUITAR_PRACTICE"
+                }
+            if any(aff in lower for aff in ["yes", "yeah", "sure", "please", "yep", "do it", "go ahead", "okay", "ok"]):
+                return {
+                    "resolved": True,
+                    "request": "Set room to guitar practice mode and print tomorrow's checklist",
+                    "intent": "EVENING_PRINT_AND_GUITAR"
+                }
             return {"resolved": False, "request": user_response}
 
         # 1. Relaxation follow-up answer ("Music" vs "Movie" vs "Quiet" vs Negative Constraint)

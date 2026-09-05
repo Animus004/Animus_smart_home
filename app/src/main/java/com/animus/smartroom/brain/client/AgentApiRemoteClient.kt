@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
  * Endpoint: POST http://<host>:8095/api/agent/interact
  */
 class AgentApiRemoteClient(
-    private val hostProvider: () -> String = { "192.168.1.9" },
+    private val hostProvider: () -> String = { "192.168.1.4" },
     private val port: Int = 8095,
     private val connectTimeoutMs: Int = 5000,
     private val readTimeoutMs: Int = 135000

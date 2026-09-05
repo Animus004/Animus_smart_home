@@ -241,17 +241,28 @@ class TaskManager:
             now = time.time()
             due = now + 3600  # Default 1 hour later
             is_after_lunch = "after lunch" in clean_msg
-            if "tomorrow" in clean_msg:
-                due = now + 86400
-                clean_msg = clean_msg.replace("tomorrow", "").strip()
-            if is_after_lunch:
-                due = now + 7200
-                clean_msg = clean_msg.replace("after lunch", "").strip()
-            for t_marker in ["at 5", "at 17:00", "at 10", "at 10:00"]:
-                if t_marker in clean_msg:
-                    clean_msg = clean_msg.replace(t_marker, "").strip()
 
-            title = clean_msg.strip(" .,").capitalize()
+            try:
+                from agent.agent_decision_engine import parse_reminder_intention
+                parsed = parse_reminder_intention(utterance, current_time=now)
+            except Exception:
+                parsed = None
+
+            if parsed:
+                due = parsed["scheduled_time"]
+                title = parsed["subject"]
+            else:
+                if "tomorrow" in clean_msg:
+                    due = now + 86400
+                    clean_msg = clean_msg.replace("tomorrow", "").strip()
+                if is_after_lunch:
+                    due = now + 7200
+                    clean_msg = clean_msg.replace("after lunch", "").strip()
+                for t_marker in ["at 5", "at 17:00", "at 10", "at 10:00"]:
+                    if t_marker in clean_msg:
+                        clean_msg = clean_msg.replace(t_marker, "").strip()
+
+                title = clean_msg.strip(" .,").capitalize()
 
             # Turn 13: Contextual modification (e.g. "Actually remind me after lunch")
             if not title or title.lower() in ("after lunch", "tomorrow", "then", "later"):
@@ -264,7 +275,7 @@ class TaskManager:
                     return {
                         "type": "REMINDER_MODIFIED",
                         "object": rem,
-                        "message": f"Got it, buddy — I've updated your reminder for '{rem.message}' to {time_label}."
+                        "message": f"Got it, Sir — I've updated your reminder for '{rem.message}' to {time_label}."
                     }
 
             if not title:
@@ -279,7 +290,7 @@ class TaskManager:
                         return {
                             "type": "REMINDER_REUSED",
                             "object": r,
-                            "message": f"Got it, buddy — you already have a reminder scheduled for '{r.message}' at {r_time}."
+                            "message": f"Got it, Sir — you already have a reminder scheduled for '{r.message}' at {r_time}."
                         }
 
             task = self.create_task(
@@ -291,7 +302,7 @@ class TaskManager:
                 "type": "REMINDER_CREATED",
                 "object": rem,
                 "task": task,
-                "message": f"Got it, buddy — I'll remind you to '{rem.message}'."
+                "message": f"Got it, Sir — I'll remind you to '{rem.message}'."
             }
 
         # Check add task pattern
@@ -302,7 +313,7 @@ class TaskManager:
                     clean_title = clean_title.replace(prefix, "").strip()
                     break
             task = self.create_task(title=clean_title.strip(" .,").capitalize(), priority=TaskPriority.MEDIUM)
-            return {"type": "TASK_CREATED", "object": task, "message": f"Got it, buddy — I've added task: '{task.title}'."}
+            return {"type": "TASK_CREATED", "object": task, "message": f"Got it, Sir — I've added task: '{task.title}'."}
 
         return None
 
@@ -316,11 +327,11 @@ class TaskManager:
         if any(q in lower for q in ["what did i just add", "what was the last thing i added", "what reminder did i just add", "what task did i just add"]):
             if self._last_created_reminder_id and self._last_created_reminder_id in self._reminders:
                 rem = self._reminders[self._last_created_reminder_id]
-                return f"You just added a reminder to '{rem.message}', buddy."
+                return f"You just added a reminder to '{rem.message}', Sir."
             if self._last_created_task_id and self._last_created_task_id in self._tasks:
                 task = self._tasks[self._last_created_task_id]
-                return f"You just added task '{task.title}', buddy."
-            return "You haven't added any new tasks or reminders recently, buddy."
+                return f"You just added task '{task.title}', Sir."
+            return "You haven't added any new tasks or reminders recently, Sir."
 
         # Turn 17: Query specific after-lunch task
         if any(q in lower for q in ["what was i supposed to do after lunch", "what to do after lunch", "after lunch task"]):
@@ -329,8 +340,8 @@ class TaskManager:
                 if "window functions" in r.message.lower() or "sql" in r.message.lower()
             ]
             if after_lunch_items:
-                return f"After lunch, you're scheduled to: {', '.join(after_lunch_items)}, buddy."
-            return "You don't have any specific tasks scheduled right after lunch, buddy."
+                return f"After lunch, you're scheduled to: {', '.join(after_lunch_items)}, Sir."
+            return "You don't have any specific tasks scheduled right after lunch, Sir."
 
         # Turn 24: Specific task status query (e.g. guitar practice)
         if any(q in lower for q in ["did i finish my guitar practice", "guitar practice on the list", "is guitar done", "did i finish guitar"]):
@@ -338,18 +349,18 @@ class TaskManager:
             if guitar_tasks:
                 t = guitar_tasks[0]
                 if t.status == TaskStatus.COMPLETED:
-                    return "Yes, your guitar practice session is marked as completed on your list, buddy."
+                    return "Yes, your guitar practice session is marked as completed on your list, Sir."
                 else:
-                    return "Your guitar practice session is still pending on your list, buddy."
-            return "Guitar practice is currently pending on your list, buddy."
+                    return "Your guitar practice session is still pending on your list, Sir."
+            return "Guitar practice is currently pending on your list, Sir."
 
         # Completed tasks query (Turn 42: "What did I accomplish today?")
         if any(q in lower for q in ["what did i accomplish", "what did i do today", "completed tasks"]):
             completed = self.list_tasks(status=TaskStatus.COMPLETED)
             if not completed:
-                return "No completed tasks recorded yet today, buddy."
+                return "No completed tasks recorded yet today, Sir."
             lines = [f"- {t.title}" for t in completed]
-            return f"Here's what you've completed today, buddy:\n" + "\n".join(lines)
+            return f"Here's what you've completed today, Sir:\n" + "\n".join(lines)
 
         # Pending tasks / General agenda query (Turn 02: "What's on my plate today?")
         if any(q in lower for q in [
@@ -358,16 +369,16 @@ class TaskManager:
         ]):
             pending = self.get_pending_tasks()
             if not pending:
-                return "You're all caught up, buddy! No pending tasks on your schedule right now."
+                return "You're all caught up, Sir! No pending tasks on your schedule right now."
             lines = [f"{idx+1}. {t.title} ({t.priority.value} priority)" for idx, t in enumerate(pending)]
-            return f"Here is what's on your agenda, buddy:\n" + "\n".join(lines)
+            return f"Here is what's on your agenda, Sir:\n" + "\n".join(lines)
 
         if any(q in lower for q in ["what did i forget", "what is pending", "what's pending"]):
             pending = self.get_pending_tasks()
             if not pending:
-                return "Nothing pending, buddy! You're completely up to date."
+                return "Nothing pending, Sir! You're completely up to date."
             lines = [f"- {t.title}" for t in pending]
-            return f"You have {len(pending)} pending item(s), buddy:\n" + "\n".join(lines)
+            return f"You have {len(pending)} pending item(s), Sir:\n" + "\n".join(lines)
 
         return None
 

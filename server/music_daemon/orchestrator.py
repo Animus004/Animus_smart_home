@@ -88,6 +88,7 @@ class SmartRoomOrchestrator:
         self._in_movie_mode: bool = False
         self._in_alarm_mode: bool = False
         self._auto_advance_lock = threading.Lock()
+        self._active_mode_val: str = "IDLE"
 
         # Register continuous IPC EOF event callback
         self.player.register_eof_callback(self._handle_player_eof)
@@ -95,6 +96,16 @@ class SmartRoomOrchestrator:
     @property
     def current_state(self) -> RoomAudioState:
         return self._current_state
+
+    @property
+    def current_mode(self) -> str:
+        if getattr(self, "_in_movie_mode", False):
+            return "MOVIE"
+        return getattr(self, "_active_mode_val", "IDLE")
+
+    def set_active_mode(self, mode: str) -> None:
+        self._active_mode_val = str(mode).upper()
+        logger.info(f"[ORCHESTRATOR_MODE_CHANGE] Active mode transitioned to {self._active_mode_val}")
 
     def _handle_player_eof(self, last_track: Optional[Dict[str, Any]], event_data: Dict[str, Any]):
         """
@@ -354,6 +365,35 @@ class SmartRoomOrchestrator:
     def get_queue_status(self) -> Dict[str, Any]:
         return self.queue.get_status()
 
+    # Canonical Playback Aliases for Agent Decision Engine & Work Mode
+    def play_music(self, query: str, artist: Optional[str] = None) -> Tuple[bool, Dict[str, Any], Optional[str]]:
+        """Alias for safe_play to satisfy agent decision engine and work mode activations."""
+        return self.safe_play(title=query, artist=artist)
+
+    def pause_media(self) -> bool:
+        """Alias for safe_pause."""
+        return self.safe_pause()
+
+    def resume_media(self) -> bool:
+        """Alias for safe_resume."""
+        return self.safe_resume()
+
+    def stop_media(self) -> bool:
+        """Stops active player and resets room audio state."""
+        if hasattr(self, "player") and self.player:
+            self.player.stop()
+            self._current_state = RoomAudioState.AUDIO_READY
+            return True
+        return False
+
+    def next_track(self) -> Tuple[bool, Dict[str, Any], Optional[str]]:
+        """Alias for skip_next."""
+        return self.skip_next()
+
+    def previous_track(self) -> Tuple[bool, Dict[str, Any], Optional[str]]:
+        """Alias for skip_previous."""
+        return self.skip_previous()
+
     def get_movie_mode_health(self) -> Dict[str, Any]:
         """
         Validates the critical room invariant:
@@ -512,6 +552,11 @@ class SmartRoomOrchestrator:
         """
         t0 = time.time()
         logger.info(f"[ORCHESTRATOR_PLAY] Safe play requested: title='{title}', artist='{artist}'")
+        if hasattr(self, "proactive_orchestrator") and self.proactive_orchestrator:
+            try:
+                self.proactive_orchestrator.notify_manual_playback_started()
+            except Exception:
+                pass
 
         # 1. Resolve track
         resolved = self.resolver.resolve(title=title, artist=artist, direct_id=direct_video_id)

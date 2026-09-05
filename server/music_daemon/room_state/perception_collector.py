@@ -84,6 +84,7 @@ class PerceptionCollector:
         poll_interval_seconds: float = 5.0,
         ir_hub_ip: str = "192.168.1.12",
         ir_hub_port: int = 6668,
+        vision_observer: Optional[Any] = None,
     ):
         self.projector = projector_controller
         self.fire_tv = fire_tv_controller
@@ -93,6 +94,7 @@ class PerceptionCollector:
         self.poll_interval = poll_interval_seconds
         self.ir_hub_ip = ir_hub_ip
         self.ir_hub_port = ir_hub_port
+        self.vision_observer = vision_observer
 
         self.audio_resolver = AudioContextResolver(
             orchestrator=self.orchestrator,
@@ -107,6 +109,10 @@ class PerceptionCollector:
         self._total_polls: int = 0
         self._last_ac_success_time: float = 0.0
         self._last_ir_success_time: float = 0.0
+
+    def set_vision_observer(self, vision_observer: Any) -> None:
+        """Sets or updates the vision observer instance."""
+        self.vision_observer = vision_observer
 
     def start(self) -> None:
         """Starts the background perception worker thread."""
@@ -521,14 +527,73 @@ class PerceptionCollector:
         pc_on = bool(st.pc.online.value) if st.pc and st.pc.online and st.pc.online.value is not None else True
         media_playing = (st.audio_stream.playback_state.value == "PLAYING") if st.audio_stream and st.audio_stream.playback_state and st.audio_stream.playback_state.value is not None else False
 
+        user_idle_sec = 0.0
+        pc_locked = False
+        if self.pc:
+            if hasattr(self.pc, "get_user_idle_seconds") and callable(getattr(self.pc, "get_user_idle_seconds")):
+                user_idle_sec = self.pc.get_user_idle_seconds()
+            if hasattr(self.pc, "is_workstation_locked") and callable(getattr(self.pc, "is_workstation_locked")):
+                pc_locked = self.pc.is_workstation_locked()
+
+        mode_val = "IDLE"
+        if self.orchestrator and hasattr(self.orchestrator, "current_mode"):
+            mode_val = str(self.orchestrator.current_mode)
+        elif st.environment and hasattr(st.environment, "room_mode") and st.environment.room_mode and getattr(st.environment.room_mode, "value", None):
+            mode_val = str(st.environment.room_mode.value)
+
+        desk_present = False
+        desk_state = "UNKNOWN"
+        desk_seated_sec = 0.0
+        camera_online = False
+        motion_score = 0.0
+        if self.vision_observer and hasattr(self.vision_observer, "get_presence_telemetry"):
+            try:
+                v_tel = self.vision_observer.get_presence_telemetry()
+                desk_present = bool(v_tel.get("is_present", False))
+                desk_state = str(v_tel.get("state", "UNKNOWN"))
+                desk_seated_sec = float(v_tel.get("seated_duration_seconds", 0.0))
+                camera_online = bool(v_tel.get("camera_online", False))
+                motion_score = float(v_tel.get("motion_score", 0.0))
+            except Exception as e:
+                logger.debug(f"[PERCEPTION_VISION_QUERY_ERR] {e}")
+
+        # Multi-modal desk presence fusion:
+        # Case A: If camera is offline/disconnected, fall back to PC user activity (idle < 30s)
+        if not camera_online:
+            if pc_on and not pc_locked and float(user_idle_sec) < 30.0:
+                desk_present = True
+                desk_state = "PRESENT"
+            else:
+                desk_present = False
+                desk_state = "EMPTY"
+        else:
+            # Case B: Camera is online — optical observer is the physical ground truth.
+            # If user is visually present, active typing (idle < 15s) sustains quiet focus
+            if desk_present and self.vision_observer and pc_on and not pc_locked and float(user_idle_sec) < 15.0:
+                if hasattr(self.vision_observer, "last_seen_timestamp"):
+                    self.vision_observer.last_seen_timestamp = time.time()
+
+        last_seen = 0.0
+        if self.vision_observer and hasattr(self.vision_observer, "last_seen_timestamp"):
+            last_seen = float(self.vision_observer.last_seen_timestamp or 0.0)
+
         return {
+            "active_mode": mode_val,
             "ac_power": bool(ac_pwr),
             "ac_ambient_temp": int(ac_amb) if ac_amb is not None else 24,
             "ac_target_temp": int(ac_tgt) if ac_tgt is not None else 24,
             "projector_power": bool(proj_pwr),
             "fire_tv_online": bool(ftv_on),
             "pc_online": bool(pc_on),
-            "media_playing": bool(media_playing)
+            "user_idle_seconds": float(user_idle_sec),
+            "pc_locked": bool(pc_locked),
+            "media_playing": bool(media_playing),
+            "desk_present": desk_present,
+            "desk_state": desk_state,
+            "desk_seated_seconds": desk_seated_sec,
+            "camera_online": camera_online,
+            "desk_motion_score": motion_score,
+            "last_seen_timestamp": last_seen
         }
 
 
@@ -536,10 +601,41 @@ class PerceptionCollector:
 _global_perception_collector: Optional[PerceptionCollector] = None
 
 
-def get_perception_collector() -> PerceptionCollector:
-    """Returns or initializes the global PerceptionCollector singleton."""
+def get_perception_collector(
+    projector_controller: Optional[Any] = None,
+    fire_tv_controller: Optional[Any] = None,
+    pc_controller: Optional[Any] = None,
+    orchestrator: Optional[Any] = None,
+    ac_read_adapter: Optional[Any] = None,
+    vision_observer: Optional[Any] = None,
+) -> PerceptionCollector:
+    """Returns or initializes the global PerceptionCollector singleton with connected physical controllers."""
     global _global_perception_collector
     if _global_perception_collector is None:
-        _global_perception_collector = PerceptionCollector()
+        _global_perception_collector = PerceptionCollector(
+            projector_controller=projector_controller,
+            fire_tv_controller=fire_tv_controller,
+            pc_controller=pc_controller,
+            orchestrator=orchestrator,
+            ac_read_adapter=ac_read_adapter,
+            vision_observer=vision_observer
+        )
+    else:
+        if orchestrator:
+            _global_perception_collector.orchestrator = orchestrator
+            if hasattr(_global_perception_collector, "aggregator") and _global_perception_collector.aggregator:
+                _global_perception_collector.aggregator.orchestrator = orchestrator
+            if hasattr(_global_perception_collector, "audio_resolver") and _global_perception_collector.audio_resolver:
+                _global_perception_collector.audio_resolver.orchestrator = orchestrator
+        if pc_controller:
+            _global_perception_collector.pc = pc_controller
+            if hasattr(_global_perception_collector, "aggregator") and _global_perception_collector.aggregator:
+                _global_perception_collector.aggregator.pc = pc_controller
+        if projector_controller and not _global_perception_collector.projector:
+            _global_perception_collector.projector = projector_controller
+        if fire_tv_controller and not _global_perception_collector.fire_tv:
+            _global_perception_collector.fire_tv = fire_tv_controller
+        if vision_observer:
+            _global_perception_collector.vision_observer = vision_observer
     return _global_perception_collector
 
