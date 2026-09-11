@@ -14,9 +14,13 @@ Capabilities:
 
 from __future__ import annotations
 import os
+import sys
+import uuid
+import tempfile
 import subprocess
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("music_daemon.printer_controller")
@@ -55,6 +59,35 @@ class PrinterController:
         except Exception as e:
             logger.error(f"[PRINTER_PS_ERR] {e}")
             return -1, "", str(e)
+
+    def _run_ps_script(self, script_content: str, timeout: float = 40.0) -> Tuple[int, str, str]:
+        """Executes a PowerShell script content via a temporary .ps1 file to bypass CLI escaping limits."""
+        ps_file = None
+        try:
+            temp_dir = Path(tempfile.gettempdir()) / "animus_printer_scripts"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            ps_file = temp_dir / f"spool_{uuid.uuid4().hex[:8]}.ps1"
+            ps_file.write_text(script_content, encoding="utf-8")
+
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(ps_file)],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            return res.returncode, res.stdout.strip(), res.stderr.strip()
+        except subprocess.TimeoutExpired:
+            logger.error(f"[PRINTER_PS_TIMEOUT] Script timed out after {timeout}s")
+            return -1, "", f"Timeout after {timeout}s"
+        except Exception as e:
+            logger.error(f"[PRINTER_PS_ERR] {e}")
+            return -1, "", str(e)
+        finally:
+            if ps_file and ps_file.exists():
+                try:
+                    ps_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     # =========================================================================
     # 1. State & Telemetry Queries
@@ -132,64 +165,9 @@ class PrinterController:
 
     def print_file(self, file_path: str, printer_name: Optional[str] = None) -> Tuple[bool, Dict[str, Any]]:
         """
-        Sends a physical file to the printer with security validation and spooler verification.
+        Sends a physical file to the printer with format-specific page fitting and spooler verification.
         """
-        target = printer_name or self.target_printer
-        clean_path = os.path.abspath(file_path)
-
-        if not os.path.exists(clean_path):
-            return False, {
-                "success": False,
-                "error": f"File does not exist: {clean_path}",
-                "status": "FILE_NOT_FOUND",
-                "verified": False
-            }
-
-        ext = os.path.splitext(clean_path)[1].lower()
-        if ext not in self.ALLOWED_EXTENSIONS:
-            return False, {
-                "success": False,
-                "error": f"File type '{ext}' is not allowed for printing. Allowed: {list(self.ALLOWED_EXTENSIONS)}",
-                "status": "INVALID_EXTENSION",
-                "verified": False
-            }
-
-        if self.is_simulated:
-            logger.info(f"[PRINTER_SIMULATED] Printed '{clean_path}' to '{target}'.")
-            return True, {
-                "success": True,
-                "file": clean_path,
-                "printer": target,
-                "action": "PRINT_FILE",
-                "status": "QUEUED_SIMULATED",
-                "verified": True
-            }
-
-        # Dispatch printing using Start-Process with Verb PrintTo or Out-Printer
-        logger.info(f"[PRINTER_DISPATCH] Dispatching '{clean_path}' to physical printer '{target}'...")
-        ps_dispatch = (
-            f"Start-Process -FilePath '{clean_path}' -Verb PrintTo -ArgumentList '\"{target}\"' -PassThru -WindowStyle Hidden"
-        )
-        code, _, stderr = self._run_ps(ps_dispatch, timeout=8.0)
-
-        # In case PrintTo verb is not registered for extension, fallback to Get-Content / Out-Printer for text/code
-        if code != 0 and ext in [".txt", ".sql", ".csv", ".md", ".json"]:
-            ps_fallback = f"Get-Content -Path '{clean_path}' | Out-Printer -Name '{target}'"
-            code, _, stderr = self._run_ps(ps_fallback, timeout=8.0)
-
-        ok = (code == 0)
-        time.sleep(0.5)
-        st = self.get_status()
-
-        return ok, {
-            "success": ok,
-            "file": clean_path,
-            "printer": target,
-            "action": "PRINT_FILE",
-            "active_jobs_in_spooler": st.get("job_count", 0),
-            "message": f"Dispatched '{os.path.basename(clean_path)}' to {target}." if ok else f"Print dispatch failed: {stderr}",
-            "verified": ok
-        }
+        return self.print_custom_file(file_path=file_path, printer_name=printer_name)
 
     def print_document(self, file_path: str, printer_name: Optional[str] = None) -> Tuple[bool, Dict[str, Any]]:
         """Alias for print_file."""
@@ -244,90 +222,230 @@ class PrinterController:
             }
 
         logger.info(f"[PRINTER_CUSTOM_DISPATCH] Dispatching '{clean_path}' (type={ext}, copies={copies}, orient={orientation}) to '{target}'...")
+        escaped_target = target.replace("'", "''")
         code = -1
         stderr = ""
 
-        # 1. Images (PNG, JPG, JPEG, BMP): Auto-fit to A4 Margin Bounds without clipping
-        if ext in [".png", ".jpg", ".jpeg", ".bmp"]:
-            escaped_path = clean_path.replace("'", "''")
-            escaped_target = target.replace("'", "''")
-            ps_img = (
-                f"Add-Type -AssemblyName System.Drawing; "
-                f"$doc = New-Object System.Drawing.Printing.PrintDocument; "
-                f"$doc.PrinterSettings.PrinterName = '{escaped_target}'; "
-                f"$doc.PrinterSettings.Copies = {copies}; "
-                f"$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}; "
-                f"$img = [System.Drawing.Image]::FromFile('{escaped_path}'); "
-                f"$doc.add_PrintPage({{ "
-                f"  param($sender, $ev) "
-                f"  $bounds = $ev.MarginBounds; "
-                f"  $ratio = [Math]::Min($bounds.Width / $img.Width, $bounds.Height / $img.Height); "
-                f"  $w = [int]($img.Width * $ratio); "
-                f"  $h = [int]($img.Height * $ratio); "
-                f"  $x = $bounds.X + [int](($bounds.Width - $w) / 2); "
-                f"  $y = $bounds.Y + [int](($bounds.Height - $h) / 2); "
-                f"  $ev.Graphics.DrawImage($img, $x, $y, $w, $h); "
-                f"  $ev.HasMorePages = $false; "
-                f"}}); "
-                f"$doc.Print(); "
-                f"$img.Dispose(); "
-                f"$doc.Dispose();"
-            )
-            code, _, stderr = self._run_ps(ps_img, timeout=12.0)
+        # 1. PDF Files (.pdf): High-DPI Multi-Page Rasterization + Direct GDI Spooler
+        if ext == ".pdf":
+            try:
+                import pymupdf
+                doc = pymupdf.open(clean_path)
+                page_count = len(doc)
+                temp_spool_dir = Path(tempfile.gettempdir()) / "animus_pdf_spool"
+                temp_spool_dir.mkdir(parents=True, exist_ok=True)
 
-        # 2. Text, Markdown, and Code (.txt, .md, .sql, .py, .json, .csv, .log): Clean monospace with header & pagination
+                img_paths = []
+                for i in range(page_count):
+                    page = doc[i]
+                    pix = page.get_pixmap(dpi=200)
+                    out_img = temp_spool_dir / f"pdf_page_{uuid.uuid4().hex[:8]}_{i}.png"
+                    pix.save(str(out_img))
+                    img_paths.append(str(out_img).replace("'", "''"))
+                doc.close()
+
+                if img_paths:
+                    files_array = "@(" + ", ".join([f"'{p}'" for p in img_paths]) + ")"
+                    ps_pdf = f"""
+Add-Type -AssemblyName System.Drawing
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = '{escaped_target}'
+$doc.PrinterSettings.Copies = {copies}
+$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}
+
+$script:pageList = {files_array}
+$script:pIdx = 0
+
+$doc.add_PrintPage({{
+    param($sender, $ev)
+    if ($script:pIdx -lt $script:pageList.Count) {{
+        $imgPath = $script:pageList[$script:pIdx]
+        $img = [System.Drawing.Image]::FromFile($imgPath)
+        # Printable area with 15pt hardware safety margins
+        $b = New-Object System.Drawing.Rectangle(15, 15, $ev.PageBounds.Width - 30, $ev.PageBounds.Height - 30)
+        $ratio = [Math]::Min($b.Width / $img.Width, $b.Height / $img.Height)
+        $w = [int]($img.Width * $ratio)
+        $h = [int]($img.Height * $ratio)
+        $x = $b.X + [int](($b.Width - $w) / 2)
+        $y = $b.Y + [int](($b.Height - $h) / 2)
+        $ev.Graphics.DrawImage($img, $x, $y, $w, $h)
+        $img.Dispose()
+        $script:pIdx++
+        $ev.HasMorePages = ($script:pIdx -lt $script:pageList.Count)
+    }} else {{
+        $ev.HasMorePages = $false
+    }}
+}})
+
+try {{
+    $doc.Print()
+    Write-Output "SUCCESS_PRINT_DISPATCH"
+}} catch {{
+    Write-Error $_
+}} finally {{
+    $doc.Dispose()
+}}
+"""
+                    code, _, stderr = self._run_ps_script(ps_pdf, timeout=40.0)
+
+                    # Cleanup rendered temporary page images
+                    for p_str in img_paths:
+                        try:
+                            if os.path.exists(p_str):
+                                os.remove(p_str)
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.error(f"[PRINTER_PDF_RENDER_ERR] {e}", exc_info=True)
+                code = -1
+                stderr = str(e)
+
+        # 2. Images (PNG, JPG, JPEG, BMP): Auto-fit to A4 Margin Bounds without clipping
+        elif ext in [".png", ".jpg", ".jpeg", ".bmp"]:
+            escaped_path = clean_path.replace("'", "''")
+            ps_img = f"""
+Add-Type -AssemblyName System.Drawing
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = '{escaped_target}'
+$doc.PrinterSettings.Copies = {copies}
+$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}
+$img = [System.Drawing.Image]::FromFile('{escaped_path}')
+$doc.add_PrintPage({{
+    param($sender, $ev)
+    $b = New-Object System.Drawing.Rectangle(15, 15, $ev.PageBounds.Width - 30, $ev.PageBounds.Height - 30)
+    $ratio = [Math]::Min($b.Width / $img.Width, $b.Height / $img.Height)
+    $w = [int]($img.Width * $ratio)
+    $h = [int]($img.Height * $ratio)
+    $x = $b.X + [int](($b.Width - $w) / 2)
+    $y = $b.Y + [int](($b.Height - $h) / 2)
+    $ev.Graphics.DrawImage($img, $x, $y, $w, $h)
+    $ev.HasMorePages = $false
+}})
+
+try {{
+    $doc.Print()
+    Write-Output "SUCCESS_PRINT_DISPATCH"
+}} catch {{
+    Write-Error $_
+}} finally {{
+    $img.Dispose()
+    $doc.Dispose()
+}}
+"""
+            code, _, stderr = self._run_ps_script(ps_img, timeout=20.0)
+
+        # 3. Word Documents (.docx, .doc): Extract structured paragraphs and paginate
+        elif ext in [".docx", ".doc"]:
+            try:
+                import docx
+                doc = docx.Document(clean_path)
+                lines = [p.text for p in doc.paragraphs if p.text.strip()]
+                clean_txt_path = Path(tempfile.gettempdir()) / f"docx_spool_{uuid.uuid4().hex[:8]}.txt"
+                clean_txt_path.write_text("\n".join(lines), encoding="utf-8")
+                escaped_txt = str(clean_txt_path).replace("'", "''")
+                base_name = os.path.basename(clean_path).replace("'", "''")
+
+                ps_docx = f"""
+Add-Type -AssemblyName System.Drawing
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = '{escaped_target}'
+$doc.PrinterSettings.Copies = {copies}
+$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}
+$font = New-Object System.Drawing.Font('Segoe UI', 10)
+$hdrFont = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+$brush = [System.Drawing.Brushes]::Black
+$lines = Get-Content -Path '{escaped_txt}' -Encoding UTF8
+$script:lIdx = 0
+$script:pg = 1
+$doc.add_PrintPage({{
+    param($sender, $ev)
+    $m = $ev.MarginBounds
+    $y = $m.Top
+    $hdr = 'Animus Smart Room  |  {base_name}  |  Page ' + $script:pg
+    $ev.Graphics.DrawString($hdr, $hdrFont, $brush, $m.Left, $y)
+    $y += 22
+    $ev.Graphics.DrawLine([System.Drawing.Pens]::LightGray, $m.Left, $y, $m.Right, $y)
+    $y += 10
+    $lineH = $font.GetHeight($ev.Graphics)
+    while ($script:lIdx -lt $lines.Count -and ($y + $lineH) -lt $m.Bottom) {{
+        $ev.Graphics.DrawString($lines[$script:lIdx], $font, $brush, $m.Left, $y)
+        $y += $lineH
+        $script:lIdx++
+    }}
+    $script:pg++
+    $ev.HasMorePages = ($script:lIdx -lt $lines.Count)
+}})
+
+try {{
+    $doc.Print()
+    Write-Output "SUCCESS_PRINT_DISPATCH"
+}} catch {{
+    Write-Error $_
+}} finally {{
+    $font.Dispose()
+    $hdrFont.Dispose()
+    $doc.Dispose()
+}}
+"""
+                code, _, stderr = self._run_ps_script(ps_docx, timeout=25.0)
+                try:
+                    clean_txt_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.error(f"[PRINTER_DOCX_ERR] {e}", exc_info=True)
+                code = -1
+                stderr = str(e)
+
+        # 4. Text, Markdown, and Code (.txt, .md, .sql, .py, .json, .csv, .log): Clean monospace with header & pagination
         elif ext in [".txt", ".md", ".sql", ".py", ".json", ".csv", ".log"]:
             escaped_path = clean_path.replace("'", "''")
-            escaped_target = target.replace("'", "''")
             base_name = os.path.basename(clean_path).replace("'", "''")
-            ps_text = (
-                f"Add-Type -AssemblyName System.Drawing; "
-                f"$doc = New-Object System.Drawing.Printing.PrintDocument; "
-                f"$doc.PrinterSettings.PrinterName = '{escaped_target}'; "
-                f"$doc.PrinterSettings.Copies = {copies}; "
-                f"$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}; "
-                f"$font = New-Object System.Drawing.Font('Consolas', 10); "
-                f"$hdrFont = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold); "
-                f"$brush = [System.Drawing.Brushes]::Black; "
-                f"$lines = Get-Content -Path '{escaped_path}' -Encoding UTF8; "
-                f"$script:lIdx = 0; "
-                f"$script:pg = 1; "
-                f"$doc.add_PrintPage({{ "
-                f"  param($sender, $ev) "
-                f"  $m = $ev.MarginBounds; "
-                f"  $y = $m.Top; "
-                f"  $hdr = 'Animus Smart Room  |  {base_name}  |  Page ' + $script:pg; "
-                f"  $ev.Graphics.DrawString($hdr, $hdrFont, $brush, $m.Left, $y); "
-                f"  $y += 22; "
-                f"  $ev.Graphics.DrawLine([System.Drawing.Pens]::LightGray, $m.Left, $y, $m.Right, $y); "
-                f"  $y += 10; "
-                f"  $lineH = $font.GetHeight($ev.Graphics); "
-                f"  while ($script:lIdx -lt $lines.Count -and ($y + $lineH) -lt $m.Bottom) {{ "
-                f"    $ev.Graphics.DrawString($lines[$script:lIdx], $font, $brush, $m.Left, $y); "
-                f"    $y += $lineH; "
-                f"    $script:lIdx++; "
-                f"  }}; "
-                f"  $script:pg++; "
-                f"  $ev.HasMorePages = ($script:lIdx -lt $lines.Count); "
-                f"}}); "
-                f"$doc.Print(); "
-                f"$font.Dispose(); "
-                f"$hdrFont.Dispose(); "
-                f"$doc.Dispose();"
-            )
-            code, _, stderr = self._run_ps(ps_text, timeout=15.0)
+            ps_text = f"""
+Add-Type -AssemblyName System.Drawing
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = '{escaped_target}'
+$doc.PrinterSettings.Copies = {copies}
+$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}
+$font = New-Object System.Drawing.Font('Consolas', 10)
+$hdrFont = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+$brush = [System.Drawing.Brushes]::Black
+$lines = Get-Content -Path '{escaped_path}' -Encoding UTF8
+$script:lIdx = 0
+$script:pg = 1
+$doc.add_PrintPage({{
+    param($sender, $ev)
+    $m = $ev.MarginBounds
+    $y = $m.Top
+    $hdr = 'Animus Smart Room  |  {base_name}  |  Page ' + $script:pg
+    $ev.Graphics.DrawString($hdr, $hdrFont, $brush, $m.Left, $y)
+    $y += 22
+    $ev.Graphics.DrawLine([System.Drawing.Pens]::LightGray, $m.Left, $y, $m.Right, $y)
+    $y += 10
+    $lineH = $font.GetHeight($ev.Graphics)
+    while ($script:lIdx -lt $lines.Count -and ($y + $lineH) -lt $m.Bottom) {{
+        $ev.Graphics.DrawString($lines[$script:lIdx], $font, $brush, $m.Left, $y)
+        $y += $lineH
+        $script:lIdx++
+    }}
+    $script:pg++
+    $ev.HasMorePages = ($script:lIdx -lt $lines.Count)
+}})
 
-        # 3. PDF and Office (.pdf, .docx, .doc, .xlsx, .pptx, .html)
-        if code != 0:
-            # Fallback to Windows Shell PrintTo verb
-            escaped_path = clean_path.replace("'", "''")
-            escaped_target = target.replace("'", "''")
-            ps_shell = (
-                f"Start-Process -FilePath '{escaped_path}' -Verb PrintTo -ArgumentList '\"{escaped_target}\"' -PassThru -WindowStyle Hidden"
-            )
-            code, _, stderr = self._run_ps(ps_shell, timeout=10.0)
+try {{
+    $doc.Print()
+    Write-Output "SUCCESS_PRINT_DISPATCH"
+}} catch {{
+    Write-Error $_
+}} finally {{
+    $font.Dispose()
+    $hdrFont.Dispose()
+    $doc.Dispose()
+}}
+"""
+            code, _, stderr = self._run_ps_script(ps_text, timeout=25.0)
 
-        # 4. Ultimate fallback for text/code if Shell PrintTo was unavailable
+        # 5. Fallback for text/code if script failed
         if code != 0 and ext in [".txt", ".sql", ".csv", ".md", ".json", ".py", ".log"]:
             ps_fallback = f"Get-Content -Path '{clean_path}' | Out-Printer -Name '{target}'"
             code, _, stderr = self._run_ps(ps_fallback, timeout=8.0)
