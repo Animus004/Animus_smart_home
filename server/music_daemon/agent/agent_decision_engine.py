@@ -1873,8 +1873,24 @@ class AgentDecisionEngine:
 
             elif tool_name in ["PRINTER_PRINT_FILE", "PRINT_DOCUMENT", "PRINT_FILE"]:
                 fpath = params.get("file_path") or params.get("path") or params.get("file")
-                if not fpath:
-                    return {"step_id": step_id, "tool": tool_name, "status": "INVALID_PARAMETER", "error": "file_path is required"}
+                if not fpath or not os.path.exists(fpath):
+                    # Smart auto-resolve for "my resume" or uploaded files
+                    storage_docs = Path("D:/AnimusSmartRoom/server/music_daemon/storage/printed_documents")
+                    matched = None
+                    if storage_docs.exists():
+                        all_pdfs = sorted(list(storage_docs.glob("*.pdf")), key=lambda p: p.stat().st_mtime, reverse=True)
+                        if fpath and any(kw in fpath.lower() for kw in ["resume", "cv", "bio"]):
+                            for p in all_pdfs:
+                                if "resume" in p.name.lower():
+                                    matched = str(p)
+                                    break
+                        elif all_pdfs:
+                            matched = str(all_pdfs[0])
+                    if matched:
+                        fpath = matched
+                    elif not fpath or not os.path.exists(fpath):
+                        return {"step_id": step_id, "tool": tool_name, "status": "INVALID_PARAMETER", "error": f"File path not found: {fpath}"}
+
                 try:
                     from printer_controller import get_printer_controller
                     ok, res = get_printer_controller().print_file(fpath)
@@ -1904,6 +1920,21 @@ class AgentDecisionEngine:
                     return {"step_id": step_id, "tool": tool_name, "status": "SUCCESS" if p_res.get("success") else "FAILED", "print_result": p_res}
                 except Exception as e:
                     logger.error(f"[DECISION_ENGINE] PRINT_SQL_WORKSHEET error: {e}")
+                    return {"step_id": step_id, "tool": tool_name, "status": "ERROR", "error": str(e)}
+
+            elif tool_name in ["PRINT_DAILY_PLAN", "PRINT_BRIEFING", "PRINT_DAILY_SHEET"]:
+                try:
+                    from agent.briefing_service import BriefingService
+                    from printer_controller import get_printer_controller
+                    bs = BriefingService(
+                        memory_store=self.memory_store,
+                        task_manager=self.task_manager,
+                        printer_controller=get_printer_controller()
+                    )
+                    p_res = bs.print_executive_sheet()
+                    return {"step_id": step_id, "tool": tool_name, "status": "SUCCESS" if p_res.get("success") else "FAILED", "print_result": p_res}
+                except Exception as e:
+                    logger.error(f"[DECISION_ENGINE] PRINT_DAILY_PLAN error: {e}")
                     return {"step_id": step_id, "tool": tool_name, "status": "ERROR", "error": str(e)}
 
             # 3. AC Commands

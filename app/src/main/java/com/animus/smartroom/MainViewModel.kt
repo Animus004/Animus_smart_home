@@ -132,6 +132,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun printCustomFile(filename: String, bytes: ByteArray, copies: Int = 1, orientation: String = "portrait") {
         viewModelScope.launch {
+            val reqId = java.util.UUID.randomUUID().toString()
+            _activeRequestId.value = reqId
+            _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
+                requestId = reqId,
+                intent = "PRINT_DOCUMENT",
+                targetDevice = "HP Ink Tank 310",
+                state = com.animus.smartroom.ui.glass.ActionExecutionState.EXECUTING,
+                message = "Spooling '$filename' to HP Ink Tank 310 (USB001)...",
+                severity = com.animus.smartroom.ui.glass.FeedbackSeverity.INFO
+            )
             _chatHistory.update {
                 it + com.animus.smartroom.ui.glass.ChatMessage(
                     isUser = true,
@@ -140,18 +150,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             val res = printerClient.uploadAndPrintFile(filename, bytes, copies, orientation, autoPrint = true)
             if (res.success) {
+                _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
+                    requestId = reqId,
+                    intent = "PRINT_DOCUMENT",
+                    targetDevice = "HP Ink Tank 310",
+                    state = com.animus.smartroom.ui.glass.ActionExecutionState.VERIFIED_SUCCESS,
+                    message = "🖨️ Spooled to HP Ink Tank 310 series (USB001)",
+                    severity = com.animus.smartroom.ui.glass.FeedbackSeverity.SUCCESS
+                )
                 _chatHistory.update {
                     it + com.animus.smartroom.ui.glass.ChatMessage(
                         isUser = false,
                         text = "🖨️ ${res.message}"
                     )
                 }
+                kotlinx.coroutines.delay(6000)
+                if (_activeRequestId.value == reqId && _actionFeedbackState.value?.state == com.animus.smartroom.ui.glass.ActionExecutionState.VERIFIED_SUCCESS) {
+                    _actionFeedbackState.value = null
+                }
             } else {
+                _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
+                    requestId = reqId,
+                    intent = "PRINT_DOCUMENT",
+                    targetDevice = "HP Ink Tank 310",
+                    state = com.animus.smartroom.ui.glass.ActionExecutionState.ERROR_BLOCKED,
+                    message = "❌ Spool failed: ${res.error ?: "Hardware error"}",
+                    severity = com.animus.smartroom.ui.glass.FeedbackSeverity.ERROR
+                )
                 _chatHistory.update {
                     it + com.animus.smartroom.ui.glass.ChatMessage(
                         isUser = false,
                         text = "❌ Failed to print '$filename': ${res.error ?: "Spooler error"}"
                     )
+                }
+                kotlinx.coroutines.delay(6000)
+                if (_activeRequestId.value == reqId && _actionFeedbackState.value?.state == com.animus.smartroom.ui.glass.ActionExecutionState.ERROR_BLOCKED) {
+                    _actionFeedbackState.value = null
                 }
             }
         }

@@ -2177,6 +2177,20 @@ def cancel_printer_spooler_jobs(printer_name: Optional[str] = None):
     return {"success": ok, "telemetry": res}
 
 
+@app.post("/api/printer/queue/open")
+def open_native_printer_queue_window(printer_name: Optional[str] = None):
+    """Opens the native Windows Print Queue status window on the PC desktop."""
+    ok = printer_controller.show_print_queue(printer_name=printer_name)
+    return {"success": ok, "message": "Opened Windows print queue status window."}
+
+
+@app.get("/api/printer/status")
+def get_printer_live_status():
+    """Returns authoritative real-time status of the HP printer and print spooler."""
+    return printer_controller.get_status()
+
+
+
 @app.get("/api/printer/history")
 def get_print_history(limit: int = 20):
     """Returns list of recently staged/printed documents."""

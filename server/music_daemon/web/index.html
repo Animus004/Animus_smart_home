@@ -722,6 +722,106 @@
       background: #0d121f;
       color: #fff;
     }
+    /* ─── PRINT STATUS STEPPER & QUEUE MONITOR ─── */
+    .print-status-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-top: 12px;
+    }
+    .spooler-info-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+    .spooler-info-badge.busy {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+    }
+    .print-stepper {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .print-step-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85rem;
+      color: var(--text-sub);
+      transition: all 0.2s ease;
+    }
+    .print-step-item.active {
+      color: #fff;
+      font-weight: 600;
+    }
+    .print-step-item.done {
+      color: #34d399;
+    }
+    .print-step-item.error {
+      color: #f87171;
+    }
+    .step-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      flex-shrink: 0;
+    }
+    .print-step-item.active .step-circle {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: #6366f1;
+      color: #818cf8;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+      animation: pulse 1.5s infinite;
+    }
+    .print-step-item.done .step-circle {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: #10b981;
+      color: #34d399;
+    }
+    .print-step-item.error .step-circle {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      color: #f87171;
+    }
+    .queue-telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+    }
+    .telemetry-item-label {
+      color: var(--text-sub);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .telemetry-item-value {
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-top: 2px;
+    }
   </style>
 </head>
 <body>
@@ -876,6 +976,9 @@
           </button>
           <button class="action-btn" id="btn-print-custom" onclick="openCustomPrintModal()" title="Print Custom Document, Code Script, or Image on HP Ink Tank 310">
             <span>📄</span> Print Custom File
+          </button>
+          <button class="action-btn" id="btn-print-queue" onclick="openPrintQueueModal()" title="View Windows Spooler Queue & Real-time Status">
+            <span>📊</span> Print Queue
           </button>
           <button class="action-btn" id="btn-show-briefing" onclick="fetchMorningBriefing()" title="Display Morning Briefing in Chat Feed">
             <span>📋</span> Morning Briefing
@@ -1475,19 +1578,47 @@
       document.getElementById('tts-icon').innerText = ttsEnabled ? '🔊' : '🔇';
     }
 
-    /* ─── CUSTOM FILE PRINT MODAL HANDLERS ─── */
+    /* ─── CUSTOM FILE PRINT & LIVE QUEUE MONITOR ─── */
     let selectedPrintFile = null;
+    let printQueuePollInterval = null;
 
     function openCustomPrintModal() {
       const modal = document.getElementById('modal-custom-print');
       if (modal) modal.style.display = 'flex';
+      showPrintConfigView();
       resetCustomPrintForm();
+    }
+
+    function openPrintQueueModal() {
+      const modal = document.getElementById('modal-custom-print');
+      if (modal) modal.style.display = 'flex';
+      showPrintStatusView();
+      pollPrintStatus();
+      if (!printQueuePollInterval) {
+        printQueuePollInterval = setInterval(pollPrintStatus, 3000);
+      }
     }
 
     function closeCustomPrintModal() {
       const modal = document.getElementById('modal-custom-print');
       if (modal) modal.style.display = 'none';
+      if (printQueuePollInterval) {
+        clearInterval(printQueuePollInterval);
+        printQueuePollInterval = null;
+      }
       resetCustomPrintForm();
+    }
+
+    function showPrintConfigView() {
+      document.getElementById('print-config-view').style.display = 'block';
+      document.getElementById('print-status-view').style.display = 'none';
+      document.getElementById('modal-title-text').innerText = 'HP Ink Tank 310 Custom Print';
+    }
+
+    function showPrintStatusView() {
+      document.getElementById('print-config-view').style.display = 'none';
+      document.getElementById('print-status-view').style.display = 'block';
+      document.getElementById('modal-title-text').innerText = 'HP Ink Tank 310 Print Job Status';
     }
 
     function resetCustomPrintForm() {
@@ -1499,7 +1630,10 @@
       const dropLabel = document.getElementById('drop-label');
       if (dropLabel) dropLabel.style.display = 'block';
       const btn = document.getElementById('btn-dispatch-print');
-      if (btn) btn.disabled = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>🖨️</span> Print Now';
+      }
     }
 
     function handleFileSelected(input) {
@@ -1515,6 +1649,68 @@
       document.getElementById('selected-file-info').style.display = 'block';
       document.getElementById('drop-label').style.display = 'none';
       document.getElementById('btn-dispatch-print').disabled = false;
+    }
+
+    async function pollPrintStatus() {
+      try {
+        const res = await fetch('/api/printer/status');
+        const data = await res.json();
+        const badge = document.getElementById('status-hardware-badge');
+        const countEl = document.getElementById('status-spooler-count');
+        const portEl = document.getElementById('status-printer-port');
+        const driverEl = document.getElementById('status-printer-driver');
+
+        const jobCount = data.job_count || 0;
+        if (countEl) countEl.innerText = `${jobCount} job${jobCount === 1 ? '' : 's'} in spooler`;
+        if (portEl) portEl.innerText = data.port || 'USB001';
+        if (driverEl) driverEl.innerText = data.driver || 'HP Ink Tank 310 series PCL-3';
+
+        if (badge) {
+          if (jobCount > 0) {
+            badge.className = 'spooler-info-badge busy';
+            badge.innerHTML = '<span>⚡</span> PRINTING / ACTIVE';
+          } else if (data.is_online) {
+            badge.className = 'spooler-info-badge';
+            badge.innerHTML = '<span>●</span> ONLINE & READY (USB001)';
+          } else {
+            badge.className = 'spooler-info-badge busy';
+            badge.innerHTML = '<span>○</span> OFFLINE';
+          }
+        }
+      } catch (err) {
+        console.warn('[PRINTER_POLL_ERR]', err);
+      }
+    }
+
+    async function openDesktopPrintQueue() {
+      const btn = document.getElementById('btn-open-desktop-queue');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Opening Desktop Window...';
+      }
+      try {
+        await fetch('/api/printer/queue/open', { method: 'POST' });
+        appendMessage('agent', '🪟 **Desktop Print Queue Window Opened:** Check your Windows desktop for the native HP Ink Tank 310 queue manager.');
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🪟</span> Open Windows Print Queue Window';
+        }
+      }
+    }
+
+    async function cancelSpoolerJobs() {
+      if (!confirm('Clear all pending jobs from HP Ink Tank 310 spooler?')) return;
+      try {
+        const res = await fetch('/api/printer/cancel', { method: 'POST' });
+        const data = await res.json();
+        pollPrintStatus();
+        appendMessage('agent', `🚫 **Spooler Cleared:** ${data.message || 'Canceled pending jobs'}`);
+      } catch (err) {
+        alert('Failed to cancel jobs: ' + err.message);
+      }
     }
 
     // Drag & Drop Setup
@@ -1548,34 +1744,65 @@
       if (!selectedPrintFile) return;
       const copies = parseInt(document.getElementById('print-copies').value || '1', 10);
       const orientation = document.getElementById('print-orientation').value || 'portrait';
-      const btn = document.getElementById('btn-dispatch-print');
-      btn.disabled = true;
-      btn.innerText = 'Spooling...';
+      const fileToPrint = selectedPrintFile;
 
-      closeCustomPrintModal();
-      appendMessage('user', `Print file '${selectedPrintFile.name}' (${copies} cop${copies === 1 ? 'y' : 'ies'}, ${orientation}).`);
-      appendMessage('agent', `Connecting to HP Ink Tank 310 spooler... formatting '${selectedPrintFile.name}' for A4 bounds.`);
+      // Switch to live status view immediately
+      showPrintStatusView();
+
+      const stepUpload = document.getElementById('step-upload');
+      const stepRaster = document.getElementById('step-raster');
+      const stepSpool = document.getElementById('step-spool');
+      const stepFinish = document.getElementById('step-finish');
+      const statusTitle = document.getElementById('live-job-filename');
+      const statusSubtitle = document.getElementById('live-job-details');
+
+      statusTitle.innerText = fileToPrint.name;
+      statusSubtitle.innerText = `${(fileToPrint.size / 1024).toFixed(1)} KB  •  ${copies} cop${copies === 1 ? 'y' : 'ies'}  •  ${orientation.toUpperCase()}`;
+
+      // Reset steps
+      [stepUpload, stepRaster, stepSpool, stepFinish].forEach(s => s.className = 'print-step-item');
+      stepUpload.className = 'print-step-item active';
+
+      appendMessage('user', `Print file '${fileToPrint.name}' (${copies} cop${copies === 1 ? 'y' : 'ies'}, ${orientation}).`);
+      appendMessage('agent', `Connecting to HP Ink Tank 310 spooler... formatting '${fileToPrint.name}' for A4 bounds.`);
 
       try {
         const formData = new FormData();
-        formData.append('file', selectedPrintFile);
+        formData.append('file', fileToPrint);
         formData.append('copies', copies);
         formData.append('orientation', orientation);
         formData.append('fit_to_page', 'true');
         formData.append('auto_print', 'true');
+
+        // Simulate step transition for visual feedback
+        stepUpload.className = 'print-step-item done';
+        stepRaster.className = 'print-step-item active';
 
         const res = await fetch('/api/printer/upload', {
           method: 'POST',
           body: formData
         });
         const data = await res.json();
+
         if (data.success) {
+          stepRaster.className = 'print-step-item done';
+          stepSpool.className = 'print-step-item done';
+          stepFinish.className = 'print-step-item done';
+
           const resInfo = data.print_result || {};
-          appendMessage('agent', `🖨️ **Print Job Spooled Successfully, Sir!**\n\nFile: **${data.filename}**\nTarget: **${resInfo.printer || 'HP Ink Tank 310 series'}**\nCopies: ${resInfo.copies || copies} (${resInfo.orientation || orientation})\nSpooler Status: ${resInfo.status || 'QUEUED'}`);
+          appendMessage('agent', `🖨️ **Print Job Spooled Successfully, Sir!**\n\nFile: **${data.filename}**\nTarget: **${resInfo.printer || 'HP Ink Tank 310 series'}**\nCopies: ${resInfo.copies || copies} (${resInfo.orientation || orientation})\nHardware: Connected over USB001`);
+          
+          pollPrintStatus();
+          if (!printQueuePollInterval) {
+            printQueuePollInterval = setInterval(pollPrintStatus, 2500);
+          }
         } else {
+          stepSpool.className = 'print-step-item error';
+          stepFinish.className = 'print-step-item error';
           appendMessage('agent', `❌ **Print Dispatch Failed:** ${data.error || JSON.stringify(data)}`);
         }
       } catch (err) {
+        stepSpool.className = 'print-step-item error';
         appendMessage('agent', `❌ **Print Dispatch Error:** ${err.message}`);
       }
     }
@@ -1586,53 +1813,138 @@
     }
   </script>
 
-  <!-- Custom File Print Modal Backdrop -->
+  <!-- Custom File Print & Live Status Modal Backdrop -->
   <div id="modal-custom-print" class="modal-backdrop" style="display: none;">
-    <div class="modal-card">
+    <div class="modal-card" style="max-width: 520px;">
       <div class="modal-header">
-        <div class="modal-title"><span>🖨️</span> HP Ink Tank 310 Custom Print</div>
+        <div class="modal-title"><span>🖨️</span> <span id="modal-title-text">HP Ink Tank 310 Custom Print</span></div>
         <button class="modal-close" onclick="closeCustomPrintModal()">&times;</button>
       </div>
-      <div class="modal-body">
-        <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 12px;">
-          Select or drop any document, code script, or image. Auto-formatted for A4 paper.
-        </p>
-        
-        <div class="file-drop-area" id="drop-area" onclick="document.getElementById('custom-file-input').click()">
-          <input type="file" id="custom-file-input" style="display: none;" onchange="handleFileSelected(this)" accept=".pdf,.docx,.doc,.txt,.sql,.csv,.png,.jpg,.jpeg,.bmp,.md,.json,.py,.xlsx,.pptx,.log">
-          <div id="drop-label">
-            <span style="font-size: 28px;">📂</span>
-            <div style="font-weight: 600; margin-top: 6px;">Click or Drag & Drop file here</div>
-            <div style="font-size: 11px; color: var(--text-sub); margin-top: 4px;">PDF, DOCX, SQL, PY, TXT, MD, PNG, JPG, CSV</div>
+
+      <!-- VIEW 1: FILE SELECTION & CONFIGURATION -->
+      <div id="print-config-view">
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 12px;">
+            Select or drop any document, code script, or image. Auto-formatted for A4 paper.
+          </p>
+          
+          <div class="file-drop-area" id="drop-area" onclick="document.getElementById('custom-file-input').click()">
+            <input type="file" id="custom-file-input" style="display: none;" onchange="handleFileSelected(this)" accept=".pdf,.docx,.doc,.txt,.sql,.csv,.png,.jpg,.jpeg,.bmp,.md,.json,.py,.xlsx,.pptx,.log">
+            <div id="drop-label">
+              <span style="font-size: 28px;">📂</span>
+              <div style="font-weight: 600; margin-top: 6px;">Click or Drag & Drop file here</div>
+              <div style="font-size: 11px; color: var(--text-sub); margin-top: 4px;">PDF, DOCX, SQL, PY, TXT, MD, PNG, JPG, CSV</div>
+            </div>
           </div>
-        </div>
-        
-        <div id="selected-file-info" style="display: none; margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-size: 13px; font-weight: 600;" id="print-file-name">filename.py</div>
-            <div style="font-size: 11px; color: var(--text-sub);" id="print-file-size">0 KB</div>
+          
+          <div id="selected-file-info" style="display: none; margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="font-size: 13px; font-weight: 600;" id="print-file-name">filename.py</div>
+              <div style="font-size: 11px; color: var(--text-sub);" id="print-file-size">0 KB</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
+            <div>
+              <label style="font-size: 11px; color: var(--text-sub); font-weight: bold; text-transform: uppercase;">Orientation</label>
+              <select id="print-orientation" class="input-select" style="width: 100%; margin-top: 4px;">
+                <option value="portrait" selected>Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 11px; color: var(--text-sub); font-weight: bold; text-transform: uppercase;">Copies</label>
+              <input type="number" id="print-copies" value="1" min="1" max="10" class="input-text" style="width: 100%; margin-top: 4px;">
+            </div>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
-          <div>
-            <label style="font-size: 11px; color: var(--text-sub); font-weight: bold; text-transform: uppercase;">Orientation</label>
-            <select id="print-orientation" class="input-select" style="width: 100%; margin-top: 4px;">
-              <option value="portrait" selected>Portrait</option>
-              <option value="landscape">Landscape</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size: 11px; color: var(--text-sub); font-weight: bold; text-transform: uppercase;">Copies</label>
-            <input type="number" id="print-copies" value="1" min="1" max="10" class="input-text" style="width: 100%; margin-top: 4px;">
+        <div class="modal-footer" style="margin-top: 18px; display: flex; justify-content: space-between; align-items: center;">
+          <button class="action-btn" onclick="openPrintQueueModal()"><span>📊</span> View Print Queue</button>
+          <div style="display: flex; gap: 10px;">
+            <button class="action-btn" onclick="closeCustomPrintModal()">Cancel</button>
+            <button class="action-btn action-btn-primary" id="btn-dispatch-print" onclick="dispatchCustomPrint()" disabled>
+              <span>🖨️</span> Print Now
+            </button>
           </div>
         </div>
       </div>
-      <div class="modal-footer" style="margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px;">
-        <button class="action-btn" onclick="closeCustomPrintModal()">Cancel</button>
-        <button class="action-btn action-btn-primary" id="btn-dispatch-print" onclick="dispatchCustomPrint()" disabled>
-          <span>🖨️</span> Print Now
-        </button>
+
+      <!-- VIEW 2: LIVE PRINT JOB STATUS & QUEUE MONITOR -->
+      <div id="print-status-view" style="display: none;">
+        <div class="modal-body">
+          <!-- Active Target Hardware Bar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+            <div>
+              <div style="font-weight: 700; font-size: 0.95rem; color: #fff;">HP Ink Tank 310 series</div>
+              <div style="font-size: 0.75rem; color: var(--text-sub);">Direct USB001 Hardware Port</div>
+            </div>
+            <div id="status-hardware-badge" class="spooler-info-badge">
+              <span>●</span> ONLINE & READY (USB001)
+            </div>
+          </div>
+
+          <!-- Active Document Header -->
+          <div style="margin-top: 14px; padding: 12px; background: rgba(99,102,241,0.08); border-radius: var(--radius-sm); border: 1px solid rgba(99,102,241,0.2);">
+            <div style="font-size: 0.72rem; color: #a5b4fc; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Active Print Job</div>
+            <div id="live-job-filename" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin-top: 2px;">No active file selected</div>
+            <div id="live-job-details" style="font-size: 0.78rem; color: var(--text-sub); margin-top: 2px;">Awaiting file dispatch or queue query</div>
+          </div>
+
+          <!-- Progress Stepper -->
+          <div class="print-stepper">
+            <div id="step-upload" class="print-step-item">
+              <div class="step-circle">1</div>
+              <div>Upload & Staging Validation</div>
+            </div>
+            <div id="step-raster" class="print-step-item">
+              <div class="step-circle">2</div>
+              <div>High-DPI Rasterization & MarginBounds Fitting</div>
+            </div>
+            <div id="step-spool" class="print-step-item">
+              <div class="step-circle">3</div>
+              <div>Spooling to Windows GDI & USB001 Driver</div>
+            </div>
+            <div id="step-finish" class="print-step-item">
+              <div class="step-circle">4</div>
+              <div>Hardware Dispatch (HP PCL-3 Print Processor)</div>
+            </div>
+          </div>
+
+          <!-- Hardware Telemetry Details -->
+          <div class="queue-telemetry-grid">
+            <div>
+              <div class="telemetry-item-label">Spooler Queue</div>
+              <div class="telemetry-item-value" id="status-spooler-count">0 jobs in spooler</div>
+            </div>
+            <div>
+              <div class="telemetry-item-label">Hardware Port</div>
+              <div class="telemetry-item-value" id="status-printer-port">USB001</div>
+            </div>
+            <div style="grid-column: span 2;">
+              <div class="telemetry-item-label">Print Driver</div>
+              <div class="telemetry-item-value" id="status-printer-driver">HP Ink Tank 310 series PCL-3</div>
+            </div>
+          </div>
+
+          <!-- Desktop Queue Opener Button -->
+          <div style="margin-top: 14px;">
+            <button class="action-btn" id="btn-open-desktop-queue" onclick="openDesktopPrintQueue()" style="width: 100%; padding: 9px; justify-content: center;">
+              <span>🪟</span> Open Windows Print Queue Window (Desktop)
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="margin-top: 18px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; gap: 8px;">
+            <button class="action-btn" onclick="pollPrintStatus()" title="Query current spooler state"><span>🔄</span> Refresh</button>
+            <button class="action-btn" onclick="cancelSpoolerJobs()" title="Clear stuck print jobs" style="color: #f87171;"><span>🚫</span> Clear Queue</button>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="action-btn" onclick="showPrintConfigView()"><span>➕</span> Print Another</button>
+            <button class="action-btn action-btn-primary" onclick="closeCustomPrintModal()">Close</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

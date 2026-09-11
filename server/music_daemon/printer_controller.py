@@ -261,8 +261,7 @@ $doc.add_PrintPage({{
     if ($script:pIdx -lt $script:pageList.Count) {{
         $imgPath = $script:pageList[$script:pIdx]
         $img = [System.Drawing.Image]::FromFile($imgPath)
-        # Printable area with 15pt hardware safety margins
-        $b = New-Object System.Drawing.Rectangle(15, 15, $ev.PageBounds.Width - 30, $ev.PageBounds.Height - 30)
+        $b = $ev.MarginBounds
         $ratio = [Math]::Min($b.Width / $img.Width, $b.Height / $img.Height)
         $w = [int]($img.Width * $ratio)
         $h = [int]($img.Height * $ratio)
@@ -282,22 +281,20 @@ try {{
     Write-Output "SUCCESS_PRINT_DISPATCH"
 }} catch {{
     Write-Error $_
+    exit 1
 }} finally {{
     $doc.Dispose()
 }}
 """
-                    code, _, stderr = self._run_ps_script(ps_pdf, timeout=40.0)
+                    code, stdout, stderr = self._run_ps_script(ps_pdf, timeout=40.0)
 
-                    # Cleanup rendered temporary page images
-                    for p_str in img_paths:
-                        try:
-                            if os.path.exists(p_str):
-                                os.remove(p_str)
-                        except Exception:
-                            pass
+                    # Retain page images in animus_pdf_spool so Windows Spoolsv can render asynchronously.
+                    # Clean up only stale spool files older than 1 hour.
+                    self._cleanup_old_spool_files(temp_spool_dir)
             except Exception as e:
                 logger.error(f"[PRINTER_PDF_RENDER_ERR] {e}", exc_info=True)
                 code = -1
+                stdout = ""
                 stderr = str(e)
 
         # 2. Images (PNG, JPG, JPEG, BMP): Auto-fit to A4 Margin Bounds without clipping
@@ -312,7 +309,7 @@ $doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}
 $img = [System.Drawing.Image]::FromFile('{escaped_path}')
 $doc.add_PrintPage({{
     param($sender, $ev)
-    $b = New-Object System.Drawing.Rectangle(15, 15, $ev.PageBounds.Width - 30, $ev.PageBounds.Height - 30)
+    $b = $ev.MarginBounds
     $ratio = [Math]::Min($b.Width / $img.Width, $b.Height / $img.Height)
     $w = [int]($img.Width * $ratio)
     $h = [int]($img.Height * $ratio)
@@ -327,12 +324,13 @@ try {{
     Write-Output "SUCCESS_PRINT_DISPATCH"
 }} catch {{
     Write-Error $_
+    exit 1
 }} finally {{
     $img.Dispose()
     $doc.Dispose()
 }}
 """
-            code, _, stderr = self._run_ps_script(ps_img, timeout=20.0)
+            code, stdout, stderr = self._run_ps_script(ps_img, timeout=20.0)
 
         # 3. Word Documents (.docx, .doc): Extract structured paragraphs and paginate
         elif ext in [".docx", ".doc"]:
@@ -381,13 +379,14 @@ try {{
     Write-Output "SUCCESS_PRINT_DISPATCH"
 }} catch {{
     Write-Error $_
+    exit 1
 }} finally {{
     $font.Dispose()
     $hdrFont.Dispose()
     $doc.Dispose()
 }}
 """
-                code, _, stderr = self._run_ps_script(ps_docx, timeout=25.0)
+                code, stdout, stderr = self._run_ps_script(ps_docx, timeout=25.0)
                 try:
                     clean_txt_path.unlink(missing_ok=True)
                 except Exception:
@@ -395,6 +394,7 @@ try {{
             except Exception as e:
                 logger.error(f"[PRINTER_DOCX_ERR] {e}", exc_info=True)
                 code = -1
+                stdout = ""
                 stderr = str(e)
 
         # 4. Text, Markdown, and Code (.txt, .md, .sql, .py, .json, .csv, .log): Clean monospace with header & pagination
@@ -437,22 +437,27 @@ try {{
     Write-Output "SUCCESS_PRINT_DISPATCH"
 }} catch {{
     Write-Error $_
+    exit 1
 }} finally {{
     $font.Dispose()
     $hdrFont.Dispose()
     $doc.Dispose()
 }}
 """
-            code, _, stderr = self._run_ps_script(ps_text, timeout=25.0)
+            code, stdout, stderr = self._run_ps_script(ps_text, timeout=25.0)
 
         # 5. Fallback for text/code if script failed
         if code != 0 and ext in [".txt", ".sql", ".csv", ".md", ".json", ".py", ".log"]:
             ps_fallback = f"Get-Content -Path '{clean_path}' | Out-Printer -Name '{target}'"
-            code, _, stderr = self._run_ps(ps_fallback, timeout=8.0)
+            code, stdout, stderr = self._run_ps(ps_fallback, timeout=8.0)
 
-        ok = (code == 0)
+        ok = (code == 0 and ("SUCCESS_PRINT_DISPATCH" in stdout or (not stderr and not stdout)))
         time.sleep(0.5)
         st = self.get_status()
+
+        if ok:
+            # Auto-open Windows native Print Queue status window so the operator has immediate visual feedback
+            self.show_print_queue(target)
 
         return ok, {
             "success": ok,
@@ -466,6 +471,37 @@ try {{
             "message": f"Successfully dispatched '{os.path.basename(clean_path)}' ({copies} cop{'y' if copies==1 else 'ies'}, {orientation}) to {target}." if ok else f"Print dispatch failed: {stderr}",
             "verified": ok
         }
+
+    def _cleanup_old_spool_files(self, temp_spool_dir: Path, max_age_seconds: float = 3600.0) -> None:
+        """Safely cleans up orphaned raster images from earlier sessions without interrupting active spooling."""
+        try:
+            now = time.time()
+            if temp_spool_dir.exists():
+                for f in temp_spool_dir.glob("pdf_page_*.png"):
+                    try:
+                        if now - f.stat().st_mtime > max_age_seconds:
+                            f.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug(f"[SPOOL_CLEANUP_ERR] {e}")
+
+    def show_print_queue(self, printer_name: Optional[str] = None) -> bool:
+        """Opens the native Windows Print Queue status window on the desktop."""
+        target = printer_name or self.target_printer
+        if self.is_simulated:
+            logger.info(f"[PRINTER_SIMULATED] show_print_queue on '{target}'")
+            return True
+        try:
+            subprocess.Popen(
+                ["rundll32.exe", "printui.dll,PrintUIEntry", "/o", "/n", target],
+                shell=False
+            )
+            logger.info(f"[PRINTER_QUEUE_WINDOW] Opened native print queue window for '{target}'.")
+            return True
+        except Exception as e:
+            logger.error(f"[PRINTER_QUEUE_WINDOW_ERR] {e}")
+            return False
 
     # =========================================================================
     # 3. Queue Management
