@@ -113,3 +113,35 @@ def test_api_upload_base64_and_history(test_client, tmp_path):
     # Clean up staged file
     if os.path.exists(data["staged_path"]):
         os.remove(data["staged_path"])
+
+
+def test_smart_a4_photo_paper_telemetry(simulated_printer, tmp_path):
+    img_file = tmp_path / "camera_snap.jpg"
+    img_file.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF")  # Mock JPG header
+    ok, telemetry = simulated_printer.print_custom_file(
+        file_path=str(img_file),
+        copies=1,
+        orientation="portrait"
+    )
+    assert ok is True
+    meta = telemetry.get("smart_metadata", {})
+    assert meta.get("paper_size") == "A4"
+    assert meta.get("photo_optimized") is True
+    assert meta.get("dpi") == 1200
+    assert meta.get("page_coverage") == "97.1%"
+
+
+def test_smart_a4_pdf_300dpi_telemetry(simulated_printer, tmp_path):
+    pdf_file = tmp_path / "resume.pdf"
+    pdf_file.write_bytes(b"%PDF-1.5\n%test\n")
+    ok, telemetry = simulated_printer.print_custom_file(
+        file_path=str(pdf_file),
+        copies=1,
+        orientation="portrait"
+    )
+    assert ok is True
+    meta = telemetry.get("smart_metadata", {})
+    assert meta.get("paper_size") == "A4"
+    assert meta.get("dpi") == 300
+    assert meta.get("page_coverage") == "97.1%"
+
