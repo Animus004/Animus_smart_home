@@ -11,7 +11,7 @@
 
 > **Animus** is an enterprise-grade, event-driven cyber-physical automation and telemetry architecture. It unifies real-time multi-device IoT streaming (Tuya Protocol 3.3, Wi-Fi ADB, WinRT Bluetooth WASAPI audio graphs, OpenCV computer vision) with an autonomous, dual-engine cognitive agent that decomposes compound natural language queries into deterministic, verified hardware state transitions.
 >
-> 📊 **Recruiter & Hiring Manager Quick Guide**: Check out the [Data Analyst & Analytics Engineering Portfolio Guide](docs/DATA_ANALYST_PORTFOLIO_GUIDE.md) for technical interview cheatsheets, ready-to-use resume bullets, and Blinkit SQL project mapping.
+
 
 ---
 
