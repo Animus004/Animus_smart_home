@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 
-from fastapi import FastAPI, HTTPException, status, WebSocket, WebSocketDisconnect
+import uuid
+import base64
+from fastapi import FastAPI, HTTPException, status, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 import uvicorn
@@ -653,6 +655,31 @@ def skip_previous():
 def clear_queue():
     logger.info("[API_QUEUE_CLEAR] Clear queue requested via API")
     return orchestrator.clear_queue()
+
+
+# ==========================================
+# Room Hardware Telemetry & Safe Device Audit
+# ==========================================
+@app.get("/api/room/devices/scan")
+@app.get("/api/room/devices/status")
+def scan_all_devices():
+    """Performs a 100% safe, non-disruptive, read-only telemetry audit across all room hardware."""
+    try:
+        from device_scanner import get_device_scanner
+        scanner = get_device_scanner()
+        report = scanner.scan_all_devices()
+        summary = scanner.format_status_summary(report)
+        return {
+            "success": True,
+            "telemetry": report,
+            "summary": summary
+        }
+    except Exception as e:
+        logger.error(f"[ROOM_DEVICE_SCAN_ERR] {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 # ==========================================
@@ -1465,21 +1492,22 @@ def agent_interact_endpoint(req: AgentInteractRequest) -> Dict[str, Any]:
         except Exception as e:
             logger.error(f"[ROOM_TTS_DISPATCH_FAIL] Failed to dispatch TTS: {e}")
 
-    # Additive Proactive Follow-up Event Dispatch (if follow-up question is active)
+    # Additive Proactive Follow-up Event Dispatch (if follow-up question is active and not already in agent_message)
     if resp.followup_required and resp.followup_question:
         already_spoken = bool(resp.agent_message and resp.followup_question in resp.agent_message)
-        try:
-            agent_event_bus.publish(AgentEvent(
-                event_type=AgentEventType.FOLLOWUP_REQUIRED,
-                priority=AgentEventPriority.NORMAL,
-                message=resp.followup_question,
-                payload={
-                    "followup_question": resp.followup_question,
-                    "already_spoken": already_spoken
-                }
-            ))
-        except Exception as e:
-            logger.error(f"[EVENT_BUS_FOLLOWUP_FAIL] Failed to publish follow-up event: {e}")
+        if not already_spoken:
+            try:
+                agent_event_bus.publish(AgentEvent(
+                    event_type=AgentEventType.FOLLOWUP_REQUIRED,
+                    priority=AgentEventPriority.NORMAL,
+                    message=resp.followup_question,
+                    payload={
+                        "followup_question": resp.followup_question,
+                        "already_spoken": already_spoken
+                    }
+                ))
+            except Exception as e:
+                logger.error(f"[EVENT_BUS_FOLLOWUP_FAIL] Failed to publish follow-up event: {e}")
 
     # Cross-Device Chat Sync: publish turn to EventBus for WebSocket / Android / PC Sync
     try:
@@ -1759,16 +1787,12 @@ def agent_chat_endpoint(req: ChatMessageRequest) -> Dict[str, Any]:
     Processes user prompts and pasted ChatGPT work summaries through AgentDecisionEngine.
     Updates subgoals, creates tomorrow's tasks, and returns executive feedback.
     """
-    mode_hint = req.active_mode or "WORK"
-    if hasattr(orchestrator, "set_active_mode") and mode_hint:
-        if orchestrator.current_mode != mode_hint:
-            orchestrator.set_active_mode(mode_hint)
-
+    current_mode = orchestrator.current_mode if (orchestrator and hasattr(orchestrator, "current_mode")) else "IDLE"
     current_state = room_state_aggregator.get_room_state() if room_state_aggregator else None
     dec_res = animus_personal_agent.decision_engine.decide_and_act(
         user_utterance=req.message,
         room_state=current_state,
-        active_mode=mode_hint
+        active_mode=current_mode
     )
 
     # Dispatch audio speech if room TTS is active
@@ -1959,10 +1983,214 @@ def get_desk_presence():
     return vision_observer.get_presence_telemetry()
 
 
+@app.post("/api/vision/reset")
+def reset_desk_camera():
+    """Restarts Windows Camera Frame Server and reconnects the desk camera."""
+    service_ok = vision_observer.reset_camera_service()
+    reopened = vision_observer._open_camera(retry_after_reset=False)
+    return {
+        "status": "SUCCESS" if (service_ok or reopened) else "ERROR",
+        "service_reset": service_ok,
+        "camera_online": vision_observer._camera_online,
+        "camera_index": vision_observer.camera_index,
+        "telemetry": vision_observer.get_presence_telemetry()
+    }
+
+
 @app.get("/api/printer/status")
 def get_printer_status():
     """Returns physical printer telemetry and spooler status."""
     return printer_controller.get_status()
+
+
+# ==========================================
+# HP Custom Print Subsystem & Document Staging
+# ==========================================
+STORAGE_PRINTED_DOCS = Path(__file__).parent / "storage" / "printed_documents"
+STORAGE_PRINTED_DOCS.mkdir(parents=True, exist_ok=True)
+
+
+class PrintStagedRequest(BaseModel):
+    file_id: Optional[str] = None
+    file_path: Optional[str] = None
+    copies: int = 1
+    orientation: str = "portrait"
+    fit_to_page: bool = True
+    printer_name: Optional[str] = None
+
+
+class Base64UploadPrintRequest(BaseModel):
+    filename: str
+    content_base64: str
+    copies: int = 1
+    orientation: str = "portrait"
+    fit_to_page: bool = True
+    auto_print: bool = True
+    printer_name: Optional[str] = None
+
+
+@app.post("/api/printer/upload")
+async def upload_and_print_file(
+    file: UploadFile = File(...),
+    copies: int = Form(1),
+    orientation: str = Form("portrait"),
+    fit_to_page: bool = Form(True),
+    auto_print: bool = Form(True),
+    printer_name: Optional[str] = Form(None)
+):
+    """
+    Stages an uploaded document/image and dispatches custom formatting and printing
+    to HP Ink Tank 310 series.
+    """
+    try:
+        ext = os.path.splitext(file.filename)[1].lower() if file.filename else ""
+        if ext not in printer_controller.ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file format '{ext}'. Allowed: {sorted(list(printer_controller.ALLOWED_EXTENSIONS))}"
+            )
+
+        doc_id = f"{int(time.time())}_{uuid.uuid4().hex[:6]}"
+        safe_fname = f"{doc_id}_{os.path.basename(file.filename)}"
+        target_path = STORAGE_PRINTED_DOCS / safe_fname
+
+        content = await file.read()
+        with open(target_path, "wb") as f_out:
+            f_out.write(content)
+
+        res_print = {}
+        if auto_print:
+            ok, res_print = printer_controller.print_custom_file(
+                file_path=str(target_path),
+                copies=copies,
+                orientation=orientation,
+                fit_to_page=fit_to_page,
+                printer_name=printer_name
+            )
+        else:
+            ok = True
+            res_print = {
+                "success": True,
+                "status": "STAGED",
+                "message": f"File '{file.filename}' uploaded and staged successfully."
+            }
+
+        return {
+            "success": ok,
+            "doc_id": doc_id,
+            "filename": file.filename,
+            "staged_path": str(target_path),
+            "file_size": target_path.stat().st_size,
+            "auto_printed": auto_print,
+            "print_result": res_print
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[PRINTER_UPLOAD_ERR] {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/printer/upload-base64")
+def upload_base64_and_print_file(req: Base64UploadPrintRequest):
+    """
+    Zero-dependency Base64 JSON upload for clients (Web fetch, CLI, Kotlin) unable
+    to assemble multipart/form-data.
+    """
+    try:
+        ext = os.path.splitext(req.filename)[1].lower() if req.filename else ""
+        if ext not in printer_controller.ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file format '{ext}'. Allowed: {sorted(list(printer_controller.ALLOWED_EXTENSIONS))}"
+            )
+
+        raw_bytes = base64.b64decode(req.content_base64)
+        doc_id = f"{int(time.time())}_{uuid.uuid4().hex[:6]}"
+        safe_fname = f"{doc_id}_{os.path.basename(req.filename)}"
+        target_path = STORAGE_PRINTED_DOCS / safe_fname
+
+        with open(target_path, "wb") as f_out:
+            f_out.write(raw_bytes)
+
+        res_print = {}
+        if req.auto_print:
+            ok, res_print = printer_controller.print_custom_file(
+                file_path=str(target_path),
+                copies=req.copies,
+                orientation=req.orientation,
+                fit_to_page=req.fit_to_page,
+                printer_name=req.printer_name
+            )
+        else:
+            ok = True
+            res_print = {
+                "success": True,
+                "status": "STAGED",
+                "message": f"File '{req.filename}' staged successfully."
+            }
+
+        return {
+            "success": ok,
+            "doc_id": doc_id,
+            "filename": req.filename,
+            "staged_path": str(target_path),
+            "file_size": target_path.stat().st_size,
+            "auto_printed": req.auto_print,
+            "print_result": res_print
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[PRINTER_BASE64_UPLOAD_ERR] {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/printer/print-staged")
+def print_staged_document(req: PrintStagedRequest):
+    """Prints a previously uploaded or staged document by ID or path."""
+    target_path = None
+    if req.file_path and os.path.exists(req.file_path):
+        target_path = req.file_path
+    elif req.file_id:
+        for f in STORAGE_PRINTED_DOCS.glob(f"{req.file_id}_*"):
+            target_path = str(f)
+            break
+
+    if not target_path or not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail="Staged document not found.")
+
+    ok, res = printer_controller.print_custom_file(
+        file_path=target_path,
+        copies=req.copies,
+        orientation=req.orientation,
+        fit_to_page=req.fit_to_page,
+        printer_name=req.printer_name
+    )
+    return {"success": ok, "file_path": target_path, "telemetry": res}
+
+
+@app.post("/api/printer/cancel")
+def cancel_printer_spooler_jobs(printer_name: Optional[str] = None):
+    """Cancels all active and stuck jobs in the Windows print spooler for the printer."""
+    ok, res = printer_controller.cancel_all_jobs(printer_name=printer_name)
+    return {"success": ok, "telemetry": res}
+
+
+@app.get("/api/printer/history")
+def get_print_history(limit: int = 20):
+    """Returns list of recently staged/printed documents."""
+    items = []
+    if STORAGE_PRINTED_DOCS.exists():
+        for f in sorted(STORAGE_PRINTED_DOCS.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True)[:limit]:
+            if f.is_file():
+                items.append({
+                    "filename": f.name,
+                    "size_bytes": f.stat().st_size,
+                    "modified_time": f.stat().st_mtime,
+                    "path": str(f)
+                })
+    return {"success": True, "count": len(items), "documents": items}
 
 
 @app.get("/api/briefing/morning")
@@ -2009,6 +2237,25 @@ def serve_chat_ui():
     if web_file.exists():
         return HTMLResponse(content=web_file.read_text(encoding="utf-8"))
     return HTMLResponse(content="<h1>Animus PC Chat UI Loading...</h1>")
+
+
+@app.api_route("/app-debug.apk", methods=["GET", "HEAD"])
+def download_android_apk():
+    """Serves the latest compiled Android debug APK for direct over-the-air installation."""
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk",
+        Path(__file__).resolve().parent / "web" / "app-debug.apk",
+        Path("d:/AnimusSmartRoom/app/build/outputs/apk/debug/app-debug.apk"),
+        Path("d:/AnimusSmartRoom/server/music_daemon/web/app-debug.apk")
+    ]
+    for apk_path in candidates:
+        if apk_path.exists():
+            return FileResponse(
+                path=str(apk_path),
+                filename="AnimusSmartRoom-debug.apk",
+                media_type="application/vnd.android.package-archive"
+            )
+    raise HTTPException(status_code=404, detail="APK not found. Please compile debug build first.")
 
 
 if __name__ == "__main__":

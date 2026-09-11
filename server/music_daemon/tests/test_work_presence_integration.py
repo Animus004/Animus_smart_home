@@ -223,7 +223,8 @@ def test_ergonomic_50min_break_nudge():
         "desk_seated_seconds": 2940.0,
         "pc_online": True,
         "pc_locked": False,
-        "suppress_morning": True
+        "suppress_morning": True,
+        "suppress_evening": True
     }
     res = orch.evaluate_proactive_rules(t_49m)
     assert res is None
@@ -235,7 +236,8 @@ def test_ergonomic_50min_break_nudge():
         "desk_seated_seconds": 3060.0,
         "pc_online": True,
         "pc_locked": False,
-        "suppress_morning": True
+        "suppress_morning": True,
+        "suppress_evening": True
     }
     res = orch.evaluate_proactive_rules(t_51m)
     assert res is not None

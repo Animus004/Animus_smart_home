@@ -122,17 +122,59 @@ class VisionObserver:
         self._release_camera()
         logger.info("[VISION_OBSERVER_STOPPED] Desk presence monitor stopped and camera released.")
 
-    def _open_camera(self) -> bool:
+    @staticmethod
+    def is_hardware_attached() -> bool:
+        """Queries Windows PnP to check if the physical USB HD Camera (VID_349C&PID_2317) is attached."""
+        try:
+            import subprocess
+            cmd = 'Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -like "*349C&PID_2317*" } | Select-Object -ExpandProperty Status'
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                capture_output=True,
+                text=True,
+                timeout=4
+            )
+            return "OK" in res.stdout
+        except Exception:
+            return False
+
+    @staticmethod
+    def reset_camera_service() -> bool:
+        """Restarts Windows Camera Frame Server service (FrameServer) to recover wedged camera driver state."""
+        try:
+            import subprocess
+            logger.info("[VISION_RESET] Restarting Windows Camera Frame Server (FrameServer)...")
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "Restart-Service -Name FrameServer -Force -ErrorAction SilentlyContinue"],
+                capture_output=True,
+                text=True,
+                timeout=8
+            )
+            time.sleep(1.0)
+            return res.returncode == 0
+        except Exception as e:
+            logger.warning(f"[VISION_RESET_ERR] Failed to restart FrameServer: {e}")
+            return False
+
+    def _open_camera(self, retry_after_reset: bool = True) -> bool:
         """Opens DirectShow camera handle safely and verifies the stream is live."""
         if self.is_simulated or not OPENCV_AVAILABLE:
             self._camera_online = self.is_simulated
             return self.is_simulated
 
+        with self._lock:
+            if self._cap is not None:
+                try:
+                    self._cap.release()
+                except Exception:
+                    pass
+                self._cap = None
+
         try:
-            # Check target camera index first, then all potential physical indices
+            # Prioritize primary physical HD camera (Index 0), then configured or alternative indices
             seen = set()
             candidates = []
-            for c in [self.camera_index, 0, 1, 2, 3]:
+            for c in [0, self.camera_index, 1, 2, 3]:
                 if c not in seen:
                     candidates.append(c)
                     seen.add(c)
@@ -144,50 +186,56 @@ class VisionObserver:
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.FRAME_WIDTH)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.FRAME_HEIGHT)
 
-                # Warmup sensor reads
+                # Warmup sensor reads to clear cached buffer
                 f1 = None
-                for _ in range(3):
+                for _ in range(5):
                     ret, f1 = cap.read()
-                    time.sleep(0.04)
+                    time.sleep(0.03)
 
                 if f1 is None:
                     cap.release()
                     continue
 
-                # Filter out flat gray dummy buffers (std < 3.0) and completely black streams (mean < 5.0)
+                # Filter out flat gray dummy buffers (std < 1.0)
                 mean_val = float(np.mean(f1))
                 std_val = float(np.std(f1))
-                if std_val < 3.0 or mean_val < 5.0:
-                    logger.debug(f"[VISION_CANDIDATE_REJECT] Index {idx} rejected (mean={mean_val:.1f}, std={std_val:.1f})")
+                if std_val < 1.0:
+                    logger.debug(f"[VISION_CANDIDATE_REJECT] Index {idx} rejected: flat dummy buffer (mean={mean_val:.1f}, std={std_val:.1f})")
                     cap.release()
                     continue
 
-                # Filter out static virtual placeholders by comparing successive frames
-                time.sleep(0.06)
+                # Filter out static virtual placeholders by comparing successive frames across sufficient interval
+                time.sleep(0.10)
                 ret2, f2 = cap.read()
                 if ret2 and f2 is not None:
                     diff = cv2.absdiff(f1, f2)
                     max_d = int(np.max(diff))
                     if max_d == 0:
-                        # Static image / virtual camera (e.g. Smart Connect or OBS placeholder)
-                        logger.debug(f"[VISION_CANDIDATE_REJECT] Index {idx} rejected: static virtual camera placeholder.")
-                        cap.release()
-                        continue
+                        # Take another frame to verify it's truly a static placeholder (like OBS disabled graphic)
+                        time.sleep(0.10)
+                        ret3, f3 = cap.read()
+                        if ret3 and f3 is not None and int(np.max(cv2.absdiff(f1, f3))) == 0:
+                            logger.debug(f"[VISION_CANDIDATE_REJECT] Index {idx} rejected: static virtual camera placeholder.")
+                            cap.release()
+                            continue
 
-                self.camera_index = idx
-                self._cap = cap
-                self._camera_online = True
-                self._consecutive_frozen_frames = 0
-                if self._subtractor is None and OPENCV_AVAILABLE:
-                    self._subtractor = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=25, detectShadows=False)
+                with self._lock:
+                    self.camera_index = idx
+                    self._cap = cap
+                    self._camera_online = True
+                    self._consecutive_frozen_frames = 0
+                    if self._subtractor is None and OPENCV_AVAILABLE:
+                        self._subtractor = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=25, detectShadows=False)
                 logger.info(f"[VISION_CAMERA_OPENED] Active physical camera bound on index {idx} ({self.FRAME_WIDTH}x{self.FRAME_HEIGHT}, mean={mean_val:.1f}, std={std_val:.1f}).")
                 return True
 
-            self._camera_online = False
+            with self._lock:
+                self._camera_online = False
             return False
         except Exception as e:
             logger.warning(f"[VISION_CAMERA_OPEN_ERR] Could not open camera: {e}")
-            self._camera_online = False
+            with self._lock:
+                self._camera_online = False
             return False
 
     def _release_camera(self) -> None:
@@ -269,8 +317,9 @@ class VisionObserver:
                     self._consecutive_frozen_frames = 0
 
                 if self._consecutive_frozen_frames >= 5 and not self.is_simulated:
+                    logger.warning(f"[VISION_CAMERA_FROZEN] 5 consecutive frozen frames on camera index {self.camera_index}. Releasing handle for auto-reconnection.")
+                    self._release_camera()
                     with self._lock:
-                        self._camera_online = False
                         self.state = "DISCONNECTED"
                         self.is_present = False
                         self.last_motion_score = 0.0
@@ -440,7 +489,12 @@ class VisionObserver:
         with self._lock:
             now = time.time()
             seated_dur = (now - self.seated_since) if (self.is_present and self.seated_since) else 0.0
-            device_name = "HD camera (USB VID_349C&PID_2317)" if self._camera_online else "HD camera (DISCONNECTED / CODE 45 - Reconnect USB)"
+            if self._camera_online:
+                device_name = f"HD camera (Active on Index {self.camera_index} - USB VID_349C&PID_2317)"
+            elif self.is_hardware_attached():
+                device_name = "HD camera (Present in Windows PnP - Resetting FrameServer)"
+            else:
+                device_name = "HD camera (DISCONNECTED / CODE 45 - Reconnect USB)"
             current_state = self.state if self._camera_online else "DISCONNECTED"
             return {
                 "camera_online": self._camera_online,

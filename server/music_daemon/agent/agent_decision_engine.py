@@ -256,18 +256,33 @@ class AgentDecisionEngine:
         prompt = state.get("message", "")
 
         # If user explicitly issued a hardware or distinct subsystem command, it's NOT a proactive followup response
-        if any(w in lower for w in ["projector", "movie", "ac", "air conditioner", "soundbar", "volume", "workbench", "sql", "weather", "done with work", "wrap up", "start work"]):
+        is_hw_subsystem = (
+            re.search(r'\b(?:projector|movie|ac|air conditioner|soundbar|volume|workbench|sql|weather|done with work|wrap up|start work)\b', lower) is not None
+        )
+        # Check if user issued an explicit media/playback command
+        is_media_command = (
+            lower.startswith("play ") or lower.startswith("listen to ") or lower.startswith("queue ")
+        )
+        if is_media_command:
+            # Only allow morning briefing to handle if specifically requesting focus playlist / morning music
+            if (cat == "MORNING_GREETING" or ctx == "PROACTIVE_MORNING_BRIEFING") and any(w in lower for w in ["focus", "morning", "playlist"]):
+                pass
+            else:
+                self._proactive_followup_state = None
+                return None
+
+        if is_hw_subsystem:
             self._proactive_followup_state = None
             return None
 
         # Check for affirmative responses
-        is_aff = any(w in lower for w in [
+        is_aff = any(re.search(rf'\b{re.escape(w)}\b', lower) for w in [
             "yes", "yeah", "sure", "please", "yep", "do it", "go ahead", "okay", "ok", 
             "take a break", "break", "dim", "soothing", "relax", "turn on", "turn off", 
-            "guitar", "practice", "standby", "print", "music", "play", "sheet", "checklist"
-        ])
+            "guitar", "practice", "standby", "print", "music", "song", "playlist", "play it", "play that", "sheet", "checklist", "both"
+        ]) or lower.strip() in ["play", "cue"]
         # Check for rejection / snooze responses
-        is_neg = any(w in lower for w in [
+        is_neg = any(re.search(rf'\b{re.escape(w)}\b', lower) for w in [
             "no", "nah", "don't", "dont", "not now", "later", "leave it", "leave it off",
             "cancel", "still working", "keep working", "working", "study", "studying", "busy", "snooze"
         ])
@@ -475,6 +490,22 @@ class AgentDecisionEngine:
 
     def _handle_wrapup_followup_turn(self, raw: str, lower: str) -> Optional[Dict[str, Any]]:
         """Handles multi-turn conversational reasoning for session wrap-up and reminder preferences."""
+        # 0. Check if user pivoted to an unrelated query, status inquiry, or room device command
+        is_pivot_or_query = (
+            any(lower.startswith(q) for q in ["what", "how", "when", "where", "who", "why", "which", "is", "are", "can", "could", "will", "do", "does", "tell"]) or
+            "?" in lower or
+            any(w in lower for w in [
+                "mode", "temperature", "temp", "volume", "soundbar", "speaker",
+                "projector", "ac", "light", "play", "pause", "resume", "stop",
+                "status", "who are you", "weather", "time"
+            ])
+        )
+        if is_pivot_or_query:
+            # User is asking a question (e.g. "what mode is the room in?") or issuing a command.
+            # Do NOT hijack the conversation or fabricate milestone completions.
+            self._wrapup_followup_state = None
+            return None
+
         curr_sg = self.memory_store.get_current_work_subgoal()
         sg_title = curr_sg.get("title", "your milestone") if curr_sg else "your milestone"
 
@@ -503,7 +534,7 @@ class AgentDecisionEngine:
                     "response_message": f"Logged your partial progress, Sir. We'll continue '{sg_title}' in your next session. Would you like me to set a reminder for when you want to work tomorrow, or should we leave it unscheduled?"
                 }
             # Milestone completed or detailed work summary
-            else:
+            elif any(w in lower for w in ["yes", "yeah", "completed", "finished", "done", "solved", "implemented", "finished the sql", "completed the sql", "completed today's milestone", "finished milestone"]) or any(k in lower for k in ["cte", "lag", "query", "queries", "sql", "formula", "excel", "dataset"]):
                 wrap_res = self.memory_store.process_work_session_outcome("COMPLETED", user_summary=raw)
                 comp_title = wrap_res.get("completed_subgoal", {}).get("title", sg_title)
                 next_title = wrap_res.get("next_subgoal", {}).get("title", "Tomorrow's focus")
@@ -515,6 +546,9 @@ class AgentDecisionEngine:
                     "goal_update": None,
                     "response_message": f"Outstanding progress today, Sir! Milestone '{comp_title}' is marked complete and '{next_title}' is queued on your roadmap. Would you like me to set a reminder for when you want to work tomorrow, or should we leave it unscheduled?"
                 }
+            else:
+                self._wrapup_followup_state = None
+                return None
 
         # 2. User was asked if they want a reminder
         if self._wrapup_followup_state == "AWAITING_REMINDER_DECISION":
@@ -607,17 +641,112 @@ class AgentDecisionEngine:
 
         return None
 
-    def _try_fastpath_decision(
+    def _decompose_compound_utterance(self, raw_utterance: str) -> List[str]:
+        """
+        Decomposes compound sentences or multi-clause instructions into distinct sequential command clauses.
+        Splits on conjunctions ('and then', 'and also', 'then', 'also', 'plus', 'and') and punctuation (';', '\n', ',').
+        """
+        raw = raw_utterance.strip()
+        if not raw:
+            return []
+
+        lower = raw.lower()
+        # Protect work summaries, ChatGPT milestone logs, and project narratives from splitting
+        if any(k in lower for k in [
+            "chatgpt", "today i completed", "today i worked", "today i did", "today's work",
+            "summary of my work", "here is what i did", "completed the sql", "blinkit",
+            "career goal", "milestone", "stakeholder", "sq1", "sq2", "sq3", "sq4", "sq5",
+            "replenish", "out-of-stock", "lost revenue"
+        ]):
+            return [raw]
+
+        # Protect explicit reminder statements if they contain internal conjunctions
+        if re.search(r'\b(?:remind me|set a reminder|schedule a reminder)\b', lower) and not any(w in lower for w in [";", "\n", "also", "then", "plus"]):
+            return [raw]
+
+        pattern = re.compile(
+            r'(?:;\s*|\n+|\s*\band\s+then\b\s*|\s*\band\s+also\b\s*|\s*\band\b\s*|\s*\bthen\b\s*|\s*\balso\b\s*|\s*\bplus\b\s*|,\s*)',
+            re.IGNORECASE
+        )
+        parts = [p.strip() for p in pattern.split(raw) if p.strip()]
+
+        cleaned_parts = []
+        for p in parts:
+            p_clean = re.sub(r'^(?:animus\s*,?|please\s*|kindly\s*|could you\s*|can you\s*|would you\s*)+', '', p, flags=re.IGNORECASE).strip()
+            if p_clean:
+                cleaned_parts.append(p_clean)
+
+        return cleaned_parts
+
+    def _try_compound_fastpath_decision(
         self,
         user_utterance: str,
         room_state: Optional[RoomState] = None,
         active_mode: str = "IDLE"
     ) -> Optional[Dict[str, Any]]:
         """
-        Sub-50ms deterministic fast-path for explicit hardware commands, work sessions,
-        task/roadmap queries, and pasted ChatGPT daily summaries.
-        Bypasses 40s+ CPU LLM latency for known physical room operations.
+        Extracts and executes multi-command instructions deterministically across subsystems
+        (e.g., 'turn off the AC, turn on the projector, and play focus beats').
         """
+        parts = self._decompose_compound_utterance(user_utterance)
+        if len(parts) <= 1:
+            return None
+
+        sub_decisions = []
+        for part in parts:
+            dec = self._try_single_fastpath_decision(part, room_state, active_mode)
+            # Every extracted clause in a compound fast-path MUST resolve to actionable tool calls
+            if not dec or not dec.get("tool_calls"):
+                return None
+            sub_decisions.append((part, dec))
+
+        aggregated_tool_calls = []
+        for _, dec in sub_decisions:
+            aggregated_tool_calls.extend(dec.get("tool_calls", []))
+
+        if not aggregated_tool_calls:
+            return None
+
+        # Synthesize clean, natural unified conversational feedback
+        clean_messages = []
+        for _, dec in sub_decisions:
+            msg = dec.get("response_message", "").strip()
+            msg = re.sub(r',?\s*Sir\.?$', '', msg, flags=re.IGNORECASE).strip()
+            msg = re.sub(r'[\.!\?]+$', '', msg).strip()
+            if msg:
+                clean_messages.append(msg)
+
+        if not clean_messages:
+            synthesized_msg = "All requested actions executed, Sir."
+        elif len(clean_messages) == 1:
+            synthesized_msg = f"{clean_messages[0]}, Sir."
+        elif len(clean_messages) == 2:
+            c2 = clean_messages[1]
+            if len(c2) > 1 and c2[0].isupper() and not c2[1].isupper():
+                c2 = c2[0].lower() + c2[1:]
+            synthesized_msg = f"{clean_messages[0]} and {c2}, Sir."
+        else:
+            first_parts = clean_messages[:-1]
+            last_part = clean_messages[-1]
+            if len(last_part) > 1 and last_part[0].isupper() and not last_part[1].isupper():
+                last_part = last_part[0].lower() + last_part[1:]
+            synthesized_msg = f"{', '.join(first_parts)}, and {last_part}, Sir."
+
+        tool_summary = ", ".join(tc.get("tool", "TOOL") for tc in aggregated_tool_calls)
+        return {
+            "thought": f"Fast-path multi-command execution across {len(aggregated_tool_calls)} actions: {tool_summary}.",
+            "action_type": "TOOL_EXECUTION",
+            "tool_calls": aggregated_tool_calls,
+            "goal_update": None,
+            "response_message": synthesized_msg
+        }
+
+    def _try_fastpath_decision(
+        self,
+        user_utterance: str,
+        room_state: Optional[RoomState] = None,
+        active_mode: str = "IDLE"
+    ) -> Optional[Dict[str, Any]]:
         raw = user_utterance.strip()
         lower = raw.lower()
 
@@ -632,6 +761,42 @@ class AgentDecisionEngine:
             res = self._handle_wrapup_followup_turn(raw, lower)
             if res:
                 return res
+
+        # 0c. Multi-command compound extraction
+        compound_dec = self._try_compound_fastpath_decision(user_utterance, room_state, active_mode)
+        if compound_dec:
+            return compound_dec
+
+        # 0d. Single intent fast-path evaluation
+        return self._try_single_fastpath_decision(user_utterance, room_state, active_mode)
+
+    def _try_single_fastpath_decision(
+        self,
+        user_utterance: str,
+        room_state: Optional[RoomState] = None,
+        active_mode: str = "IDLE"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Sub-50ms deterministic fast-path for explicit hardware commands, work sessions,
+        task/roadmap queries, and pasted ChatGPT daily summaries.
+        Bypasses 40s+ CPU LLM latency for known physical room operations.
+        """
+        raw = user_utterance.strip()
+        lower = raw.lower()
+
+        # Mode Introspection Fast-Path: e.g. "what mode is the room in?", "what mode are we in?", "current mode"
+        if re.search(r'\b(?:what mode|current mode|which mode|what\'s the mode|active mode)\b', lower) or (
+            "mode" in lower and any(w in lower for w in ["what", "which", "current", "room in", "we in"])
+        ):
+            orch = getattr(self, "orchestrator", None)
+            eff_mode = (orch.current_mode if (orch and hasattr(orch, "current_mode")) else active_mode).upper()
+            return {
+                "thought": f"Fast-path: introspect active mode ({eff_mode}).",
+                "action_type": "CONVERSATION",
+                "tool_calls": [],
+                "goal_update": None,
+                "response_message": f"The room is currently in {eff_mode} mode, Sir."
+            }
 
         # Standalone Reminder Fast-Path: e.g. "remind me today at 5:00 PM to start work"
         if re.search(r'\b(?:remind me|set a reminder|schedule a reminder|set reminder|schedule reminder)\b', lower):
@@ -658,7 +823,11 @@ class AgentDecisionEngine:
         has_ac_mention = any(w in lower for w in ["ac", "air conditioner", "air conditioning", "climate", "temp", "temperature", "degree", "cool", "heat"])
 
         # Check for explicit AC Power Off
-        if any(w in lower for w in ["turn off ac", "ac off", "switch off ac", "power off ac", "stop ac", "shut off ac"]):
+        if any(w in lower for w in [
+            "turn off ac", "turn off the ac", "ac off", "switch off ac", "switch off the ac",
+            "power off ac", "power off the ac", "stop ac", "stop the ac", "shut off ac", "shut off the ac",
+            "kill the ac", "kill ac"
+        ]) or re.search(r'\b(?:turn off|switch off|power off|shut off|kill|stop)\s+(?:the\s+)?ac\b', lower):
             return {
                 "thought": "Fast-path: explicit AC power off command.",
                 "action_type": "TOOL_EXECUTION",
@@ -688,7 +857,10 @@ class AgentDecisionEngine:
             }
 
         # Check for generic AC Power On
-        if any(w in lower for w in ["turn on ac", "ac on", "switch on ac", "power on ac", "start ac"]):
+        if any(w in lower for w in [
+            "turn on ac", "turn on the ac", "ac on", "switch on ac", "switch on the ac",
+            "power on ac", "power on the ac", "start ac", "start the ac", "fire up the ac", "fire up ac"
+        ]) or re.search(r'\b(?:turn on|switch on|power on|start|fire up)\s+(?:the\s+)?ac\b', lower):
             return {
                 "thought": "Fast-path: explicit AC power on command.",
                 "action_type": "TOOL_EXECUTION",
@@ -715,7 +887,15 @@ class AgentDecisionEngine:
             }
 
         # 2. Work Session Start & Wrap-Up
-        if any(w in lower for w in ["start work", "work mode", "let's work", "start work session", "open work apps", "time to study", "time to code"]):
+        is_work_deactivate = any(w in lower for w in [
+            "done with work", "i am done with work", "wrap up work", "wrap up",
+            "finished work", "finished working", "finish work", "close work apps",
+            "end work", "end work mode", "stop work", "stop work mode",
+            "exit work", "exit work mode", "quit work", "leave work", "leave work mode",
+            "deactivate work", "turn off work", "turn off work mode"
+        ])
+
+        if not is_work_deactivate and any(w in lower for w in ["start work", "work mode", "let's work", "start work session", "open work apps", "time to study", "time to code"]):
             return {
                 "thought": "Fast-path: work mode activation.",
                 "action_type": "TOOL_EXECUTION",
@@ -724,7 +904,7 @@ class AgentDecisionEngine:
                 "response_message": "Work mode activated, Sir. MySQL Workbench and Word are open, volume set to 15%, and room at 24°C."
             }
 
-        if any(w in lower for w in ["done with work", "i am done with work", "wrap up work", "wrap up", "finished work", "finished working", "finish work", "close work apps"]):
+        if is_work_deactivate:
             curr_sg = self.memory_store.get_current_work_subgoal()
             sg_title = curr_sg.get("title", "your milestone") if curr_sg else "your milestone"
 
@@ -764,6 +944,52 @@ class AgentDecisionEngine:
                     "goal_update": None,
                     "response_message": f"Progress saved and work applications closed, Sir. Did you make progress on '{sg_title}' today, or did you decide to take a break?"
                 }
+
+        # Safe Hardware Device Scan & Audit Fast-Path
+        if any(w in lower for w in [
+            "scan for devices", "scan devices", "scan room devices", "scan all devices",
+            "device status", "devices status", "hardware status", "check all devices",
+            "check devices", "check room devices", "scan the room", "scan room",
+            "what devices are online", "what devices are connected", "scan hardware",
+            "status of all devices", "audit devices", "device audit"
+        ]):
+            try:
+                from device_scanner import get_device_scanner
+                scanner = get_device_scanner()
+                report = scanner.scan_all_devices()
+                summary = scanner.format_status_summary(report, preferred_name="Sir")
+                return {
+                    "thought": "Fast-path: Safe non-disruptive hardware device scan across AC, Fire TV, Projector, Soundbar.",
+                    "action_type": "CONVERSATION",
+                    "tool_calls": [],
+                    "goal_update": None,
+                    "response_message": summary
+                }
+            except Exception as e:
+                logger.error(f"[DEVICE_SCAN_FASTPATH_ERR] {e}")
+
+        # Explicit Mode Transition Fast-Paths
+        if re.search(r'\b(?:relax mode|chill mode|set relax mode|switch to relax mode|enter relax mode)\b', lower):
+            return {
+                "thought": "Fast-path: explicit relax mode activation.",
+                "action_type": "TOOL_EXECUTION",
+                "tool_calls": [
+                    {"tool": "SET_ACTIVE_MODE", "params": {"mode": "RELAX"}}
+                ],
+                "goal_update": None,
+                "response_message": "Setting the room to relax mode, Sir."
+            }
+
+        if re.search(r'\b(?:idle mode|set idle mode|switch to idle mode|default mode)\b', lower):
+            return {
+                "thought": "Fast-path: explicit idle mode activation.",
+                "action_type": "TOOL_EXECUTION",
+                "tool_calls": [
+                    {"tool": "SET_ACTIVE_MODE", "params": {"mode": "IDLE"}}
+                ],
+                "goal_update": None,
+                "response_message": "Room set back to idle baseline, Sir."
+            }
 
         # 3. Master PC Volume Controls
         vol_match = re.search(r'\b(?:volume|sound|vol)\s*(?:to|at|is)?\s*([0-9]{1,3})\b', lower)
@@ -849,11 +1075,25 @@ class AgentDecisionEngine:
                 "response_message": f"Sir, your career target is {roadmap.get('career_target')}. Active project: {roadmap.get('current_project')}. Your top pending tasks are: {t_str}"
             }
 
-        # 7. ChatGPT Daily Work Summary Ingestion
-        if any(k in lower for k in ["chatgpt", "today i completed", "today i worked", "today i did", "today's work", "summary of my work", "here is what i did", "completed the sql", "completed the project", "blinkit stock", "blink kit"]):
+        # 7. ChatGPT Daily Work Summary & Project Milestone Ingestion
+        is_summary_input = any(k in lower for k in [
+            "chatgpt", "today i completed", "today i worked", "today i did", "today's work",
+            "summary of my work", "here is what i did", "completed the sql", "completed the project",
+            "blinkit stock", "blink kit", "current project", "project 4", "stakeholder 1",
+            "stakeholder 2", "learning milestone", "sq1", "sq2", "sq3", "sq4", "sq5",
+            "has been completed", "current work:", "current work", "career goal:", "career goal",
+            "inventory/replenishment", "replenishment analysis"
+        ]) or (
+            ("project" in lower or "milestone" in lower or "stakeholder" in lower or "blinkit" in lower)
+            and ("completed" in lower or "finished" in lower or "current work" in lower or "sq" in lower)
+        )
+
+        if is_summary_input:
             task_title = "Blinkit SQL: Calculate lost revenue per out-of-stock SKU"
-            if "lost revenue" in lower:
+            if "lost revenue" in lower or "penalty" in lower or "demand" in lower:
                 task_title = "Blinkit SQL: Calculate lost revenue per out-of-stock SKU"
+            elif "replenish" in lower or "reorder" in lower or "sq5" in lower:
+                task_title = "Blinkit SQL: Event-based replenishment & reorder analysis (SQ5)"
             elif "dashboard" in lower:
                 task_title = "Blinkit Analytics: Build Power BI dashboard"
             elif "cte" in lower or "lag" in lower or "duration" in lower:
@@ -862,7 +1102,7 @@ class AgentDecisionEngine:
                 task_title = "Practice SQL window function interview drills"
 
             # Determine whether user finished milestone or made partial progress
-            is_completed = any(k in lower for k in ["completed", "finished", "all done", "solved", "finalized"])
+            is_completed = any(k in lower for k in ["completed", "has been completed", "finished", "all done", "solved", "finalized"])
             outcome = "COMPLETED" if is_completed else "PARTIAL"
 
             wrap_res = self.memory_store.process_work_session_outcome(outcome_type=outcome, user_summary=raw)
@@ -873,14 +1113,20 @@ class AgentDecisionEngine:
             self._wrapup_followup_state = "AWAITING_REMINDER_DECISION"
 
             if outcome == "COMPLETED":
-                msg = f"Outstanding progress today on the Blinkit project, Sir! I have marked milestone '{comp_title}' complete on your Data Analyst roadmap and queued '{tomorrow_task}'. Would you like me to set a reminder for when you want to work tomorrow, or should we leave it unscheduled?"
+                next_sg = wrap_res.get("next_subgoal", {})
+                next_title = next_sg.get("title", tomorrow_task) if next_sg else tomorrow_task
+                msg = (
+                    f"Outstanding progress on the Blinkit project, Sir! I have marked milestone '{comp_title}' complete "
+                    f"on your Data Analyst roadmap and updated your active focus to '{next_title}'. "
+                    f"Would you like me to set a reminder for when you want to work tomorrow, or should we leave it unscheduled?"
+                )
             else:
                 curr_sg = self.memory_store.get_current_work_subgoal()
                 curr_title = curr_sg.get("title", "your milestone") if curr_sg else "your milestone"
                 msg = f"Logged your work progress on the Blinkit project, Sir! Current focus '{curr_title}' remains active. Would you like me to set a reminder for when you want to work tomorrow, or should we leave it unscheduled?"
 
             return {
-                "thought": f"Fast-path: Ingested ChatGPT work summary ({outcome}). Inquiring about reminder.",
+                "thought": f"Fast-path: Ingested work summary ({outcome}) and updated career roadmap.",
                 "action_type": "CONVERSATION",
                 "tool_calls": [],
                 "goal_update": None,
@@ -1203,26 +1449,34 @@ class AgentDecisionEngine:
         """
         has_work_launch = any(tc.get("tool") == "LAUNCH_WORK_MODE" for tc in tool_calls)
         has_work_wrapup = any(tc.get("tool") == "WRAPUP_WORK_SESSION" for tc in tool_calls)
+        mode_call = next((tc for tc in tool_calls if tc.get("tool") in ["SET_ACTIVE_MODE", "SET_ROOM_MODE", "TRANSITION_MODE"]), None)
+        target_mode = mode_call.get("params", {}).get("mode", "").upper() if mode_call else None
         has_projector = any(tc.get("tool") == "SET_PROJECTOR_POWER" for tc in tool_calls)
         has_ac = any(tc.get("tool") == "SET_AC_STATE" for tc in tool_calls)
 
-        if has_work_launch or active_mode == "WORK":
-            return {
-                "light_cue": "FOCUS_WARM",
-                "ui_state": {"mode": "WORK", "status": "active", "badge_color": "#3b82f6"},
-                "sound_cue": "FOCUS_START"
-            }
-        elif has_work_wrapup:
+        if has_work_wrapup or target_mode in ("RELAX", "COMFORT") or (active_mode in ("RELAX", "COMFORT") and not has_work_launch and target_mode != "WORK"):
             return {
                 "light_cue": "RELAX_AMBER",
                 "ui_state": {"mode": "RELAX", "status": "completed", "badge_color": "#10b981"},
                 "sound_cue": "RESTFUL_CHIME"
             }
-        elif has_projector:
+        elif has_work_launch or target_mode == "WORK" or (active_mode == "WORK" and not has_work_wrapup):
+            return {
+                "light_cue": "FOCUS_WARM",
+                "ui_state": {"mode": "WORK", "status": "active", "badge_color": "#3b82f6"},
+                "sound_cue": "FOCUS_START"
+            }
+        elif target_mode == "MOVIE" or has_projector:
             return {
                 "light_cue": "CINEMA_DIM",
-                "ui_state": {"mode": "CINEMA", "status": "projector_active", "badge_color": "#f59e0b"},
+                "ui_state": {"mode": "MOVIE", "status": "projector_active", "badge_color": "#f59e0b"},
                 "sound_cue": "CINEMA_CHIME"
+            }
+        elif target_mode == "IDLE":
+            return {
+                "light_cue": "NEUTRAL",
+                "ui_state": {"mode": "IDLE", "status": "idle", "badge_color": "#6b7280"},
+                "sound_cue": "SILENT"
             }
         elif has_ac:
             return {
@@ -1326,7 +1580,7 @@ class AgentDecisionEngine:
                 "stream": False,
                 "options": {
                     "temperature": 0.1,
-                    "num_predict": 200
+                    "num_predict": 1024
                 }
             }
             resp = requests.post(f"{self.ollama_url}/api/generate", json=payload, timeout=45.0)

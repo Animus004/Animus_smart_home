@@ -127,7 +127,8 @@ class FollowUpEngine:
             "remind me", "add task", "create task", "what do i", "what are my", "what's on", "what did i",
             "set ac", "turn on", "turn off", "wake", "good morning", "good night", "i had lunch", "i've had lunch",
             "just had lunch", "can you", "what can you", "sit for sql", "focus mode", "time to focus",
-            "heading to", "going to", "at my desk", "practicing guitar", "mark ", "completed ", "done "
+            "heading to", "going to", "at my desk", "practicing guitar", "mark ", "completed ", "done ",
+            "play ", "listen to ", "queue ", "soundbar", "projector", "ac "
         ]
         if any(trigger in lower for trigger in interrupt_triggers):
             logger.info(f"[FOLLOWUP_INTERRUPTED] Pending follow-up superseded by new utterance: '{user_response}'")

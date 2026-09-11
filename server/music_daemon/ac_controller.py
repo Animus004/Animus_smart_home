@@ -180,6 +180,14 @@ class LocalTuyaTransport:
             sock.settimeout(self.timeout)
             try:
                 sock.connect((self.ip, self.port))
+                # Protocol 3.3 requires heartbeat handshake to establish session before control
+                try:
+                    hb_pkt = self._pack_message(0x09, None)
+                    sock.sendall(hb_pkt)
+                    sock.recv(1024)
+                except Exception:
+                    pass
+
                 data_payload = {
                     "devId": self.dev_id,
                     "gwId": self.dev_id,
@@ -362,8 +370,8 @@ class AcController:
 
     def __init__(
         self,
-        lan_ip: str = "192.168.1.3",
-        lan_port: int = 6668,
+        lan_ip: Optional[str] = None,
+        lan_port: Optional[int] = None,
         dev_id: Optional[str] = None,
         local_key: Optional[str] = None,
         access_id: Optional[str] = None,
@@ -374,9 +382,9 @@ class AcController:
     ):
         props = _read_local_properties()
         self.dev_id = dev_id or props.get("tuya.device.id", "76776532a4e57c0a2ca4")
-        self.local_key = local_key or props.get("tuya.local.key", "]VMHXOqTJHw:.jr@")
-        self.lan_ip = lan_ip or props.get("tuya.local.ip", "192.168.1.3")
-        self.lan_port = lan_port
+        self.local_key = local_key or props.get("tuya.local.key", "1'/j|^zqMwIX=fL6")
+        self.lan_ip = lan_ip or props.get("tuya.local.ip", "192.168.1.4")
+        self.lan_port = lan_port or int(props.get("tuya.local.port", "6668"))
         raw_mac = mac_address or os.environ.get("TUYA_AC_MAC", props.get("tuya.ac.mac", self.DEFAULT_AC_MAC))
         self.mac_address = raw_mac.lower().replace(":", "-")
         
@@ -519,7 +527,10 @@ class AcController:
         # 1. Attempt Local LAN Read First (Zero Cloud Quota)
         if time.time() >= self._lan_degraded_until:
             try:
-                from tuya_local_read_adapter import TuyaLocalAcReadAdapter, ReadDiagnosticStatus
+                try:
+                    from tuya_local_read_adapter import TuyaLocalAcReadAdapter, ReadDiagnosticStatus
+                except ImportError:
+                    from server.music_daemon.tuya_local_read_adapter import TuyaLocalAcReadAdapter, ReadDiagnosticStatus
                 local_adapter = TuyaLocalAcReadAdapter(
                     ip=self.lan_ip,
                     port=self.lan_port,

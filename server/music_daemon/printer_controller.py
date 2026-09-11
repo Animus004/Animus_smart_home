@@ -31,7 +31,8 @@ class PrinterController:
     DEFAULT_TARGET_PRINTER = "HP Ink Tank 310 series"
     ALLOWED_EXTENSIONS = frozenset([
         ".txt", ".pdf", ".docx", ".doc", ".sql", ".csv",
-        ".png", ".jpg", ".jpeg", ".bmp", ".md", ".json"
+        ".png", ".jpg", ".jpeg", ".bmp", ".md", ".json",
+        ".py", ".xlsx", ".pptx", ".html", ".log"
     ])
 
     def __init__(self, target_printer: Optional[str] = None, is_simulated: bool = False):
@@ -193,6 +194,160 @@ class PrinterController:
     def print_document(self, file_path: str, printer_name: Optional[str] = None) -> Tuple[bool, Dict[str, Any]]:
         """Alias for print_file."""
         return self.print_file(file_path=file_path, printer_name=printer_name)
+
+    def print_custom_file(
+        self,
+        file_path: str,
+        copies: int = 1,
+        orientation: str = "portrait",
+        fit_to_page: bool = True,
+        printer_name: Optional[str] = None
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Sends a custom file to the HP Ink Tank printer with format-specific page fitting,
+        orientation control, copy count, and spooler verification.
+        """
+        target = printer_name or self.target_printer
+        clean_path = os.path.abspath(file_path)
+
+        if not os.path.exists(clean_path):
+            return False, {
+                "success": False,
+                "error": f"File does not exist: {clean_path}",
+                "status": "FILE_NOT_FOUND",
+                "verified": False
+            }
+
+        ext = os.path.splitext(clean_path)[1].lower()
+        if ext not in self.ALLOWED_EXTENSIONS:
+            return False, {
+                "success": False,
+                "error": f"File type '{ext}' is not allowed for printing. Allowed: {sorted(list(self.ALLOWED_EXTENSIONS))}",
+                "status": "INVALID_EXTENSION",
+                "verified": False
+            }
+
+        copies = max(1, min(int(copies or 1), 10))
+        is_landscape = (orientation.lower() == "landscape")
+
+        if self.is_simulated:
+            logger.info(f"[PRINTER_SIMULATED] Custom print '{clean_path}' to '{target}' (copies={copies}, orientation={orientation}).")
+            return True, {
+                "success": True,
+                "file": clean_path,
+                "printer": target,
+                "copies": copies,
+                "orientation": orientation,
+                "action": "PRINT_CUSTOM_FILE",
+                "status": "QUEUED_SIMULATED",
+                "verified": True
+            }
+
+        logger.info(f"[PRINTER_CUSTOM_DISPATCH] Dispatching '{clean_path}' (type={ext}, copies={copies}, orient={orientation}) to '{target}'...")
+        code = -1
+        stderr = ""
+
+        # 1. Images (PNG, JPG, JPEG, BMP): Auto-fit to A4 Margin Bounds without clipping
+        if ext in [".png", ".jpg", ".jpeg", ".bmp"]:
+            escaped_path = clean_path.replace("'", "''")
+            escaped_target = target.replace("'", "''")
+            ps_img = (
+                f"Add-Type -AssemblyName System.Drawing; "
+                f"$doc = New-Object System.Drawing.Printing.PrintDocument; "
+                f"$doc.PrinterSettings.PrinterName = '{escaped_target}'; "
+                f"$doc.PrinterSettings.Copies = {copies}; "
+                f"$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}; "
+                f"$img = [System.Drawing.Image]::FromFile('{escaped_path}'); "
+                f"$doc.add_PrintPage({{ "
+                f"  param($sender, $ev) "
+                f"  $bounds = $ev.MarginBounds; "
+                f"  $ratio = [Math]::Min($bounds.Width / $img.Width, $bounds.Height / $img.Height); "
+                f"  $w = [int]($img.Width * $ratio); "
+                f"  $h = [int]($img.Height * $ratio); "
+                f"  $x = $bounds.X + [int](($bounds.Width - $w) / 2); "
+                f"  $y = $bounds.Y + [int](($bounds.Height - $h) / 2); "
+                f"  $ev.Graphics.DrawImage($img, $x, $y, $w, $h); "
+                f"  $ev.HasMorePages = $false; "
+                f"}}); "
+                f"$doc.Print(); "
+                f"$img.Dispose(); "
+                f"$doc.Dispose();"
+            )
+            code, _, stderr = self._run_ps(ps_img, timeout=12.0)
+
+        # 2. Text, Markdown, and Code (.txt, .md, .sql, .py, .json, .csv, .log): Clean monospace with header & pagination
+        elif ext in [".txt", ".md", ".sql", ".py", ".json", ".csv", ".log"]:
+            escaped_path = clean_path.replace("'", "''")
+            escaped_target = target.replace("'", "''")
+            base_name = os.path.basename(clean_path).replace("'", "''")
+            ps_text = (
+                f"Add-Type -AssemblyName System.Drawing; "
+                f"$doc = New-Object System.Drawing.Printing.PrintDocument; "
+                f"$doc.PrinterSettings.PrinterName = '{escaped_target}'; "
+                f"$doc.PrinterSettings.Copies = {copies}; "
+                f"$doc.DefaultPageSettings.Landscape = {'$true' if is_landscape else '$false'}; "
+                f"$font = New-Object System.Drawing.Font('Consolas', 10); "
+                f"$hdrFont = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold); "
+                f"$brush = [System.Drawing.Brushes]::Black; "
+                f"$lines = Get-Content -Path '{escaped_path}' -Encoding UTF8; "
+                f"$script:lIdx = 0; "
+                f"$script:pg = 1; "
+                f"$doc.add_PrintPage({{ "
+                f"  param($sender, $ev) "
+                f"  $m = $ev.MarginBounds; "
+                f"  $y = $m.Top; "
+                f"  $hdr = 'Animus Smart Room  |  {base_name}  |  Page ' + $script:pg; "
+                f"  $ev.Graphics.DrawString($hdr, $hdrFont, $brush, $m.Left, $y); "
+                f"  $y += 22; "
+                f"  $ev.Graphics.DrawLine([System.Drawing.Pens]::LightGray, $m.Left, $y, $m.Right, $y); "
+                f"  $y += 10; "
+                f"  $lineH = $font.GetHeight($ev.Graphics); "
+                f"  while ($script:lIdx -lt $lines.Count -and ($y + $lineH) -lt $m.Bottom) {{ "
+                f"    $ev.Graphics.DrawString($lines[$script:lIdx], $font, $brush, $m.Left, $y); "
+                f"    $y += $lineH; "
+                f"    $script:lIdx++; "
+                f"  }}; "
+                f"  $script:pg++; "
+                f"  $ev.HasMorePages = ($script:lIdx -lt $lines.Count); "
+                f"}}); "
+                f"$doc.Print(); "
+                f"$font.Dispose(); "
+                f"$hdrFont.Dispose(); "
+                f"$doc.Dispose();"
+            )
+            code, _, stderr = self._run_ps(ps_text, timeout=15.0)
+
+        # 3. PDF and Office (.pdf, .docx, .doc, .xlsx, .pptx, .html)
+        if code != 0:
+            # Fallback to Windows Shell PrintTo verb
+            escaped_path = clean_path.replace("'", "''")
+            escaped_target = target.replace("'", "''")
+            ps_shell = (
+                f"Start-Process -FilePath '{escaped_path}' -Verb PrintTo -ArgumentList '\"{escaped_target}\"' -PassThru -WindowStyle Hidden"
+            )
+            code, _, stderr = self._run_ps(ps_shell, timeout=10.0)
+
+        # 4. Ultimate fallback for text/code if Shell PrintTo was unavailable
+        if code != 0 and ext in [".txt", ".sql", ".csv", ".md", ".json", ".py", ".log"]:
+            ps_fallback = f"Get-Content -Path '{clean_path}' | Out-Printer -Name '{target}'"
+            code, _, stderr = self._run_ps(ps_fallback, timeout=8.0)
+
+        ok = (code == 0)
+        time.sleep(0.5)
+        st = self.get_status()
+
+        return ok, {
+            "success": ok,
+            "file": clean_path,
+            "file_name": os.path.basename(clean_path),
+            "printer": target,
+            "copies": copies,
+            "orientation": orientation,
+            "action": "PRINT_CUSTOM_FILE",
+            "active_jobs_in_spooler": st.get("job_count", 0),
+            "message": f"Successfully dispatched '{os.path.basename(clean_path)}' ({copies} cop{'y' if copies==1 else 'ies'}, {orientation}) to {target}." if ok else f"Print dispatch failed: {stderr}",
+            "verified": ok
+        }
 
     # =========================================================================
     # 3. Queue Management

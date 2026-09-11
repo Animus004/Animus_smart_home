@@ -130,6 +130,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onExecuteCommand(trimmed)
     }
 
+    fun printCustomFile(filename: String, bytes: ByteArray, copies: Int = 1, orientation: String = "portrait") {
+        viewModelScope.launch {
+            _chatHistory.update {
+                it + com.animus.smartroom.ui.glass.ChatMessage(
+                    isUser = true,
+                    text = "Printing '$filename' (${bytes.size / 1024} KB) on HP Ink Tank 310..."
+                )
+            }
+            val res = printerClient.uploadAndPrintFile(filename, bytes, copies, orientation, autoPrint = true)
+            if (res.success) {
+                _chatHistory.update {
+                    it + com.animus.smartroom.ui.glass.ChatMessage(
+                        isUser = false,
+                        text = "🖨️ ${res.message}"
+                    )
+                }
+            } else {
+                _chatHistory.update {
+                    it + com.animus.smartroom.ui.glass.ChatMessage(
+                        isUser = false,
+                        text = "❌ Failed to print '$filename': ${res.error ?: "Spooler error"}"
+                    )
+                }
+            }
+        }
+    }
+
     fun clearAiFeedback() {
         _aiCommandState.update { it.copy(lastResultMessage = null, isSuccess = null) }
     }
@@ -198,6 +225,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val brainHost: StateFlow<String> = _brainHost.asStateFlow()
 
     private val pcAlarmClient = com.animus.smartroom.routine.alarm.PcAlarmClient(
+        hostProvider = { localBrainConfigStorage.getConfig().host }
+    )
+
+    private val printerClient = com.animus.smartroom.brain.client.PrinterRemoteClient(
         hostProvider = { localBrainConfigStorage.getConfig().host }
     )
 
@@ -285,8 +316,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         // Voice Command Routing: Wire speech recognition into main interactive command lifecycle
         (voiceInputPort as? com.animus.smartroom.voice.SpeechRecognitionManager)?.setOnResultDispatched { spokenText ->
-            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                sendChatMessage(spokenText)
+            val coordinator = app.voiceLifecycleCoordinator
+            val isCoordActive = coordinator?.currentState?.value != null && coordinator.currentState.value != com.animus.smartroom.core.voice.WakeWordState.IDLE
+            if (!isCoordActive) {
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    sendChatMessage(spokenText)
+                }
+            } else {
+                // If VoiceLifecycleCoordinator is managing the cycle, record user bubble without duplicate command execution
+                _chatHistory.update { it + com.animus.smartroom.ui.glass.ChatMessage(isUser = true, text = spokenText.trim()) }
             }
         }
 
@@ -328,21 +366,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Observe proactive events from Animus Backend Agent Event Bus
         viewModelScope.launch {
             app.agentEventClient.eventFlow.collectLatest { event ->
-                Log.i("MainViewModel", "[PROACTIVE_BACKEND_EVENT] Type=${event.eventType}, Message='${event.message}'")
+                val msg = event.message.trim()
+                if (msg.isBlank()) return@collectLatest
+                Log.i("MainViewModel", "[PROACTIVE_BACKEND_EVENT] Type=${event.eventType}, Message='$msg'")
+
+                // Deduplication: If this event was published as an echo of a mobile HTTP command,
+                // or matches a recently added assistant response, skip duplicate chat rendering.
+                val source = event.payload.optString("source", "")
+                if (source.equals("MOBILE", ignoreCase = true)) {
+                    Log.d("MainViewModel", "[PROACTIVE_EVENT_DEDUP] Skipping echo of mobile interaction: '$msg'")
+                    return@collectLatest
+                }
+
                 val severity = when (event.priority.uppercase()) {
                     "HIGH", "CRITICAL" -> com.animus.smartroom.ui.glass.FeedbackSeverity.WARNING
                     else -> com.animus.smartroom.ui.glass.FeedbackSeverity.INFO
                 }
-                _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
-                    requestId = event.eventId,
-                    intent = event.eventType,
-                    state = com.animus.smartroom.ui.glass.ActionExecutionState.IDLE,
-                    message = event.message,
-                    severity = severity,
-                    isPersistent = false
-                )
+                if (_actionFeedbackState.value?.message != msg) {
+                    _actionFeedbackState.value = com.animus.smartroom.ui.glass.ActionFeedback(
+                        requestId = event.eventId,
+                        intent = event.eventType,
+                        state = com.animus.smartroom.ui.glass.ActionExecutionState.IDLE,
+                        message = msg,
+                        severity = severity,
+                        isPersistent = false
+                    )
+                }
                 _chatHistory.update { history ->
-                    history + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = event.message)
+                    val recentReplies = history.takeLast(3).filter { !it.isUser }.map { it.text.trim() }
+                    if (recentReplies.contains(msg)) {
+                        Log.d("MainViewModel", "[PROACTIVE_EVENT_DEDUP] Skipping duplicate assistant message: '$msg'")
+                        history
+                    } else {
+                        history + com.animus.smartroom.ui.glass.ChatMessage(isUser = false, text = msg)
+                    }
                 }
             }
         }

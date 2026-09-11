@@ -14,47 +14,65 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "serv
 
 from datetime import datetime
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 API_BASE_URL = os.getenv("ANIMUS_API_URL", "http://127.0.0.1:8095")
 
 
 def print_banner():
     now_str = datetime.now().astimezone().strftime("%A, %d %B %Y, %I:%M %p (%Z)")
     print("=" * 68)
-    print("      ★ ANIMUS COGNITIVE SMART ROOM ORCHESTRATOR CONSOLE ★      ")
+    print("      * ANIMUS COGNITIVE SMART ROOM ORCHESTRATOR CONSOLE *      ")
     print("   Agent-Centric Cognition | Local Qwen 4B + Gemini Hybrid Cloud   ")
     print("=" * 68)
     print(f"Current Local Time: {now_str}")
     print(f"Connecting to Animus Daemon at: {API_BASE_URL}")
-    print("Type your request naturally (e.g. 'Movie time', 'What are my active goals?', 'Make it 22')")
-    print("Special Commands: 'goals' (active tasks), 'memory' (facts), 'status', 'clear', 'exit'\n")
+    print("Type your request naturally (e.g. 'Movie time', 'Scan devices', 'Make it 22')")
+    print("Special Commands: 'scan' (hardware audit), 'goals' (tasks), 'memory' (facts), 'status', 'clear', 'exit'\n")
 
 
-def check_daemon_health() -> bool:
-    try:
-        resp = requests.get(f"{API_BASE_URL}/api/agent/profile", timeout=2.0)
-        return resp.status_code == 200
-    except Exception:
-        return False
+def check_daemon_health(retries: int = 6, delay: float = 1.0) -> bool:
+    for attempt in range(retries):
+        try:
+            resp = requests.get(f"{API_BASE_URL}/api/agent/profile", timeout=1.5)
+            if resp.status_code == 200:
+                return True
+        except Exception:
+            pass
+        if attempt < retries - 1:
+            time.sleep(delay)
+    return False
 
 
 def main():
     print_banner()
 
+    print("[CONNECTING] Checking Animus Daemon on port 8095...")
     is_online = check_daemon_health()
     if not is_online:
-        print("[WARNING] Animus daemon not detected on port 8095.")
-        print("          Starting in standalone embedded mode...\n")
+        print("[WARNING] Live Animus daemon not detected on port 8095.")
+        print("          Loading local orchestration engine...\n")
         try:
-            from agent.core import AnimusPersonalAgent
-            agent = AnimusPersonalAgent()
-            print("[ONLINE] Standalone AnimusPersonalAgent initialized successfully!\n")
+            from main import animus_personal_agent as agent
+            print("[ONLINE] Standalone Animus engine initialized with full hardware orchestration!\n")
             use_embedded = True
         except Exception as e:
-            print(f"[ERROR] Could not load embedded agent: {e}")
-            print("Please run `python server/music_daemon/main.py` first.")
-            return
+            try:
+                from agent.core import AnimusPersonalAgent
+                agent = AnimusPersonalAgent()
+                print("[ONLINE] Bare AnimusPersonalAgent initialized successfully!\n")
+                use_embedded = True
+            except Exception as e2:
+                print(f"[ERROR] Could not load embedded agent: {e2}")
+                print("Please run `python server/music_daemon/main.py` first.")
+                return
     else:
-        print("[ONLINE] Connected to live Animus Daemon!\n")
+        print("[ONLINE] Connected to live Animus Daemon on port 8095!\n")
         use_embedded = False
 
     while True:
@@ -101,6 +119,27 @@ def main():
                     print(f"  • {k}: {v}")
                 print()
                 continue
+
+            if user_input.lower().startswith("/print ") or user_input.lower().startswith("print "):
+                target_path = user_input.split(" ", 1)[1].strip().strip('\'"')
+                if os.path.exists(target_path):
+                    print(f"\n[PRINTER] Spooling custom file '{target_path}' to HP Ink Tank 310...")
+                    try:
+                        from printer_controller import get_printer_controller
+                        ok, res = get_printer_controller().print_custom_file(target_path)
+                        if ok:
+                            print(f"[SUCCESS] {res.get('message', 'Print job spooled successfully.')}\n")
+                        else:
+                            print(f"[ERROR] Print failed: {res.get('error', 'Spooler error')}\n")
+                    except Exception as e:
+                        print(f"[ERROR] {e}\n")
+                    continue
+                else:
+                    print(f"[ERROR] File not found at path: '{target_path}'\n")
+                    continue
+
+            if user_input.lower() in ("scan", "/scan", "devices", "/devices", "scan devices"):
+                user_input = "Scan for devices"
 
             if user_input.lower() == "status":
                 user_input = "What's happening in the room right now?"

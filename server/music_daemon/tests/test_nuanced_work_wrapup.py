@@ -127,6 +127,49 @@ def test_chatgpt_summary_completion_flow(decision_engine, clean_memory):
     assert matching_old["completed"] is True
 
 
+def test_structured_project_milestone_summary_ingestion(decision_engine, clean_memory):
+    """Proves that a structured project milestone update (Blinkit SQ1-SQ4 complete, SQ5 active) advances roadmap and does not get hijacked by SQL advice."""
+    sg_before = clean_memory.get_current_work_subgoal()
+
+    structured_input = """
+- translating business questions into technically correct SQL
+- SQL performance when joins create large intermediate datasets
+
+Do not treat me as a complete SQL beginner. Standard filtering, aggregation, GROUP BY/HAVING, and straightforward joins are relatively comfortable. Focus training on the intermediate technical problems where I understand the intended logic but struggle to implement it precisely.
+
+CURRENT PROJECT
+
+Project 4: Blinkit Dark Store Intelligence.
+
+Stakeholder 1 (SQ1-SQ4) has been completed.
+
+Current work:
+Stakeholder 2 / SQ5.
+
+Current learning milestone:
+Working on event-based inventory/replenishment analysis, particularly the question about average time from falling below reorder level to replenishment request.
+
+Career goal:
+Become technically capable of handling typical Data Analyst/BI Analyst SQL technical rounds while using AI as an implementation and productivity tool.
+"""
+    res = decision_engine.decide_and_act(structured_input)
+
+    assert "Outstanding progress" in res.response_message or "Blinkit" in res.response_message
+    assert "Would you like me to set a reminder" in res.response_message
+    assert decision_engine._wrapup_followup_state == "AWAITING_REMINDER_DECISION"
+    assert res.inference_source != "PERSONAL_SITUATIONAL_REASONING"
+
+    # Milestone advanced
+    roadmap = clean_memory.get_career_roadmap()
+    subgoals = roadmap["active_goal"]["subgoals"]
+    matching_old = [s for s in subgoals if s["id"] == sg_before["id"]][0]
+    assert matching_old["completed"] is True
+    # The new current subgoal is the next one
+    current_sg = [s for s in subgoals if s.get("is_current")]
+    assert len(current_sg) == 1
+    assert current_sg[0]["id"] != sg_before["id"]
+
+
 def test_followup_engine_deduplication():
     """Proves that rapid duplicate requests to FollowUpEngine are debounced."""
     profile = UserProfile(

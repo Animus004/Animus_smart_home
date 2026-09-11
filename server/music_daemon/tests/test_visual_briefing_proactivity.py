@@ -199,3 +199,38 @@ def test_evening_debrief_trigger_and_guitar_followup(temp_memory):
     assert "Sir" in reply_res.response_message
     assert "guitar" in reply_res.response_message.lower()
     assert any("SET_ACTIVE_MODE" in tc.get("tool", "") for tc in reply_res.tool_calls)
+
+
+def test_explicit_song_playback_bypasses_evening_debrief(temp_memory):
+    """
+    Regression test: Proves that when an evening debrief is staged,
+    an explicit music playback command (e.g. 'play ki name deke ami bolbo tomake')
+    supersedes the debrief, does NOT invoke the printer or guitar tools,
+    and cleanly plays the requested song.
+    """
+    mock_pc = MagicMock()
+    engine = AgentDecisionEngine(
+        memory_store=temp_memory,
+        prompt_builder=CognitivePromptBuilder(memory_store=temp_memory),
+        pc_controller=mock_pc
+    )
+
+    # Stage evening debrief
+    engine.set_pending_proactive_followup(
+        category=ProactiveTriggerCategory.EVENING_DEBRIEF,
+        followup_context="PROACTIVE_EVENING_DEBRIEF",
+        message="Good evening, Sir. Shall I print tomorrow's checklist on the HP Ink Tank 310, and cue your guitar practice session?"
+    )
+
+    # User issues a song playback command
+    reply_res = engine.decide_and_act("play ki name deke ami bolbo tomake")
+    assert "Sir" in reply_res.response_message
+    assert "ki name deke ami bolbo tomake" in reply_res.response_message
+    # Proves HP Ink Tank 310 printer was NOT triggered
+    assert not any("PRINTER" in tc.get("tool", "") for tc in reply_res.tool_calls)
+    assert not any("PRINT" in tc.get("tool", "") for tc in reply_res.tool_calls)
+    # Proves media play was dispatched
+    assert any(tc.get("tool", "") in ["PLAY_MUSIC", "PC_MEDIA_PLAY"] for tc in reply_res.tool_calls)
+    # Proves proactive debrief state was cleared
+    assert engine._proactive_followup_state is None
+

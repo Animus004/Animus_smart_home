@@ -312,10 +312,31 @@ class AnimusPersonalAgent:
                     self.context_buffer.record_animus_turn(utterance=q, intent="RELAXATION_NARROW_OPTIONS", action_taken=False)
                     return resp
                 utterance = resolved_followup.get("request", utterance)
-                logger.info(f"[AGENT_FOLLOWUP_RESOLVED] Follow-up converted to request: '{utterance}'")
+        lower_utt = utterance.strip().lower()
+
+        # Step 1.4: Deterministic Safe Hardware Device Scan
+        if any(w in lower_utt for w in [
+            "scan for devices", "scan devices", "scan room devices", "scan all devices",
+            "device status", "devices status", "hardware status", "check all devices",
+            "check devices", "check room devices", "scan the room", "scan room",
+            "what devices are online", "what devices are connected", "scan hardware",
+            "status of all devices", "audit devices", "device audit"
+        ]):
+            try:
+                from device_scanner import get_device_scanner
+                scanner = get_device_scanner()
+                report = scanner.scan_all_devices()
+                summary = scanner.format_status_summary(report, preferred_name=addr)
+                self.context_buffer.record_animus_turn(utterance=summary, intent="DEVICE_HARDWARE_SCAN", action_taken=True)
+                return AgentInteractionResponse(
+                    understood_intent="DEVICE_HARDWARE_SCAN",
+                    agent_message=summary,
+                    action_taken=True
+                )
+            except Exception as e:
+                logger.error(f"[DEVICE_SCAN_CORE_ERR] {e}")
 
         # Step 1.5: Check if cognitive decision_engine should handle this turn
-        lower_utt = utterance.strip().lower()
         has_wrapup_state = bool(hasattr(self, "decision_engine") and self.decision_engine and getattr(self.decision_engine, "_wrapup_followup_state", None))
         has_proactive_state = bool(hasattr(self, "decision_engine") and self.decision_engine and getattr(self.decision_engine, "_proactive_followup_state", None))
         is_work_intent = any(w in lower_utt for w in [
@@ -3053,11 +3074,21 @@ class AnimusPersonalAgent:
                 return GeminiStructuredPlan(intent=f"LAUNCH_{prov.upper().replace(' ', '_')}", objective_summary=f"Launch {prov} on cinema stack", user_request=utterance, steps=steps)
 
         # Direct Audio Routing Plans
-        if any(s in lower for s in ["switch audio to pc", "route audio to pc", "switch to bedroom speaker", "connect soundbar to pc", "audio to pc", "audio to computer"]):
+        if any(s in lower for s in [
+            "switch audio to pc", "route audio to pc", "switch to bedroom speaker", "connect soundbar to pc",
+            "connect speaker to pc", "connect bluetooth to pc", "bluetooth to pc", "speaker to pc",
+            "audio to pc", "audio to computer"
+        ]):
             steps.append(PlanStep(step_id=1, device="SOUNDBAR", capability="SOUNDBAR_ROUTE_TO_PC"))
             return GeminiStructuredPlan(intent="SOUNDBAR_ROUTE_TO_PC", objective_summary="Route soundbar audio to PC", user_request=utterance, steps=steps)
 
-        if any(s in lower for s in ["switch audio to fire tv", "route audio to fire tv", "connect soundbar to fire tv", "audio to fire tv", "audio to tv"]):
+        if any(s in lower for s in [
+            "switch audio to fire tv", "route audio to fire tv", "connect soundbar to fire tv",
+            "connect bluetooth speaker to fire tv", "connect bluetooth speaker to my fire tv",
+            "connect bluetooth to fire tv", "connect speaker to fire tv", "switch speaker to fire tv",
+            "bluetooth speaker to fire tv", "bluetooth to fire tv", "speaker to fire tv",
+            "audio to fire tv", "audio to tv"
+        ]):
             steps.append(PlanStep(step_id=1, device="SOUNDBAR", capability="SOUNDBAR_ROUTE_TO_FIRE_TV"))
             return GeminiStructuredPlan(intent="SOUNDBAR_ROUTE_TO_FIRE_TV", objective_summary="Route soundbar audio to Fire TV", user_request=utterance, steps=steps)
 

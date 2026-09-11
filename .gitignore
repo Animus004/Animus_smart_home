@@ -43,5 +43,21 @@ server/music_daemon/scratch/
 *.vbs
 snapshot.json
 
+# Databases and SQLite runtime stores
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Crash and JVM logs
+hs_err_pid*.log
+replay_pid*.log
+
+# Staged print documents
+server/music_daemon/storage/printed_documents/*
+!server/music_daemon/storage/printed_documents/.gitkeep
+
+
 
 

@@ -16,7 +16,7 @@ from enum import Enum
 logger = logging.getLogger("music_daemon.fire_tv")
 
 DEFAULT_FIRE_TV_ADB_PATH = r"C:\platform-tools\platform-tools-latest-windows\platform-tools\adb.exe"
-DEFAULT_FIRE_TV_TARGET = "192.168.1.8:5555"
+DEFAULT_FIRE_TV_TARGET = "192.168.1.6:5555"
 DEFAULT_FIRE_TV_MAC = "6c-99-9d-3e-5f-c1"
 REQUIRED_A2DP_BT_MAC = "54:15:89:DC:A5:79"
 
@@ -34,7 +34,7 @@ class FireTvBluetoothState(str, Enum):
 class FireTvController:
     """
     FireTvController manages communication with the Amazon Fire TV Stick strictly
-    targeting the discovered ADB target (default: 192.168.1.8:5555) via safe subprocess abstraction.
+    targeting the discovered ADB target (default: 192.168.1.6:5555) via safe subprocess abstraction.
     Includes dynamic MAC/ARP discovery and automatic IP migration handling.
     """
     def __init__(
@@ -42,11 +42,14 @@ class FireTvController:
         target: str = DEFAULT_FIRE_TV_TARGET,
         adb_path: Optional[str] = None,
         required_bt_mac: str = REQUIRED_A2DP_BT_MAC,
-        timeout: float = 4.0
+        timeout: float = 7.0
     ):
-        if target == DEFAULT_FIRE_TV_TARGET or target == "192.168.1.5:5555":
+        if target == DEFAULT_FIRE_TV_TARGET or target in ("192.168.1.5:5555", "192.168.1.8:5555"):
             try:
-                from ac_controller import _read_local_properties
+                try:
+                    from ac_controller import _read_local_properties
+                except ImportError:
+                    from server.music_daemon.ac_controller import _read_local_properties
                 props = _read_local_properties()
                 target = os.environ.get("FIRETV_ADB_TARGET", props.get("firetv.adb.target", DEFAULT_FIRE_TV_TARGET))
             except Exception:
@@ -54,7 +57,10 @@ class FireTvController:
         self.target = target
         self.mac_address = DEFAULT_FIRE_TV_MAC
         try:
-            from ac_controller import _read_local_properties
+            try:
+                from ac_controller import _read_local_properties
+            except ImportError:
+                from server.music_daemon.ac_controller import _read_local_properties
             props = _read_local_properties()
             self.mac_address = os.environ.get("FIRETV_MAC", props.get("firetv.adb.mac", DEFAULT_FIRE_TV_MAC)).lower().replace(":", "-")
         except Exception:

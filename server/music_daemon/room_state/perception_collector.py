@@ -558,11 +558,12 @@ class PerceptionCollector:
                 logger.debug(f"[PERCEPTION_VISION_QUERY_ERR] {e}")
 
         # Multi-modal desk presence fusion:
-        # Case A: If camera is offline/disconnected, fall back to PC user activity (idle < 30s)
+        # Case A: If camera is offline/disconnected, infer presence from PC activity (idle < 300s)
+        # Note: Music auto-pause strictly requires camera_online=True in Work Mode, so PC idle never pauses music.
         if not camera_online:
-            if pc_on and not pc_locked and float(user_idle_sec) < 30.0:
+            if pc_on and not pc_locked and float(user_idle_sec) < 300.0:
                 desk_present = True
-                desk_state = "PRESENT"
+                desk_state = "PRESENT (PC_INFERRED)"
             else:
                 desk_present = False
                 desk_state = "EMPTY"

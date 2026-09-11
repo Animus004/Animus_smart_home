@@ -166,6 +166,7 @@ class ProactiveOrchestrator:
         hour = int(telemetry["hour"]) if "hour" in telemetry else now_dt.hour
         today_str = str(telemetry.get("today_str", now_dt.strftime("%Y-%m-%d")))
         suppress_morning = bool(telemetry.get("suppress_morning", False))
+        suppress_evening = bool(telemetry.get("suppress_evening", False))
 
         # Read active mode, PC state, and desk presence from telemetry
         active_mode = str(telemetry.get("active_mode", "")).upper()
@@ -178,10 +179,17 @@ class ProactiveOrchestrator:
         pc_connected = bool(telemetry.get("pc_online", False))
         pc_locked = bool(telemetry.get("pc_locked", False))
         user_idle = float(telemetry.get("user_idle_seconds", 0.0))
+        camera_online = bool(telemetry.get("camera_online", True))
         if "desk_present" in telemetry:
             desk_present = bool(telemetry["desk_present"])
         else:
             desk_present = bool(pc_connected and not pc_locked and user_idle < 300)
+
+        # Invariant: Auto-pausing music and presence departure tracking strictly apply to Work Mode.
+        # Outside of Work Mode, clear departure flags so media is never accidentally paused.
+        if not is_work_active:
+            self._music_paused_by_departure = False
+            self._music_played_while_present = False
 
         # Active desk session is active when in Work Mode OR when PC is connected & unlocked (outside cinema/sleep)
         is_desk_session_active = is_work_active or (pc_connected and not pc_locked and active_mode not in ("MOVIE", "SLEEP"))
@@ -224,30 +232,32 @@ class ProactiveOrchestrator:
                 self._time_left_desk = None
                 self._pc_locked_by_departure = False
 
-                # Auto-Resume Music if previously paused by departure
+                # Auto-Resume Music if previously paused by departure (strictly in Work Mode)
                 if self._music_paused_by_departure:
-                    if self.orchestrator:
-                        try:
-                            if hasattr(self.orchestrator, "safe_resume"):
-                                self.orchestrator.safe_resume()
-                            elif hasattr(self.orchestrator, "player") and self.orchestrator.player:
-                                self.orchestrator.player.resume()
-                            logger.info("[PROACTIVE_PRESENCE] Sir returned to desk: Music resumed.")
-                        except Exception as e:
-                            logger.debug(f"[PROACTIVE_RESUME_ERR] {e}")
+                    if is_work_active:
+                        if self.orchestrator:
+                            try:
+                                if hasattr(self.orchestrator, "safe_resume"):
+                                    self.orchestrator.safe_resume()
+                                elif hasattr(self.orchestrator, "player") and self.orchestrator.player:
+                                    self.orchestrator.player.resume()
+                                logger.info("[PROACTIVE_PRESENCE] Sir returned to desk in Work Mode: Music resumed.")
+                            except Exception as e:
+                                logger.debug(f"[PROACTIVE_RESUME_ERR] {e}")
                     self._music_paused_by_departure = False
 
-                # Mark music as played while present at desk
-                is_currently_playing = False
-                if self.orchestrator:
-                    if hasattr(self.orchestrator, "current_state") and str(self.orchestrator.current_state).endswith("PLAYING"):
-                        is_currently_playing = True
-                    elif hasattr(self.orchestrator, "player") and self.orchestrator.player:
-                        p_st = self.orchestrator.player.get_status()
-                        if p_st.get("status") == "PLAYING" or p_st.get("playback_status") == "PLAYING" or getattr(self.orchestrator.player, "_playback_status", "") == "PLAYING":
+                # Mark music as played while present at desk strictly in Work Mode
+                if is_work_active:
+                    is_currently_playing = False
+                    if self.orchestrator:
+                        if hasattr(self.orchestrator, "current_state") and str(self.orchestrator.current_state).endswith("PLAYING"):
                             is_currently_playing = True
-                if is_currently_playing:
-                    self._music_played_while_present = True
+                        elif hasattr(self.orchestrator, "player") and self.orchestrator.player:
+                            p_st = self.orchestrator.player.get_status()
+                            if p_st.get("status") == "PLAYING" or p_st.get("playback_status") == "PLAYING" or getattr(self.orchestrator.player, "_playback_status", "") == "PLAYING":
+                                is_currently_playing = True
+                    if is_currently_playing:
+                        self._music_played_while_present = True
 
                 # 2A. Ergonomic 50-Minute Deep Work Break Nudge (strictly in Work Mode)
                 if is_work_active:
@@ -335,8 +345,11 @@ class ProactiveOrchestrator:
 
                 away_duration = now - self._time_left_desk
 
-                # 1. At 20s absence: Soft-pause active work/desk music (only if played while Sir was at desk)
-                if away_duration >= 20.0 and not self._music_paused_by_departure and self._music_played_while_present:
+                # 1. At 20s absence: Soft-pause active work/desk music
+                # USER CONSTRAINT: Auto-pausing music ONLY works in WORK MODE, and is SPECIFICALLY based
+                # on CAMERA user presence (desk_present == False and camera_online == True).
+                # NEVER outside work mode, and NEVER triggered by mouse/keyboard inactivity!
+                if is_work_active and camera_online and away_duration >= 20.0 and not self._music_paused_by_departure and self._music_played_while_present:
                     is_playing = False
                     if self.orchestrator:
                         if hasattr(self.orchestrator, "current_state") and str(self.orchestrator.current_state).endswith("PLAYING"):
@@ -354,17 +367,17 @@ class ProactiveOrchestrator:
                                 self.orchestrator.player.pause()
                             self._music_paused_by_departure = True
                             self._music_played_while_present = False
-                            logger.info(f"[PROACTIVE_DEPARTURE] Sir stepped away (>= 20s, away={away_duration:.1f}s): Music paused.")
+                            logger.info(f"[PROACTIVE_DEPARTURE] Sir stepped away from camera in Work Mode (>= 20s, away={away_duration:.1f}s): Music paused.")
                         except Exception as e:
                             logger.debug(f"[PROACTIVE_PAUSE_ERR] {e}")
 
-                # 2. At absence threshold (60s default): Lock Windows workstation for privacy
-                if away_duration >= self.pc_lock_timeout and not self._pc_locked_by_departure:
+                # 2. At absence threshold (60s default): Lock Windows workstation for privacy (Work mode only)
+                if is_work_active and away_duration >= self.pc_lock_timeout and not self._pc_locked_by_departure:
                     if self.pc_controller and hasattr(self.pc_controller, "lock_workstation"):
                         try:
                             self.pc_controller.lock_workstation()
                             self._pc_locked_by_departure = True
-                            logger.info(f"[PROACTIVE_DEPARTURE] Sir away >= {self.pc_lock_timeout}s (away={away_duration:.1f}s): Windows workstation locked.")
+                            logger.info(f"[PROACTIVE_DEPARTURE] Sir away >= {self.pc_lock_timeout}s in Work Mode (away={away_duration:.1f}s): Windows workstation locked.")
                         except Exception as e:
                             logger.debug(f"[PROACTIVE_LOCK_ERR] {e}")
 
@@ -497,7 +510,7 @@ class ProactiveOrchestrator:
                 logger.debug(f"[ROUTINE_ANTICIPATION_EVAL_ERR] {e}")
 
         # 6. Check Evening Debrief & Wrap-Up Routine (18:00 - 23:00)
-        if 18 <= hour < 23 and self._evening_debriefed_today != today_str:
+        if not suppress_evening and 18 <= hour < 23 and self._evening_debriefed_today != today_str:
             is_present = desk_present or (pc_connected and not pc_locked and user_idle < 600)
             if is_present and self._can_trigger(ProactiveTriggerCategory.EVENING_DEBRIEF, now):
                 msg = "Good evening, Sir. You've completed today's focus session. Shall I print tomorrow's checklist on the HP Ink Tank 310, and cue your 5:30 PM guitar practice session?"

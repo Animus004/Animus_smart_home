@@ -645,9 +645,82 @@
     }
     .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
     .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
-    @keyframes bounce {
-      0%, 80%, 100% { transform: scale(0); }
-      40% { transform: scale(1); }
+    /* ─── CUSTOM PRINT MODAL ─── */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-card {
+      background: #0d121f;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      width: 90%;
+      max-width: 480px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(99, 102, 241, 0.15);
+      color: var(--text-main);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      font-size: 1.4rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px;
+      transition: color 0.2s ease;
+    }
+    .modal-close:hover {
+      color: #fff;
+    }
+    .file-drop-area {
+      border: 2px dashed rgba(255, 255, 255, 0.2);
+      border-radius: var(--radius-md);
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .file-drop-area:hover, .file-drop-area.drag-over {
+      border-color: #6366f1;
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .input-select, .input-text {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-sm);
+      color: #fff;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .input-select option {
+      background: #0d121f;
+      color: #fff;
     }
   </style>
 </head>
@@ -754,7 +827,7 @@
         </div>
         
         <div class="card-subtitle" id="vision-hardware-subtitle">
-          HD Camera (DirectShow Index 2) & HP Ink Tank 310
+          HD Camera (USB VID_349C&PID_2317) & HP Ink Tank 310
         </div>
 
         <!-- Optical Telemetry Grid -->
@@ -800,6 +873,9 @@
         <div class="quick-actions-grid" style="margin-top: 14px;">
           <button class="action-btn action-btn-primary" id="btn-print-briefing" onclick="printDailyBriefing()" title="Print Executive Briefing Sheet on HP Ink Tank 310">
             <span>🖨️</span> Print Daily Sheet
+          </button>
+          <button class="action-btn" id="btn-print-custom" onclick="openCustomPrintModal()" title="Print Custom Document, Code Script, or Image on HP Ink Tank 310">
+            <span>📄</span> Print Custom File
           </button>
           <button class="action-btn" id="btn-show-briefing" onclick="fetchMorningBriefing()" title="Display Morning Briefing in Chat Feed">
             <span>📋</span> Morning Briefing
@@ -929,10 +1005,12 @@
       fetchRoadmap();
       fetchWorkContext();
       fetchVisionPresence();
+      fetchRoomState();
       loadChatHistory();
 
       // Periodically sync cross-device chat history & context every 2.5s
       setInterval(syncChatHistory, 2500);
+      setInterval(fetchRoomState, 2000);
       setInterval(fetchWorkContext, 3500);
       setInterval(fetchRoadmap, 5000);
       setInterval(fetchVisionPresence, 2000);
@@ -1011,6 +1089,32 @@
       }
     }
 
+    async function fetchRoomState() {
+      try {
+        const res = await fetch('/api/room/state');
+        if (!res.ok) return;
+        const d = await res.json();
+        const mode = d?.environment?.room_mode?.value || 'IDLE';
+        const label = document.getElementById('label-mode');
+        const pill = document.getElementById('pill-mode');
+        if (label) {
+          label.innerText = `Mode: ${mode}`;
+        }
+        if (pill) {
+          const dot = pill.querySelector('.status-indicator');
+          if (dot) {
+            let statusClass = 'status-green';
+            if (mode === 'WORK') statusClass = 'status-cyan';
+            else if (mode === 'MOVIE') statusClass = 'status-purple';
+            else if (mode === 'RELAX' || mode === 'COMFORT') statusClass = 'status-amber';
+            dot.className = `status-indicator ${statusClass}`;
+          }
+        }
+      } catch (err) {
+        // quiet background sync
+      }
+    }
+
     async function fetchVisionPresence() {
       try {
         const res = await fetch('/api/vision/presence');
@@ -1033,6 +1137,10 @@
       const motionLabel = document.getElementById('vision-motion-label');
       const motionBar = document.getElementById('vision-motion-bar');
       const badge = document.getElementById('vision-badge');
+      const subtitle = document.getElementById('vision-hardware-subtitle');
+      if (subtitle && d.hardware_device) {
+        subtitle.innerText = `${d.hardware_device} & HP Ink Tank 310`;
+      }
 
       const isPresent = d.is_present;
       const state = d.state || 'EMPTY';
@@ -1194,7 +1302,7 @@
         const res = await fetch('/api/agent/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text, active_mode: 'WORK' })
+          body: JSON.stringify({ message: text })
         });
 
         removeTypingIndicator(typingId);
@@ -1218,13 +1326,8 @@
           if (expr.light_cue && pillMode) {
             pillMode.title = `Physical Expression: Light=${expr.light_cue}, Sound=${expr.sound_cue || 'SILENT'}`;
           }
-        } else {
-          if (data.response && data.response.toLowerCase().includes('work mode activated')) {
-            document.getElementById('label-mode').innerText = 'Mode: WORK';
-          } else if (data.response && (data.response.toLowerCase().includes('applications closed') || data.response.toLowerCase().includes('wrap up') || data.response.toLowerCase().includes('milestone as completed') || data.response.toLowerCase().includes('no milestone changes recorded') || data.response.toLowerCase().includes('progress saved'))) {
-            document.getElementById('label-mode').innerText = 'Mode: RELAX';
-          }
         }
+        setTimeout(fetchRoomState, 400);
 
         // Re-render roadmap if updated
         if (data.roadmap) {
@@ -1331,6 +1434,7 @@
           renderWorkContext(data.work_context);
         }
         setTimeout(fetchWorkContext, 2500);
+        setTimeout(fetchRoomState, 500);
       } catch (err) {
         appendMessage('agent', `Failed to activate work mode: ${err.message}`);
       }
@@ -1351,6 +1455,7 @@
           renderWorkContext(data.work_context);
         }
         setTimeout(fetchWorkContext, 1500);
+        setTimeout(fetchRoomState, 500);
       } catch (err) {
         appendMessage('agent', `Failed to wrap up work mode: ${err.message}`);
       }
@@ -1370,10 +1475,166 @@
       document.getElementById('tts-icon').innerText = ttsEnabled ? '🔊' : '🔇';
     }
 
+    /* ─── CUSTOM FILE PRINT MODAL HANDLERS ─── */
+    let selectedPrintFile = null;
+
+    function openCustomPrintModal() {
+      const modal = document.getElementById('modal-custom-print');
+      if (modal) modal.style.display = 'flex';
+      resetCustomPrintForm();
+    }
+
+    function closeCustomPrintModal() {
+      const modal = document.getElementById('modal-custom-print');
+      if (modal) modal.style.display = 'none';
+      resetCustomPrintForm();
+    }
+
+    function resetCustomPrintForm() {
+      selectedPrintFile = null;
+      const input = document.getElementById('custom-file-input');
+      if (input) input.value = '';
+      const info = document.getElementById('selected-file-info');
+      if (info) info.style.display = 'none';
+      const dropLabel = document.getElementById('drop-label');
+      if (dropLabel) dropLabel.style.display = 'block';
+      const btn = document.getElementById('btn-dispatch-print');
+      if (btn) btn.disabled = true;
+    }
+
+    function handleFileSelected(input) {
+      if (input.files && input.files[0]) {
+        setCustomPrintFile(input.files[0]);
+      }
+    }
+
+    function setCustomPrintFile(file) {
+      selectedPrintFile = file;
+      document.getElementById('print-file-name').innerText = file.name;
+      document.getElementById('print-file-size').innerText = `${(file.size / 1024).toFixed(1)} KB`;
+      document.getElementById('selected-file-info').style.display = 'block';
+      document.getElementById('drop-label').style.display = 'none';
+      document.getElementById('btn-dispatch-print').disabled = false;
+    }
+
+    // Drag & Drop Setup
+    document.addEventListener('DOMContentLoaded', () => {
+      const dropArea = document.getElementById('drop-area');
+      if (!dropArea) return;
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropArea.classList.add('drag-over');
+        }, false);
+      });
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropArea.classList.remove('drag-over');
+        }, false);
+      });
+      dropArea.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+          setCustomPrintFile(files[0]);
+        }
+      }, false);
+    });
+
+    async function dispatchCustomPrint() {
+      if (!selectedPrintFile) return;
+      const copies = parseInt(document.getElementById('print-copies').value || '1', 10);
+      const orientation = document.getElementById('print-orientation').value || 'portrait';
+      const btn = document.getElementById('btn-dispatch-print');
+      btn.disabled = true;
+      btn.innerText = 'Spooling...';
+
+      closeCustomPrintModal();
+      appendMessage('user', `Print file '${selectedPrintFile.name}' (${copies} cop${copies === 1 ? 'y' : 'ies'}, ${orientation}).`);
+      appendMessage('agent', `Connecting to HP Ink Tank 310 spooler... formatting '${selectedPrintFile.name}' for A4 bounds.`);
+
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedPrintFile);
+        formData.append('copies', copies);
+        formData.append('orientation', orientation);
+        formData.append('fit_to_page', 'true');
+        formData.append('auto_print', 'true');
+
+        const res = await fetch('/api/printer/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          const resInfo = data.print_result || {};
+          appendMessage('agent', `🖨️ **Print Job Spooled Successfully, Sir!**\n\nFile: **${data.filename}**\nTarget: **${resInfo.printer || 'HP Ink Tank 310 series'}**\nCopies: ${resInfo.copies || copies} (${resInfo.orientation || orientation})\nSpooler Status: ${resInfo.status || 'QUEUED'}`);
+        } else {
+          appendMessage('agent', `❌ **Print Dispatch Failed:** ${data.error || JSON.stringify(data)}`);
+        }
+      } catch (err) {
+        appendMessage('agent', `❌ **Print Dispatch Error:** ${err.message}`);
+      }
+    }
+
     function escapeHtml(text) {
       const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
       return text.replace(/[&<>"']/g, m => map[m]);
     }
   </script>
+
+  <!-- Custom File Print Modal Backdrop -->
+  <div id="modal-custom-print" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><span>🖨️</span> HP Ink Tank 310 Custom Print</div>
+        <button class="modal-close" onclick="closeCustomPrintModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 12px;">
+          Select or drop any document, code script, or image. Auto-formatted for A4 paper.
+        </p>
+        
+        <div class="file-drop-area" id="drop-area" onclick="document.getElementById('custom-file-input').click()">
+          <input type="file" id="custom-file-input" style="display: none;" onchange="handleFileSelected(this)" accept=".pdf,.docx,.doc,.txt,.sql,.csv,.png,.jpg,.jpeg,.bmp,.md,.json,.py,.xlsx,.pptx,.log">
+          <div id="drop-label">
+            <span style="font-size: 28px;">📂</span>
+            <div style="font-weight: 600; margin-top: 6px;">Click or Drag & Drop file here</div>
+            <div style="font-size: 11px; color: var(--text-sub); margin-top: 4px;">PDF, DOCX, SQL, PY, TXT, MD, PNG, JPG, CSV</div>
+          </div>
+        </div>
+        
+        <div id="selected-file-info" style="display: none; margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; font-weight: 600;" id="print-file-name">filename.py</div>
+            <div style="font-size: 11px; color: var(--text-sub);" id="print-file-size">0 KB</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
+          <div>
+            <label style="font-size: 11px; color: var(--text-sub); font-weight: bold; text-transform: uppercase;">Orientation</label>
+            <select id="print-orientation" class="input-select" style="width: 100%; margin-top: 4px;">
+              <option value="portrait" selected>Portrait</option>
+              <option value="landscape">Landscape</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 11px; color: var(--text-sub); font-weight: bold; text-transform: uppercase;">Copies</label>
+            <input type="number" id="print-copies" value="1" min="1" max="10" class="input-text" style="width: 100%; margin-top: 4px;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="action-btn" onclick="closeCustomPrintModal()">Cancel</button>
+        <button class="action-btn action-btn-primary" id="btn-dispatch-print" onclick="dispatchCustomPrint()" disabled>
+          <span>🖨️</span> Print Now
+        </button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

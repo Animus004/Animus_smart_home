@@ -13,7 +13,7 @@ from enum import Enum
 logger = logging.getLogger("projector_controller")
 
 DEFAULT_ADB_PATH = r"C:\platform-tools\platform-tools-latest-windows\platform-tools\adb.exe"
-DEFAULT_TARGET = "192.168.1.9:5555"
+DEFAULT_TARGET = "192.168.1.13:5555"
 DEFAULT_PROJECTOR_MAC = "a8-4f-a4-26-cd-6b"
 
 class ProjectorError(Exception):
@@ -269,9 +269,12 @@ class ProjectorController:
         use_ir_power: Optional[bool] = None,
         ir_transport: Optional[IrProjectorTransport] = None
     ):
-        if target == DEFAULT_TARGET:
+        if target == DEFAULT_TARGET or target == "192.168.1.9:5555":
             try:
-                from ac_controller import _read_local_properties
+                try:
+                    from ac_controller import _read_local_properties
+                except ImportError:
+                    from server.music_daemon.ac_controller import _read_local_properties
                 props = _read_local_properties()
                 target = os.environ.get("PROJECTOR_ADB_TARGET", props.get("projector.adb.target", DEFAULT_TARGET))
             except Exception:
@@ -279,7 +282,10 @@ class ProjectorController:
         self.target = target
         self.mac_address = DEFAULT_PROJECTOR_MAC
         try:
-            from ac_controller import _read_local_properties
+            try:
+                from ac_controller import _read_local_properties
+            except ImportError:
+                from server.music_daemon.ac_controller import _read_local_properties
             props = _read_local_properties()
             self.mac_address = os.environ.get("PROJECTOR_MAC", props.get("projector.adb.mac", DEFAULT_PROJECTOR_MAC)).lower().replace(":", "-")
         except Exception:
@@ -291,7 +297,10 @@ class ProjectorController:
         
         if ir_transport is None and use_ir_power is not False:
             try:
-                from ac_controller import _read_local_properties
+                try:
+                    from ac_controller import _read_local_properties
+                except ImportError:
+                    from server.music_daemon.ac_controller import _read_local_properties
                 props = _read_local_properties()
                 ir_dev = props.get("tuya.ir_blaster.device_id")
                 ir_key = props.get("tuya.ir_blaster.local_key")
@@ -735,9 +744,9 @@ class ProjectorController:
             return
 
         def _boot_worker():
-            logger.info("[PROJECTOR_BOOT_WORKER] Started waiting for projector to join Wi-Fi...")
+            logger.info("[PROJECTOR_BOOT_WORKER] Started waiting for projector to join Wi-Fi (40-120s boot window)...")
             start_t = time.time()
-            max_wait = 90.0
+            max_wait = 135.0
             while time.time() - start_t < max_wait:
                 time.sleep(3.0)
                 ip = self.discover_and_update_ip()

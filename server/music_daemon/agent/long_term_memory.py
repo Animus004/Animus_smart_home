@@ -935,12 +935,19 @@ class LongTermMemoryStore:
         conn = self._get_connection()
         try:
             cursor = conn.cursor()
+            comp_txt = f"%{completed_sg.get('title', '')[:30]}%" if completed_sg else "%"
             cursor.execute("""
                 UPDATE user_tasks
                 SET status = 'COMPLETED', updated_at = ?
                 WHERE status IN ('PENDING', 'IN_PROGRESS', 'ACTIVE')
-                  AND (LOWER(title) LIKE '%oos%' OR LOWER(title) LIKE '%duration%' OR LOWER(title) LIKE '%lag()%')
-            """, (now,))
+                  AND (
+                      LOWER(title) LIKE '%oos%' 
+                      OR LOWER(title) LIKE '%duration%' 
+                      OR LOWER(title) LIKE '%lag()%'
+                      OR LOWER(title) LIKE '%stock-out%'
+                      OR (LOWER(?) != '%' AND LOWER(title) LIKE LOWER(?))
+                  )
+            """, (now, comp_txt, comp_txt))
             conn.commit()
         finally:
             conn.close()

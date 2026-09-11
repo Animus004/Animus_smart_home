@@ -83,14 +83,19 @@ class RoomStateSyncClient(
     }
 
     private suspend fun checkAutoDiscoveryFallback() {
-        // If current host is unresponsive and is not DEFAULT_PC_HOST, test DEFAULT_PC_HOST
         val currentHost = hostProvider()
-        if (consecutiveFailures >= 2 && currentHost != DEFAULT_PC_HOST) {
-            Log.w(TAG, "[auto-discovery] Current host $currentHost unresponsive, probing default $DEFAULT_PC_HOST:8095")
-            if (probeHost(DEFAULT_PC_HOST)) {
-                Log.i(TAG, "[auto-discovery] Successfully discovered Animus backend at $DEFAULT_PC_HOST! Updating host.")
-                consecutiveFailures = 0
-                onHostAutoDiscovered?.invoke(DEFAULT_PC_HOST)
+        if (consecutiveFailures >= 2) {
+            val candidateHosts = listOf("192.168.1.5", "192.168.1.4", "192.168.1.9")
+            for (candidate in candidateHosts) {
+                if (candidate != currentHost) {
+                    Log.w(TAG, "[auto-discovery] Current host $currentHost unresponsive, probing candidate $candidate:8095")
+                    if (probeHost(candidate)) {
+                        Log.i(TAG, "[auto-discovery] Successfully discovered Animus backend at $candidate! Updating host.")
+                        consecutiveFailures = 0
+                        onHostAutoDiscovered?.invoke(candidate)
+                        break
+                    }
+                }
             }
         }
     }

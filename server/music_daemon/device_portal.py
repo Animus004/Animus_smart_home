@@ -177,15 +177,62 @@ class WindowsDevicePortalBluetooth:
 
         return None
 
+    def is_lg_audio_connected(self) -> bool:
+        """
+        Directly queries Windows Device Portal to verify if the physical Bluetooth A2DP
+        audio connection to LG SNC4R is actively established (AudioConnectionStatus == 'Connected').
+        """
+        username, password = self._load_credentials()
+        if not username or not password:
+            return False
+
+        # 1. Fast path: native curl query to local Device Portal HTTP port
+        try:
+            cmd = [
+                "curl.exe", "-s", "-m", "3",
+                "-u", f"{username}:{password}",
+                f"http://127.0.0.1:{self.http_port}/api/bt/getpaired"
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=4)
+            if res.returncode == 0 and res.stdout.strip():
+                data = json.loads(res.stdout)
+                for d in data.get("PairedDevices", []):
+                    name = str(d.get("Name") or d.get("Description") or "")
+                    dev_id = str(d.get("ID") or "")
+                    if "54:15:89" in dev_id.lower() or "lg snc4r" in name.lower():
+                        audio_status = str(d.get("AudioConnectionStatus", "")).lower()
+                        is_conn = bool(d.get("IsConnected", False))
+                        aep_conn = bool(d.get("Properties", {}).get("Aep.IsConnected", False))
+                        connected = (audio_status == "connected") or is_conn or aep_conn
+                        logger.debug(f"[WDP_BT_STATUS] LG SNC4R audio_status='{audio_status}', is_connected={connected}")
+                        return connected
+        except Exception as e:
+            logger.debug(f"[WDP_BT_STATUS_ERR] {e}")
+
+        # 2. Fallback: WinRT Bluetooth connection status check via PowerShell
+        try:
+            ps_cmd = (
+                "Add-Type -AssemblyName System.Runtime.WindowsRuntime;"
+                "$asTaskGeneric = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.IsGenericMethod } | Select-Object -First 1;"
+                "[Windows.Devices.Bluetooth.BluetoothDevice, Windows.Devices.Bluetooth, ContentType=WindowsRuntime] | Out-Null;"
+                "$asTask = $asTaskGeneric.MakeGenericMethod([Windows.Devices.Bluetooth.BluetoothDevice]);"
+                "$t = $asTask.Invoke($null, @([Windows.Devices.Bluetooth.BluetoothDevice]::FromBluetoothAddressAsync(0x541589DCA579)));"
+                "if ($t.Wait(2000) -and $t.Result) { Write-Output $t.Result.ConnectionStatus }"
+            )
+            res = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], capture_output=True, text=True, timeout=3)
+            for line in res.stdout.splitlines():
+                if "connected" in line.strip().lower():
+                    return True
+        except Exception:
+            pass
+
+        return False
+
     def connect_lg(self) -> Tuple[bool, str, Optional[int]]:
         """
         Requests Windows Device Portal to initiate Bluetooth A2DP connection with LG SNC4R.
         Returns (success: bool, status_message: str, http_status_code: Optional[int]).
         """
-        if not self.is_available():
-            logger.warning("[DEVICE_PORTAL_UNAVAILABLE] Device Portal not listening on localhost:50443")
-            return False, "DEVICE_PORTAL_UNAVAILABLE", None
-
         username, password = self._load_credentials()
         if not username or not password:
             logger.warning("[DEVICE_PORTAL_AUTH_REQUIRED] No credentials found in secrets/device_portal.json")
@@ -198,11 +245,29 @@ class WindowsDevicePortalBluetooth:
 
         b64_aep = encode_aep_id(aep_id)
         url_encoded_b64 = urllib.parse.quote(b64_aep)
-        url = f"https://127.0.0.1:{self.https_port}/api/bt/connectdevice?deviceId={url_encoded_b64}"
 
+        # 1. Primary path: Use native curl.exe with Content-Length: 0 on http://127.0.0.1:50080
+        try:
+            connect_url = f"http://127.0.0.1:{self.http_port}/api/bt/connectdevice?deviceId={url_encoded_b64}"
+            logger.info(f"[DEVICE_PORTAL_CONNECT_REQUEST] Dispatching POST to connect LG SNC4R via curl...")
+            cmd = [
+                "curl.exe", "-s", "-m", "6",
+                "-u", f"{username}:{password}",
+                "-X", "POST",
+                "-H", "Content-Length: 0",
+                connect_url
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+            if res.returncode == 0:
+                logger.info("[DEVICE_PORTAL_CONNECT_SUCCESS] Device Portal accepted connection request via curl")
+                return True, "REQUEST_ACCEPTED", 200
+        except Exception as e:
+            logger.warning(f"[DEVICE_PORTAL_CURL_FAIL] curl invocation failed: {e}")
+
+        # 2. Fallback: urllib with HTTPS
+        url = f"https://127.0.0.1:{self.https_port}/api/bt/connectdevice?deviceId={url_encoded_b64}"
         opener, cj = self._create_authenticated_opener(username, password)
         try:
-            # 1. Establish session & CSRF
             opener.open(f"https://127.0.0.1:{self.https_port}/certprompt.htm", timeout=2)
             try:
                 opener.open(f"https://127.0.0.1:{self.https_port}/api/authorize/setSslState?sslState=http&remember=true", timeout=2)
@@ -214,10 +279,8 @@ class WindowsDevicePortalBluetooth:
                 if c.name == "CSRF-Token":
                     csrf_token = c.value
 
-            headers = {"X-CSRF-Token": csrf_token} if csrf_token else {}
-
-            # 2. Dispatch POST /api/bt/connectdevice?deviceId=Base64
-            logger.info(f"[DEVICE_PORTAL_CONNECT_REQUEST] Dispatching POST to connect LG SNC4R...")
+            headers = {"X-CSRF-Token": csrf_token, "Content-Length": "0"} if csrf_token else {"Content-Length": "0"}
+            logger.info(f"[DEVICE_PORTAL_CONNECT_REQUEST] Dispatching POST to connect LG SNC4R via urllib...")
             req = urllib.request.Request(url, data=b"", headers=headers, method="POST")
             res = opener.open(req, timeout=4)
             logger.info(f"[DEVICE_PORTAL_CONNECT_SUCCESS] Device Portal accepted connection request (HTTP {res.status})")
@@ -234,9 +297,6 @@ class WindowsDevicePortalBluetooth:
         Requests Windows Device Portal to disconnect the Bluetooth A2DP connection with LG SNC4R.
         Returns (success: bool, status_message: str, http_status_code: Optional[int]).
         """
-        if not self.is_available():
-            return False, "DEVICE_PORTAL_UNAVAILABLE", None
-
         username, password = self._load_credentials()
         if not username or not password:
             return False, "DEVICE_PORTAL_AUTH_REQUIRED", 401
@@ -247,8 +307,27 @@ class WindowsDevicePortalBluetooth:
 
         b64_aep = encode_aep_id(aep_id)
         url_encoded_b64 = urllib.parse.quote(b64_aep)
-        url = f"https://127.0.0.1:{self.https_port}/api/bt/disconnectdevice?deviceId={url_encoded_b64}"
 
+        # 1. Primary path: Use native curl.exe with Content-Length: 0 on http://127.0.0.1:50080
+        try:
+            disconnect_url = f"http://127.0.0.1:{self.http_port}/api/bt/disconnectdevice?deviceId={url_encoded_b64}"
+            logger.info("[DEVICE_PORTAL_DISCONNECT_REQUEST] Dispatching POST to disconnect LG SNC4R via curl...")
+            cmd = [
+                "curl.exe", "-s", "-m", "6",
+                "-u", f"{username}:{password}",
+                "-X", "POST",
+                "-H", "Content-Length: 0",
+                disconnect_url
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+            if res.returncode == 0:
+                logger.info("[DEVICE_PORTAL_DISCONNECT_SUCCESS] Device Portal accepted disconnect request via curl")
+                return True, "DISCONNECTED", 200
+        except Exception as e:
+            logger.warning(f"[DEVICE_PORTAL_DISCONNECT_CURL_FAIL] {e}")
+
+        # 2. Fallback: urllib with HTTPS
+        url = f"https://127.0.0.1:{self.https_port}/api/bt/disconnectdevice?deviceId={url_encoded_b64}"
         opener, cj = self._create_authenticated_opener(username, password)
         try:
             opener.open(f"https://127.0.0.1:{self.https_port}/certprompt.htm", timeout=2)
@@ -262,8 +341,8 @@ class WindowsDevicePortalBluetooth:
                 if c.name == "CSRF-Token":
                     csrf_token = c.value
 
-            headers = {"X-CSRF-Token": csrf_token} if csrf_token else {}
-            logger.info("[DEVICE_PORTAL_DISCONNECT_REQUEST] Dispatching POST to disconnect LG SNC4R...")
+            headers = {"X-CSRF-Token": csrf_token, "Content-Length": "0"} if csrf_token else {"Content-Length": "0"}
+            logger.info("[DEVICE_PORTAL_DISCONNECT_REQUEST] Dispatching POST to disconnect LG SNC4R via urllib...")
             req = urllib.request.Request(url, data=b"", headers=headers, method="POST")
             res = opener.open(req, timeout=4)
             logger.info(f"[DEVICE_PORTAL_DISCONNECT_SUCCESS] Device Portal accepted disconnect request (HTTP {res.status})")

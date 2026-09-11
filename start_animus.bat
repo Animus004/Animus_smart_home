@@ -5,15 +5,14 @@ echo    Starting Animus Smart Room Intelligence Daemon
 echo =====================================================
 
 echo.
-echo [1/3] Connecting ADB targets...
-adb connect 192.168.1.5:5555
-adb connect 192.168.1.10:5555
+echo [1/3] Auto-discovering hardware & connecting ADB targets...
+python scripts/discover_and_connect_adb.py
 
 echo.
 echo [2/3] Starting Animus Daemon...
 start /B python server/music_daemon/main.py
 
-timeout /t 3 /nobreak > nul
+timeout /t 5 /nobreak > nul
 
 echo.
 echo [3/3] Launching Animus Interactive Console...

@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
                         onToggleFloatingOverlay = { viewModel.toggleFloatingOverlay { } },
                         chatHistory = chatHistory,
                         onSendMessage = { viewModel.sendChatMessage(it) },
+                        onPrintCustomFile = { name, bytes -> viewModel.printCustomFile(name, bytes) },
                         bluetoothUiState = bluetoothUiState,
                         musicUiState = musicUiState,
                         onPlayPauseClick = { viewModel.onPlayPauseClicked() },

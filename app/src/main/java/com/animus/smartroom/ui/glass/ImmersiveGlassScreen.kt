@@ -59,6 +59,7 @@ fun ImmersiveGlassScreen(
     onToggleFloatingOverlay: () -> Unit,
     chatHistory: List<ChatMessage>,
     onSendMessage: (String) -> Unit,
+    onPrintCustomFile: ((String, ByteArray) -> Unit)? = null,
     bluetoothUiState: BluetoothUiState,
     musicUiState: MusicUiState,
     onPlayPauseClick: () -> Unit,
@@ -135,6 +136,32 @@ fun ImmersiveGlassScreen(
                         letterSpacing = 2.sp
                     )
                     BrainStatusIndicator(state = visualBrainState, compact = true)
+
+                    val activeRoomMode = (roomState?.environment?.mode ?: "IDLE").uppercase()
+                    if (activeRoomMode != "IDLE" && activeRoomMode != "UNKNOWN") {
+                        val badgeColor = when (activeRoomMode) {
+                            "WORK" -> GlassTokens.AccentCyan
+                            "MOVIE" -> GlassTokens.AccentPurple
+                            "RELAX", "COMFORT" -> GlassTokens.AccentYellow
+                            "SLEEP" -> Color(0xFFBA68C8)
+                            else -> GlassTokens.AccentBlue
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(GlassTokens.CornerRadiusSmall)
+                                .background(badgeColor.copy(alpha = 0.2f))
+                                .border(1.dp, badgeColor.copy(alpha = 0.45f), GlassTokens.CornerRadiusSmall)
+                                .padding(horizontal = 7.dp, vertical = 2.5.dp)
+                        ) {
+                            Text(
+                                text = activeRoomMode,
+                                color = badgeColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
                 }
 
                 // Right: Real Glass Slide Switch (LOCAL ↔ REMOTE)
@@ -339,7 +366,8 @@ fun ImmersiveGlassScreen(
                         GlassChatPanel(
                             chatHistory = chatHistory,
                             onSendMessage = onSendMessage,
-                            onClose = { activeTool = ActiveGlassTool.NONE }
+                            onClose = { activeTool = ActiveGlassTool.NONE },
+                            onPrintFileRequested = onPrintCustomFile
                         )
                     }
                     ActiveGlassTool.AUTOMATIONS -> {

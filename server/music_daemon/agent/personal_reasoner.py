@@ -267,6 +267,13 @@ class PersonalReasoningEngine:
         Provides actionable Data Analyst mentorship on Sir's active portfolio projects
         (e.g., Blinkit Dark Store stock-out window functions, CTEs, lost revenue metrics).
         """
+        # Guard: Ignore if this is a work summary, milestone report, or status report rather than a query help request
+        if any(k in lower for k in [
+            "current project", "stakeholder", "learning milestone", "has been completed",
+            "current work", "career goal", "today's work", "chatgpt"
+        ]):
+            return None
+
         has_sql_issue = any(w in lower for w in [
             "stock-out", "stock out", "dark store", "lag()", "cte", "lag function",
             "window function", "out-of-stock", "inventory gap", "query isn't working",

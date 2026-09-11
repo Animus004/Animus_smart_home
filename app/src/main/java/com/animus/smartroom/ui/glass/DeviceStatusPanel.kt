@@ -207,6 +207,108 @@ fun DeviceStatusPanel(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                // Authoritative Room Behavioral Mode Banner
+                item {
+                    val currentRoomMode = (roomState?.environment?.mode ?: "IDLE").uppercase()
+                    val (modeColor, modeIcon, modeDesc) = when (currentRoomMode) {
+                        "WORK" -> Triple(
+                            GlassTokens.AccentCyan,
+                            Icons.Default.Computer,
+                            "Work Mode: Focus music active • Apps open • Camera visual departure pause enabled"
+                        )
+                        "MOVIE" -> Triple(
+                            GlassTokens.AccentPurple,
+                            Icons.Default.Videocam,
+                            "Movie Mode: Projector ON • Soundbar on Fire TV • Music auto-advance suppressed"
+                        )
+                        "RELAX", "COMFORT" -> Triple(
+                            GlassTokens.AccentYellow,
+                            Icons.Default.MusicNote,
+                            "Relax Mode: Soundbar on PC • Departure music pause disabled"
+                        )
+                        "SLEEP" -> Triple(
+                            Color(0xFFBA68C8),
+                            Icons.Default.Sensors,
+                            "Sleep Mode: Display surfaces offline • Ambient climate protection active"
+                        )
+                        else -> Triple(
+                            Color.White.copy(alpha = 0.65f),
+                            Icons.Default.Sensors,
+                            "Idle Baseline: Devices in standby • Optical & thermal monitoring active"
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(GlassTokens.CornerRadiusMedium)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        modeColor.copy(alpha = 0.22f),
+                                        GlassTokens.GlassSurface
+                                    )
+                                )
+                            )
+                            .border(1.dp, modeColor.copy(alpha = 0.45f), GlassTokens.CornerRadiusMedium)
+                            .padding(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(GlassTokens.CornerRadiusSmall)
+                                    .background(modeColor.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = modeIcon,
+                                    contentDescription = currentRoomMode,
+                                    tint = modeColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "ACTIVE ROOM MODE",
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(GlassTokens.CornerRadiusSmall)
+                                            .background(modeColor.copy(alpha = 0.25f))
+                                            .border(1.dp, modeColor.copy(alpha = 0.5f), GlassTokens.CornerRadiusSmall)
+                                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = currentRoomMode,
+                                            color = modeColor,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = modeDesc,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 11.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
                 items(telemetryList) { item ->
                     Box(
                         modifier = Modifier
